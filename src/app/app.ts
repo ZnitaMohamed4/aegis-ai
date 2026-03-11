@@ -1,4 +1,5 @@
 import { Component, signal } from '@angular/core';
+import { User } from '@core/models';
 
 @Component({
   selector: 'app-root',

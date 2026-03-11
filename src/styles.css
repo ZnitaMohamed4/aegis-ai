@@ -1,1 +1,67 @@
-/* You can add global styles to this file, and also import other style files */
+/* PrimeNG base styles */
+@import "primeicons/primeicons.css";
+
+/* Tailwind */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── AegisAI Design Tokens ─── */
+:root {
+  /* Surfaces */
+  --bg-base:       #F8FAFC;
+  --bg-surface:    #FFFFFF;
+  --bg-surface-2:  #F1F5F9;
+
+  /* Borders */
+  --border:        #E2E8F0;
+
+  /* Text */
+  --text-primary:  #0F172A;
+  --text-muted:    #64748B;
+
+  /* Accent */
+  --accent:        #4F46E5;
+  --accent-hover:  #4338CA;
+
+  /* Severity */
+  --critical:      #DC2626;
+  --high:          #EA580C;
+  --medium:        #CA8A04;
+  --low:           #16A34A;
+  --info:          #0284C7;
+}
+
+/* Dark mode tokens */
+.dark {
+  --bg-base:       #0F172A;
+  --bg-surface:    #1E293B;
+  --bg-surface-2:  #334155;
+
+  --border:        #475569;
+
+  --text-primary:  #F1F5F9;
+  --text-muted:    #94A3B8;
+
+  --accent:        #6366F1;
+  --accent-hover:  #818CF8;
+
+  --critical:      #EF4444;
+  --high:          #F97316;
+  --medium:        #EAB308;
+  --low:           #22C55E;
+  --info:          #38BDF8;
+}
+
+/* ─── Global Base ─── */
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Monospace for scores, IDs, toxicity values */
+.mono {
+  font-family: 'JetBrains Mono', monospace;
+}
