@@ -1,0 +1,7 @@
+.stat-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+  transition: border-color 0.2s;
+}

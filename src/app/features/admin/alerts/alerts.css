@@ -1,0 +1,14 @@
+.active-filter {
+  background: var(--accent);
+  color: white;
+}
+
+.inactive-filter {
+  color: var(--text-muted);
+}
+
+.inactive-filter:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+

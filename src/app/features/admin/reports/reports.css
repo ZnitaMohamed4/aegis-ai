@@ -1,0 +1,15 @@
+@keyframes generating-progress {
+  0%   { transform: scaleX(0); }
+  60%  { transform: scaleX(0.75); }
+  85%  { transform: scaleX(0.88); }
+  100% { transform: scaleX(0.92); }
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 9999px;
+  transform-origin: left;
+  transform: scaleX(0);
+  animation: generating-progress 4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}

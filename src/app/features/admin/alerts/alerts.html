@@ -1,1 +1,311 @@
-<p>alerts works!</p>
+<div class="p-4 sm:p-6 w-full">
+
+  <!-- Header -->
+  <div class="flex items-start justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-1">Live Alerts</h1>
+      <p class="text-sm text-[var(--text-muted)]">All detected harassment events — real-time</p>
+    </div>
+    <div class="flex items-center gap-2 text-xs font-semibold text-[var(--low)] bg-green-500/10 border border-green-500/20 px-3 py-1.5 rounded-full">
+      <span class="w-2 h-2 rounded-full bg-[var(--low)] animate-pulse"></span>
+      Live
+    </div>
+  </div>
+
+  <!-- Severity Summary -->
+  <div class="flex flex-wrap items-center gap-2 mb-4 text-xs font-semibold">
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('critical')" [style.background]="getRiskHex('critical') + '18'">Critical: {{ alerts().filter(a => a.severity === 'critical').length }}</span>
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('high')" [style.background]="getRiskHex('high') + '18'">High: {{ alerts().filter(a => a.severity === 'high').length }}</span>
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('medium')" [style.background]="getRiskHex('medium') + '18'">Medium: {{ alerts().filter(a => a.severity === 'medium').length }}</span>
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('low')" [style.background]="getRiskHex('low') + '18'">Low: {{ alerts().filter(a => a.severity === 'low').length }}</span>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex flex-wrap items-center gap-3 mb-5">
+
+    <!-- Search -->
+    <div class="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg px-3 py-2 flex-1 min-w-48">
+      <i class="pi pi-search text-[var(--text-muted)] text-sm"></i>
+      <input
+        type="text"
+        placeholder="Search alerts..."
+        class="bg-transparent border-none outline-none text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] w-full"
+        [ngModel]="searchQuery()"
+        (ngModelChange)="searchQuery.set($event)" />
+    </div>
+
+    <!-- Severity Filter -->
+    <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
+      @for (s of severityFilters; track s) {
+        <button
+          class="px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all"
+          [class.active-filter]="selectedSeverity() === s"
+          [class.inactive-filter]="selectedSeverity() !== s"
+          (click)="selectedSeverity.set(s)">
+          {{ s }}
+        </button>
+      }
+    </div>
+
+    <!-- Decision Filter -->
+    <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
+      @for (d of decisionFilters; track d) {
+        <button
+          class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all"
+          [class.active-filter]="selectedDecision() === d"
+          [class.inactive-filter]="selectedDecision() !== d"
+          (click)="selectedDecision.set(d)">
+          {{ d }}
+        </button>
+      }
+    </div>
+
+  </div>
+
+  <!-- Table (desktop) -->
+  <div class="hidden sm:block bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden">
+    <table class="w-full">
+      <thead>
+        <tr class="border-b border-[var(--border)]">
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Severity</th>
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Preview</th>
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Category</th>
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Decision</th>
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Score</th>
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Lang</th>
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Time</th>
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</th>
+          <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (alert of filteredAlerts(); track alert.id) {
+          <tr
+            class="border-b border-[var(--border)] hover:bg-[var(--bg-surface-2)] transition-colors cursor-pointer"
+            (click)="openDetail(alert)">
+
+            <!-- Severity -->
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-2">
+                <div class="w-2 h-2 rounded-full"
+                     [style.background]="getRiskHex(alert.severity)">
+                </div>
+                <span class="text-xs font-semibold capitalize"
+                      [style.color]="getRiskHex(alert.severity)">
+                  {{ alert.severity }}
+                </span>
+              </div>
+            </td>
+
+            <!-- Preview -->
+            <td class="px-4 py-3 max-w-xs">
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-[var(--text-primary)] truncate">{{ alert.preview }}</span>
+                @if (alert.llm_triggered) {
+                  <span class="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-mono flex-shrink-0">LLM</span>
+                }
+              </div>
+            </td>
+
+            <!-- Category -->
+            <td class="px-4 py-3">
+              <span class="text-xs text-[var(--text-muted)]">{{ alert.category }}</span>
+            </td>
+
+            <!-- Decision -->
+            <td class="px-4 py-3">
+              <span class="text-xs font-bold font-mono px-2 py-1 rounded"
+                    [ngClass]="getDecisionClass(alert.decision)">
+                {{ alert.decision }}
+              </span>
+            </td>
+
+            <!-- Toxicity Score -->
+            <td class="px-4 py-3">
+              <span class="text-sm font-mono font-bold"
+                    [style.color]="getRiskHex(alert.severity)">
+                {{ alert.toxicity_score.toFixed(2) }}
+              </span>
+            </td>
+
+            <!-- Language -->
+            <td class="px-4 py-3">
+              <span class="text-xs font-mono bg-[var(--bg-surface-2)] text-[var(--text-muted)] px-2 py-0.5 rounded">
+                {{ alert.language }}
+              </span>
+            </td>
+
+            <!-- Time -->
+            <td class="px-4 py-3">
+              <span class="text-xs text-[var(--text-muted)]">{{ formatDate(alert.sent_at) }}</span>
+            </td>
+
+            <!-- Status -->
+            <td class="px-4 py-3">
+              @if (alert.is_resolved) {
+                <span class="text-xs font-semibold text-[var(--low)] bg-green-500/10 px-2 py-0.5 rounded-full">Resolved</span>
+              } @else {
+                <span class="text-xs font-semibold text-[var(--medium)] bg-yellow-500/10 px-2 py-0.5 rounded-full">Open</span>
+              }
+            </td>
+
+            <!-- Actions -->
+            <td class="px-4 py-3" (click)="$event.stopPropagation()">
+              @if (!alert.is_resolved) {
+                <button
+                  class="text-xs text-[var(--accent)] hover:underline font-semibold"
+                  (click)="markResolved(alert)">
+                  Resolve
+                </button>
+              }
+            </td>
+
+          </tr>
+        }
+
+        @if (filteredAlerts().length === 0) {
+          <tr>
+            <td colspan="9" class="px-4 py-12 text-center text-sm text-[var(--text-muted)]">
+              <i class="pi pi-filter-slash text-2xl block mb-2"></i>
+              No alerts match your filters
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Cards (mobile) -->
+  <div class="sm:hidden flex flex-col gap-3">
+    @for (alert of filteredAlerts(); track alert.id) {
+      <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4 cursor-pointer"
+           (click)="openDetail(alert)">
+        <div class="flex items-start justify-between mb-2">
+          <span class="text-xs font-semibold capitalize"
+                [style.color]="getRiskHex(alert.severity)">
+            {{ alert.severity }}
+          </span>
+          <span class="text-xs font-bold font-mono px-2 py-0.5 rounded"
+                [ngClass]="getDecisionClass(alert.decision)">
+            {{ alert.decision }}
+          </span>
+        </div>
+        <p class="text-sm text-[var(--text-primary)] mb-2 line-clamp-2">{{ alert.preview }}</p>
+        <div class="flex items-center justify-between text-xs text-[var(--text-muted)]">
+          <span>{{ alert.category }}</span>
+          <span class="font-mono font-bold" [style.color]="getRiskHex(alert.severity)">{{ alert.toxicity_score.toFixed(2) }}</span>
+          <span>{{ formatDate(alert.sent_at) }}</span>
+        </div>
+      </div>
+    }
+    @if (filteredAlerts().length === 0) {
+      <div class="py-12 text-center text-sm text-[var(--text-muted)]">
+        <i class="pi pi-filter-slash text-2xl block mb-2"></i>
+        No alerts match your filters
+      </div>
+    }
+  </div>
+  <div class="mt-3 text-xs text-[var(--text-muted)]">
+    Showing {{ filteredAlerts().length }} of {{ alerts().length }} alerts
+  </div>
+
+</div>
+
+<!-- Detail Drawer -->
+<p-drawer
+  [(visible)]="drawerVisible"
+  position="right"
+  [style]="{ width: 'min(420px, 100vw)' }"
+  header="Alert Detail">
+
+  @if (selectedAlert()) {
+    <div class="flex flex-col gap-5 p-1">
+
+      <!-- Severity + Decision -->
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-bold capitalize px-3 py-1 rounded-full"
+              [style.color]="getRiskHex(selectedAlert()!.severity)"
+              [style.background]="getRiskHex(selectedAlert()!.severity) + '22'">
+          {{ selectedAlert()!.severity }} severity
+        </span>
+        <span class="text-xs font-bold font-mono px-2 py-1 rounded"
+              [ngClass]="getDecisionClass(selectedAlert()!.decision)">
+          {{ selectedAlert()!.decision }}
+        </span>
+      </div>
+
+      <!-- Message Preview -->
+      <div class="bg-[var(--bg-surface-2)] rounded-lg p-4">
+        <div class="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Message Preview</div>
+        <p class="text-sm text-[var(--text-primary)]">{{ selectedAlert()!.preview }}</p>
+      </div>
+
+      <!-- Scores -->
+      <div class="grid grid-cols-2 gap-3">
+        <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
+          <div class="text-xs text-[var(--text-muted)] mb-1">Toxicity Score</div>
+          <div class="text-2xl font-bold font-mono"
+               [style.color]="getRiskHex(selectedAlert()!.severity)">
+            {{ selectedAlert()!.toxicity_score.toFixed(2) }}
+          </div>
+        </div>
+        <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
+          <div class="text-xs text-[var(--text-muted)] mb-1">Confidence</div>
+          <div class="text-2xl font-bold font-mono text-[var(--text-primary)]">
+            {{ selectedAlert()!.confidence_score.toFixed(2) }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Meta -->
+      <div class="flex flex-col gap-2">
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Category</span>
+          <span class="text-[var(--text-primary)] font-medium">{{ selectedAlert()!.category }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Language</span>
+          <span class="font-mono text-[var(--text-primary)]">{{ selectedAlert()!.language }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">LLM Triggered</span>
+          <span [class]="selectedAlert()!.llm_triggered ? 'text-purple-400' : 'text-[var(--text-muted)]'">
+            {{ selectedAlert()!.llm_triggered ? 'Yes' : 'No' }}
+          </span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Time</span>
+          <span class="text-[var(--text-primary)]">{{ formatDate(selectedAlert()!.sent_at) }}</span>
+        </div>
+      </div>
+
+      <!-- LLM Explanation -->
+      @if (selectedAlert()!.llm_explanation) {
+        <div class="bg-purple-500/10 border border-purple-500/20 rounded-lg p-4">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="pi pi-sparkles text-purple-400 text-sm"></i>
+            <span class="text-xs font-semibold text-purple-400 uppercase tracking-wider">LLM Explanation</span>
+          </div>
+          <p class="text-sm text-[var(--text-primary)] leading-relaxed">
+            {{ selectedAlert()!.llm_explanation }}
+          </p>
+        </div>
+      }
+
+      <!-- Action -->
+      @if (!selectedAlert()!.is_resolved) {
+        <button
+          class="w-full py-2.5 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+          (click)="markResolved(selectedAlert()!); drawerVisible.set(false)">
+          Mark as Resolved
+        </button>
+      } @else {
+        <div class="w-full py-2.5 rounded-lg bg-green-500/10 text-[var(--low)] text-sm font-semibold text-center">
+          ✓ Resolved
+        </div>
+      }
+
+    </div>
+  }
+
+</p-drawer>

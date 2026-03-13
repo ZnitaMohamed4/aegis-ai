@@ -1,56 +1,86 @@
 /* PrimeNG base styles */
 @import "primeicons/primeicons.css";
 
+/* Shared styles */
+@import "app/shared/styles/decisions.css";
+
 /* Tailwind */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── AegisAI Design Tokens ─── */
-:root {
-  /* Surfaces */
-  --bg-base:       #F8FAFC;
+/* ─── AegisAI Design Tokens (Midnight Teal Palette) ─── */
+:root,
+[data-theme="light"],
+.light {
+  --bg-base:       #F3F4F6;
   --bg-surface:    #FFFFFF;
-  --bg-surface-2:  #F1F5F9;
+  --bg-surface-2:  #F9FAFB;
+  --bg-surface-3:  #E5E7EB;
+  --bg-surface-4:  #D1D5DB;
 
-  /* Borders */
-  --border:        #E2E8F0;
+  --border:        #E5E7EB;
 
-  /* Text */
-  --text-primary:  #0F172A;
-  --text-muted:    #64748B;
+  --accent:        #0F766E;
+  --accent-hover:  #0D9488;
+  --accent-subtle: #0F766E12;
+  --accent-border: #0F766E2B;
+  --interaction:   #0D9488;
+  --interaction-hover: #0F766E;
 
-  /* Accent */
-  --accent:        #4F46E5;
-  --accent-hover:  #4338CA;
-
-  /* Severity */
   --critical:      #DC2626;
   --high:          #EA580C;
-  --medium:        #CA8A04;
-  --low:           #16A34A;
-  --info:          #0284C7;
+  --medium:        #D97706;
+  --low:           #059669;
+  --info:          #0D9488;
+
+  --text-primary:   #111827;
+  --text-secondary: #6B7280;
+  --text-muted:     #9CA3AF;
+
+  --sidebar-bg:        var(--bg-surface);
+  --sidebar-border:    var(--border);
+  --sidebar-text:      var(--text-primary);
+  --sidebar-text-muted:var(--text-muted);
+  --sidebar-hover-bg:  var(--bg-surface-2);
+  --sidebar-active-bg: var(--bg-surface-2);
+  --sidebar-active-text: var(--accent);
 }
 
-/* Dark mode tokens */
+[data-theme="dark"],
 .dark {
-  --bg-base:       #0F172A;
-  --bg-surface:    #1E293B;
-  --bg-surface-2:  #334155;
+  --bg-base:       #080E1A;
+  --bg-surface:    #111827;
+  --bg-surface-2:  #1F2937;
+  --bg-surface-3:  #374151;
+  --bg-surface-4:  #4B5563;
 
-  --border:        #475569;
+  --border:        #374151;
 
-  --text-primary:  #F1F5F9;
-  --text-muted:    #94A3B8;
+  --accent:        #14B8A6;
+  --accent-hover:  #2DD4BF;
+  --accent-subtle: #14B8A616;
+  --accent-border: #14B8A632;
+  --interaction:   #14B8A6;
+  --interaction-hover: #2DD4BF;
 
-  --accent:        #6366F1;
-  --accent-hover:  #818CF8;
+  --critical:      #F87171;
+  --high:          #FB923C;
+  --medium:        #FBBF24;
+  --low:           #34D399;
+  --info:          #14B8A6;
 
-  --critical:      #EF4444;
-  --high:          #F97316;
-  --medium:        #EAB308;
-  --low:           #22C55E;
-  --info:          #38BDF8;
+  --text-primary:   #F9FAFB;
+  --text-secondary: #9CA3AF;
+  --text-muted:     #4B5563;
+
+  --sidebar-bg:        var(--bg-surface);
+  --sidebar-border:    var(--border);
+  --sidebar-text:      var(--text-primary);
+  --sidebar-text-muted:var(--text-muted);
+  --sidebar-hover-bg:  var(--bg-surface-2);
+  --sidebar-active-bg: var(--bg-surface-2);
+  --sidebar-active-text: var(--accent);
 }
 
 /* ─── Global Base ─── */
@@ -58,10 +88,41 @@ body {
   background-color: var(--bg-base);
   color: var(--text-primary);
   font-family: 'Inter', sans-serif;
-  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Ensure routed components fill available width */
+router-outlet + * {
+  display: block;
+  width: 100%;
 }
 
 /* Monospace for scores, IDs, toxicity values */
 .mono {
   font-family: 'JetBrains Mono', monospace;
+}
+
+/* ─── Input Fields ─── */
+.input-field {
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  outline: none;
+  width: 100%;
+  transition: border-color 0.2s;
+}
+
+.input-field:focus {
+  border-color: var(--accent);
+}
+
+.input-field::placeholder {
+  color: var(--text-muted);
+}
+
+.input-field option {
+  background: var(--bg-surface);
+  color: var(--text-primary);
 }

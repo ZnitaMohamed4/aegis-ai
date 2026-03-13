@@ -1,1 +1,314 @@
-<p>settings works!</p>
+<p-toast position="top-right" />
+<div class="settings-page p-4 sm:p-6 w-full">
+	<app-page-header
+		title="Settings"
+		subtitle="Manage system preferences, appearance, and account configuration.">
+		<button class="save-btn-header" (click)="saveSettings()">
+			<i class="pi pi-save"></i>
+			Save
+		</button>
+	</app-page-header>
+
+	<div class="settings-grid">
+		<section class="panel section-card">
+			<header class="section-header">
+				<span class="section-label">APPEARANCE</span>
+				<h2 class="section-title">Theme & Display</h2>
+			</header>
+
+			<div class="theme-grid">
+				@for (theme of themePresets; track theme.id) {
+					<button
+						type="button"
+						class="theme-card"
+						[class.theme-card-active]="selectedThemeId() === theme.id"
+						(click)="selectTheme(theme.id)">
+						<div class="theme-preview" [style.background]="theme.bgPreview"></div>
+						<div class="theme-content">
+							<span class="theme-name">{{ theme.label }}</span>
+							<span class="theme-accent">Accent {{ theme.accent }}</span>
+						</div>
+						@if (selectedThemeId() === theme.id) {
+							<span class="theme-check" aria-hidden="true">
+								<i class="pi pi-check"></i>
+							</span>
+						}
+					</button>
+				}
+			</div>
+
+			<div class="switch-row">
+				<div>
+					<p class="row-title">Dark / Light mode</p>
+					<p class="row-caption">Apply display mode across all theme presets</p>
+				</div>
+				<p-toggleswitch
+					[ngModel]="darkMode()"
+					(ngModelChange)="toggleDarkMode($event)"
+					inputId="dark-mode-toggle" />
+			</div>
+		</section>
+
+		<section class="panel section-card data-retention-card">
+			<header class="section-header">
+				<span class="section-label">DATA RETENTION</span>
+				<h2 class="section-title">Storage Lifecycle</h2>
+			</header>
+
+			<div class="field-grid">
+				<label class="field-row">
+					<span class="field-label">Messages log retention</span>
+					<div class="unit-input-wrap">
+						<input
+							type="number"
+							min="1"
+							class="input-field"
+							[ngModel]="retention().messagesLogDays"
+							(ngModelChange)="updateRetention('messagesLogDays', +$event)" />
+						<span class="unit-label">days</span>
+					</div>
+				</label>
+
+				<label class="field-row">
+					<span class="field-label">Blocked messages retention</span>
+					<div class="unit-input-wrap">
+						<input
+							type="number"
+							min="1"
+							class="input-field"
+							[ngModel]="retention().blockedMessagesDays"
+							(ngModelChange)="updateRetention('blockedMessagesDays', +$event)" />
+						<span class="unit-label">days</span>
+					</div>
+				</label>
+
+				<label class="field-row">
+					<span class="field-label">Alert history retention</span>
+					<div class="unit-input-wrap">
+						<input
+							type="number"
+							min="1"
+							class="input-field"
+							[ngModel]="retention().alertHistoryDays"
+							(ngModelChange)="updateRetention('alertHistoryDays', +$event)" />
+						<span class="unit-label">days</span>
+					</div>
+				</label>
+
+				<label class="field-row">
+					<span class="field-label">Risk profile history</span>
+					<div class="unit-input-wrap">
+						<input
+							type="number"
+							min="1"
+							class="input-field"
+							[ngModel]="retention().riskProfileHistoryDays"
+							(ngModelChange)="updateRetention('riskProfileHistoryDays', +$event)" />
+						<span class="unit-label">days</span>
+					</div>
+				</label>
+			</div>
+
+			<div class="danger-zone">
+				<div class="danger-header">
+					<h3>Danger Zone</h3>
+					<p>Permanently remove all stored data from this environment.</p>
+				</div>
+				<button type="button" class="danger-btn" (click)="requestPurgeData()">
+					<i class="pi pi-trash"></i>
+					Purge all stored data
+				</button>
+
+				@if (showPurgeConfirmation()) {
+					<div class="danger-confirmation">
+						<p class="confirm-title">Confirm Purge</p>
+						<p class="confirm-text">This action cannot be undone. Proceed with deleting all stored data?</p>
+						<div class="confirm-actions">
+							<button type="button" class="ghost-btn" (click)="cancelPurgeData()">Cancel</button>
+							<button type="button" class="danger-btn" (click)="confirmPurgeData()">Yes, purge data</button>
+						</div>
+					</div>
+				}
+			</div>
+		</section>
+
+		<section class="panel section-card">
+			<header class="section-header">
+				<span class="section-label">NOTIFICATION DEFAULTS</span>
+				<h2 class="section-title">Alert Delivery</h2>
+			</header>
+
+			<div class="switch-stack">
+				<div class="switch-row">
+					<p class="row-title">Email notifications</p>
+					<p-toggleswitch
+						[ngModel]="notifications().emailNotifications"
+						(ngModelChange)="updateNotification('emailNotifications', $event)"
+						inputId="notif-email" />
+				</div>
+
+				<div class="switch-row">
+					<p class="row-title">In-app notifications</p>
+					<p-toggleswitch
+						[ngModel]="notifications().inAppNotifications"
+						(ngModelChange)="updateNotification('inAppNotifications', $event)"
+						inputId="notif-in-app" />
+				</div>
+
+				<div class="switch-row">
+					<p class="row-title">Notify on BLOCK</p>
+					<p-toggleswitch
+						[ngModel]="notifications().notifyOnBlock"
+						(ngModelChange)="updateNotification('notifyOnBlock', $event)"
+						inputId="notif-block" />
+				</div>
+
+				<div class="switch-row">
+					<p class="row-title">Notify on ESCALATE</p>
+					<p-toggleswitch
+						[ngModel]="notifications().notifyOnEscalate"
+						(ngModelChange)="updateNotification('notifyOnEscalate', $event)"
+						inputId="notif-escalate" />
+				</div>
+
+				<div class="switch-row">
+					<p class="row-title">Notify on WARN</p>
+					<p-toggleswitch
+						[ngModel]="notifications().notifyOnWarn"
+						(ngModelChange)="updateNotification('notifyOnWarn', $event)"
+						inputId="notif-warn" />
+				</div>
+
+				<div class="quiet-hours-row">
+					<span class="field-label">Quiet hours</span>
+					<div class="time-range-wrap">
+						<input
+							type="time"
+							class="input-field"
+							[ngModel]="notifications().quietHoursStart"
+							(ngModelChange)="updateNotification('quietHoursStart', $event)" />
+						<span class="range-separator">-</span>
+						<input
+							type="time"
+							class="input-field"
+							[ngModel]="notifications().quietHoursEnd"
+							(ngModelChange)="updateNotification('quietHoursEnd', $event)" />
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="panel section-card">
+			<header class="section-header">
+				<span class="section-label">MODERATION DEFAULTS</span>
+				<h2 class="section-title">Policy Baseline</h2>
+			</header>
+
+			<div class="field-grid">
+				<label class="field-row">
+					<span class="field-label">Default language</span>
+					<p-select
+						[options]="languageOptions"
+						optionLabel="label"
+						optionValue="value"
+						[ngModel]="moderation().defaultLanguage"
+						(ngModelChange)="updateModeration('defaultLanguage', $event)"
+						styleClass="settings-select" />
+				</label>
+
+				<div class="switch-row">
+					<p class="row-title">Auto-resolve ALLOW</p>
+					<p-toggleswitch
+						[ngModel]="moderation().autoResolveAllow"
+						(ngModelChange)="updateModeration('autoResolveAllow', $event)"
+						inputId="allow-auto-resolve" />
+				</div>
+
+				<label class="field-row">
+					<span class="field-label">Rate-limit threshold</span>
+					<div class="unit-input-wrap">
+						<input
+							type="number"
+							min="1"
+							class="input-field"
+							[ngModel]="moderation().rateLimitThreshold"
+							(ngModelChange)="updateModeration('rateLimitThreshold', +$event)" />
+						<span class="unit-label">messages/hour per child</span>
+					</div>
+				</label>
+
+				<div class="switch-row">
+					<p class="row-title">Parent portal access</p>
+					<p-toggleswitch
+						[ngModel]="moderation().parentPortalAccess"
+						(ngModelChange)="updateModeration('parentPortalAccess', $event)"
+						inputId="parent-portal-access" />
+				</div>
+			</div>
+		</section>
+
+		<section class="panel section-card">
+			<header class="section-header">
+				<span class="section-label">ADMIN ACCOUNT</span>
+				<h2 class="section-title">Profile & Access</h2>
+			</header>
+
+			<div class="field-grid">
+				<label class="field-row">
+					<span class="field-label">Display name</span>
+					<input
+						type="text"
+						class="input-field"
+						[ngModel]="adminAccount().displayName"
+						(ngModelChange)="updateAdminAccount('displayName', $event)" />
+				</label>
+
+				<label class="field-row">
+					<span class="field-label">Email</span>
+					<input
+						type="email"
+						class="input-field"
+						[ngModel]="adminAccount().email"
+						(ngModelChange)="updateAdminAccount('email', $event)" />
+				</label>
+
+				<div class="field-row">
+					<span class="field-label">Password</span>
+					<button type="button" class="ghost-btn" (click)="togglePasswordForm()">
+						{{ showPasswordForm() ? 'Cancel password change' : 'Change password' }}
+					</button>
+				</div>
+
+				@if (showPasswordForm()) {
+					<div class="password-inline-form">
+						<input
+							type="password"
+							class="input-field"
+							placeholder="Current password"
+							[ngModel]="passwordForm().currentPassword"
+							(ngModelChange)="updatePasswordField('currentPassword', $event)" />
+						<input
+							type="password"
+							class="input-field"
+							placeholder="New password"
+							[ngModel]="passwordForm().newPassword"
+							(ngModelChange)="updatePasswordField('newPassword', $event)" />
+						<input
+							type="password"
+							class="input-field"
+							placeholder="Confirm new password"
+							[ngModel]="passwordForm().confirmPassword"
+							(ngModelChange)="updatePasswordField('confirmPassword', $event)" />
+						<button type="button" class="inline-save-btn" (click)="savePassword()">Save password</button>
+					</div>
+				}
+
+				<div class="field-row">
+					<span class="field-label">Last login</span>
+					<p class="readonly-value mono">{{ adminAccount().lastLogin }}</p>
+				</div>
+			</div>
+		</section>
+	</div>
+
+</div>

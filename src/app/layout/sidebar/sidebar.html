@@ -1,1 +1,39 @@
-<p>sidebar works!</p>
+<aside class="sidebar" [class.collapsed]="collapsed">
+
+  <div class="sidebar-logo">
+    <i class="pi pi-shield logo-icon"></i>
+    @if (!collapsed) {
+      <span class="logo-text">AegisAI</span>
+    }
+  </div>
+
+  <nav class="sidebar-nav">
+    @for (group of adminNav; track group.title) {
+      <div class="nav-group">
+        @if (!collapsed) {
+          <span class="nav-group-title">{{ group.title }}</span>
+        }
+        @for (item of group.items; track item.route) {
+          <a class="nav-item"
+             [routerLink]="item.route"
+             routerLinkActive="active"
+             [title]="collapsed ? item.label : ''">
+            <span class="nav-icon-wrap">
+              <i class="pi {{ item.icon }} nav-icon"></i>
+              @if (item.dot && collapsed) {
+                <span class="nav-dot-mini" [class.nav-dot-pulse]="item.dot === 'pulse'"></span>
+              }
+            </span>
+            @if (!collapsed) {
+              <span class="nav-label">{{ item.label }}</span>
+              @if (item.dot) {
+                <span class="nav-dot" [class.nav-dot-pulse]="item.dot === 'pulse'"></span>
+              }
+            }
+          </a>
+        }
+      </div>
+    }
+  </nav>
+
+</aside>

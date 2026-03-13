@@ -1,1 +1,111 @@
-<p>ai-config works!</p>
+<div class="p-4 sm:p-6 w-full flex flex-col gap-5">
+  <app-page-header title="AI Configuration" subtitle="Runtime thresholds, agents, provider routing, and simulation pipeline." />
+
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5">
+    <p class="section-label">DECISION THRESHOLDS</p>
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-2 mt-3">
+      @for (zone of zones(); track zone.key) {
+        <button type="button" class="zone-segment" [class.zone-active]="selectedZone() === zone.key" [class]="'zone-' + zone.tone" (click)="selectedZone.set(zone.key)">
+          <span class="text-xs font-bold tracking-wide">{{ zone.label }}</span>
+          <span class="text-[11px] text-[var(--text-muted)] mt-1">{{ zone.rangeLabel }}</span>
+          <span class="text-[11px] text-[var(--text-muted)] mt-2">{{ zone.action }}</span>
+        </button>
+      }
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mt-4">
+      <label class="threshold-field">AVERTIR<input class="input-field mono" type="number" min="0" max="1" step="0.01" [ngModel]="boundaries().warn" (ngModelChange)="updateBoundary('warn', $event)" /></label>
+      <label class="threshold-field">REVISER<input class="input-field mono" type="number" min="0" max="1" step="0.01" [ngModel]="boundaries().review" (ngModelChange)="updateBoundary('review', $event)" /></label>
+      <label class="threshold-field">BLOQUER<input class="input-field mono" type="number" min="0" max="1" step="0.01" [ngModel]="boundaries().block" (ngModelChange)="updateBoundary('block', $event)" /></label>
+      <label class="threshold-field">CRITIQUE<input class="input-field mono" type="number" min="0" max="1" step="0.01" [ngModel]="boundaries().critical" (ngModelChange)="updateBoundary('critical', $event)" /></label>
+    </div>
+    <article class="critical-card mt-4">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-start gap-2">
+          <i class="pi pi-phone text-[var(--critical)] mt-0.5"></i>
+          <p class="text-sm text-[var(--text-primary)]">Messages above this threshold trigger an automatic SMS and phone call to the parent.</p>
+        </div>
+        <span class="text-xs font-bold mono px-2 py-1 rounded-full bg-red-500/10 text-[var(--critical)] border border-red-500/25">{{ criticalThreshold() }}</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5">
+    <p class="section-label">RUNTIME AGENT STATUS</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-3">
+      @for (agent of agents(); track agent.id) {
+        <article class="instance-card" [class.instance-card-disconnected]="agent.status === 'OFFLINE'">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-semibold text-[var(--text-primary)]">Agent {{ agent.id }} - {{ agent.name }}</h3>
+              <p class="text-xs text-[var(--text-muted)] mt-0.5">{{ agent.role }}</p>
+            </div>
+            <p-toggleswitch [ngModel]="agent.enabled" (ngModelChange)="updateAgentEnabled(agent.id, $event)" />
+          </div>
+          <div class="flex flex-wrap items-center gap-2 mt-3">
+            <span class="pill-badge">{{ agent.model }}</span>
+            <span class="pill-badge" [class]="'status-' + getStatusTone(agent.status)">{{ agent.status }}</span>
+            @if (agent.id === 3 && agent.triggerNote) {
+              <span class="pill-badge status-warn">{{ agent.triggerNote }}</span>
+            }
+          </div>
+          <div class="text-xs text-[var(--text-muted)] mt-2">Latency <span class="mono">{{ agent.latencyMs }}ms</span></div>
+          @if (agent.id === 3 && agent.status === 'DEGRADED' && agent.degradedWarning) {
+            <div class="agent-warning mt-3">{{ agent.degradedWarning }}</div>
+          }
+        </article>
+      }
+    </div>
+  </section>
+
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5">
+    <p class="section-label">LLM PROVIDER CONFIG</p>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+      @for (provider of providerCards; track provider.id) {
+        <button type="button" class="provider-card" [class.provider-card-active]="selectedProvider() === provider.id" (click)="selectProvider(provider.id)">
+          <span class="text-sm font-semibold">{{ provider.name }}</span>
+          <span class="text-xs text-[var(--text-muted)]">{{ provider.subtitle }}</span>
+          @if (selectedProvider() === provider.id) { <i class="pi pi-check-circle text-[var(--accent)]"></i> }
+        </button>
+      }
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4">
+      <label class="threshold-field">Model
+        <p-select [options]="providerModels()" optionLabel="label" optionValue="value" [ngModel]="selectedModel()" (ngModelChange)="selectedModel.set($event)" appendTo="body" styleClass="w-full" />
+      </label>
+      <label class="threshold-field">API Key
+        <div class="relative">
+          <input class="input-field pr-10 mono" [type]="showApiKey() ? 'text' : 'password'" placeholder="sk-..." [ngModel]="apiKey()" (ngModelChange)="apiKey.set($event)" />
+          <button type="button" class="key-toggle" (click)="showApiKey.set(!showApiKey())"><i [class]="showApiKey() ? 'pi pi-eye-slash' : 'pi pi-eye'"></i></button>
+        </div>
+      </label>
+    </div>
+    <button type="button" class="action-btn mt-4" (click)="testConnection()">Test Connection</button>
+    @if (connectionResult()) {
+      <p class="text-xs font-semibold mt-3" [class.text-[var(--low)]]="connectionResult()!.ok" [class.text-[var(--critical)]]="!connectionResult()!.ok">{{ connectionResult()!.ok ? '✓' : '✗' }} {{ connectionResult()!.message }}</p>
+    }
+  </section>
+
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5">
+    <p class="section-label">SIMULATE A MESSAGE</p>
+    <textarea rows="4" class="input-field mt-3" placeholder="Type a message to test the pipeline..." [ngModel]="simulationMessage()" (ngModelChange)="simulationMessage.set($event)"></textarea>
+    <div class="flex flex-wrap items-center gap-2 mt-3">
+      @for (lang of languageTabs; track lang.key) {
+        <button type="button" class="lang-pill" [class.lang-pill-active]="simulationLanguage() === lang.key" (click)="simulationLanguage.set(lang.key)">{{ lang.label }}</button>
+      }
+    </div>
+    <button type="button" class="wizard-primary-btn w-full sm:w-auto mt-3" (click)="runSimulation()">Run Simulation</button>
+    @if (simulationResult()) {
+      <article class="result-card mt-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4 text-sm">
+          <div class="text-[var(--text-muted)]">Detected language</div><div class="font-semibold">{{ simulationResult()!.detectedLanguage === 'fr' ? '🇫🇷 French' : simulationResult()!.detectedLanguage === 'ar' ? '🇲🇦 Arabic' : '🇬🇧 English' }}</div>
+          <div class="text-[var(--text-muted)]">Toxicity score</div><div class="mono" [class.text-[var(--critical)]]="simulationResult()!.toxicityScore >= boundaries().block" [class.text-[var(--high)]]="simulationResult()!.toxicityScore >= boundaries().review && simulationResult()!.toxicityScore < boundaries().block" [class.text-[var(--low)]]="simulationResult()!.toxicityScore < boundaries().review">{{ simulationResult()!.toxicityScore.toFixed(2) }}</div>
+          <div class="text-[var(--text-muted)]">LLM triggered</div><div><span class="pill-badge" [class.status-good]="simulationResult()!.llmTriggered" [class.status-bad]="!simulationResult()!.llmTriggered">{{ simulationResult()!.llmTriggered ? 'YES' : 'NO' }}</span></div>
+          <div class="text-[var(--text-muted)]">Behavioral score</div><div class="mono">{{ simulationResult()!.behavioralScore.toFixed(2) }}</div>
+          <div class="text-[var(--text-muted)]">Final score (score_final)</div><div class="mono text-lg font-bold" [class.text-[var(--critical)]]="simulationResult()!.finalScore >= boundaries().critical" [class.text-[var(--high)]]="simulationResult()!.finalScore >= boundaries().review && simulationResult()!.finalScore < boundaries().critical" [class.text-[var(--low)]]="simulationResult()!.finalScore < boundaries().review">{{ simulationResult()!.finalScore.toFixed(2) }}</div>
+          <div class="text-[var(--text-muted)]">Decision</div><div><span class="decision-pill" [class]="'decision-' + simulationResult()!.decision">{{ getDecisionLabel(simulationResult()!.decision) }}</span></div>
+        </div>
+        <p class="text-sm text-[var(--text-muted)] mt-3">{{ simulationResult()!.explanation }}</p>
+      </article>
+    }
+  </section>
+</div>

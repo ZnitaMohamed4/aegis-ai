@@ -1,1 +1,281 @@
-<p>review-queue works!</p>
+<div class="review-queue-container">
+
+  <!-- Header -->
+  <header class="review-header">
+    <div>
+      <h1 class="review-title">Review Queue</h1>
+      <p class="review-subtitle">
+        Messages in the grey zone — confidence 0.65–0.75 or language unidentifiable. Your call.
+      </p>
+    </div>
+    <div class="header-actions">
+      <button class="mode-toggle" (click)="toggleMode()">
+        <i class="pi" [class.pi-th-large]="flashcardMode()" [class.pi-clone]="!flashcardMode()"></i>
+        {{ flashcardMode() ? 'List View' : 'Triage Mode' }}
+      </button>
+    </div>
+  </header>
+
+  <!-- Session Stats Row -->
+  <div class="session-stats">
+    <div class="stat-item">
+      <span class="stat-value">{{ pendingItems().length }}</span>
+      <span class="stat-label">Pending</span>
+    </div>
+    <div class="stat-divider"></div>
+    <div class="stat-item">
+      <span class="stat-value">{{ resolvedCount() }}</span>
+      <span class="stat-label">Reviewed</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value stat-blocked">{{ blockedCount() }}</span>
+      <span class="stat-label">Blocked</span>
+    </div>
+    <div class="stat-item">
+      <span class="stat-value stat-allowed">{{ allowedCount() }}</span>
+      <span class="stat-label">Allowed</span>
+    </div>
+    @if (resolvedCount() > 0) {
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-value">{{ agreementPercent() }}%</span>
+        <span class="stat-label">Model Agreement</span>
+      </div>
+    }
+  </div>
+
+  @if (pendingItems().length > 0) {
+    <div class="queue-body">
+
+    <!-- ═══════ FLASHCARD MODE ═══════ -->
+    @if (flashcardMode()) {
+      @if (currentItem(); as item) {
+        <div class="flashcard-wrapper">
+          <div class="flashcard"
+               [class.anim-out-left]="animating() === 'out-left'"
+               [class.anim-out-right]="animating() === 'out-right'"
+               [class.anim-out-up]="animating() === 'out-up'">
+
+            <!-- Card Top: Queue Reason + Counter + Waiting Time -->
+            <div class="card-top-row">
+              <span class="queue-reason-tag"
+                    [style.color]="getQueueReasonColor(item.queue_reason)"
+                    [style.border-color]="getQueueReasonColor(item.queue_reason)">
+                {{ getQueueReasonLabel(item.queue_reason) }}
+              </span>
+              <span class="card-counter">{{ currentIndex() + 1 }} / {{ pendingItems().length }}</span>
+              <span class="waiting-time" [class.urgent]="getWaitingTime(item.submitted_at).isUrgent">
+                {{ getWaitingTime(item.submitted_at).text }}
+              </span>
+            </div>
+
+            <!-- Child Context -->
+            <div class="child-context">
+              <a routerLink="/admin/risk-profiles" class="child-link">
+                <i class="pi pi-user"></i>
+                <span class="child-name">{{ item.child.name }}</span>
+              </a>
+              <span class="child-risk" [style.color]="getRiskLevelColor(item.child.risk_level)">
+                {{ getRiskLevelLabel(item.child.risk_level) }}
+              </span>
+              <span class="child-risk-score" [style.color]="getRiskLevelColor(item.child.risk_level)">
+                {{ (item.child.risk_score * 100).toFixed(0) }}%
+              </span>
+              <a routerLink="/admin/conversations" class="context-link">
+                <i class="pi pi-comments"></i> View Conversation
+              </a>
+            </div>
+
+            <!-- Previous Messages Context -->
+            @if (item.previous_messages.length > 0) {
+              <div class="prev-messages">
+                <span class="prev-messages-label">Previous messages:</span>
+                @for (msg of item.previous_messages; track msg.sent_at) {
+                  <div class="prev-message" [class.was-blocked]="msg.is_blocked">
+                    <span class="prev-time">{{ formatPrevMessageTime(msg.sent_at) }}</span>
+                    <span class="prev-content">"{{ msg.content_preview }}"</span>
+                    @if (msg.is_blocked) {
+                      <span class="prev-blocked-tag">blocked</span>
+                    }
+                  </div>
+                }
+              </div>
+            }
+
+            <!-- Main Message -->
+            <div class="main-message">
+              <div class="message-header">
+                <span class="label-tag" [style.color]="getLabelColor(item.tentative_label)">
+                  {{ item.tentative_label }}
+                </span>
+                <span class="language-tag">{{ item.language === 'unknown' ? '??' : item.language }}</span>
+                @if (item.agents_used.includes('Agent 3')) {
+                  <span class="llm-tag">LLM</span>
+                }
+              </div>
+              <p class="message-text">"{{ item.full_preview }}"</p>
+              <div class="message-meta">
+                <span>From {{ item.contact_number }}</span>
+                <span>{{ formatTime(item.submitted_at) }}</span>
+              </div>
+            </div>
+
+            <!-- LLM Explanation (muted, no box) -->
+            @if (item.llm_explanation) {
+              <p class="llm-explanation"><span class="llm-label">LLM:</span> {{ item.llm_explanation }}</p>
+            }
+
+            <!-- All 4 Scores -->
+            <div class="scores-grid">
+              <div class="score-item">
+                <span class="score-label">Confidence</span>
+                <span class="score-value" [style.color]="getConfidenceColor(item.confidence_score)">
+                  {{ item.confidence_score.toFixed(2) }}
+                </span>
+              </div>
+              <div class="score-item">
+                <span class="score-label">Toxicity</span>
+                <span class="score-value" [style.color]="getScoreColor(item.toxicity_score)">
+                  {{ item.toxicity_score.toFixed(2) }}
+                </span>
+              </div>
+              <div class="score-item">
+                <span class="score-label">Behavioral Risk</span>
+                <span class="score-value" [style.color]="getScoreColor(item.behavioral_risk_score)">
+                  {{ item.behavioral_risk_score.toFixed(2) }}
+                </span>
+              </div>
+              <div class="score-item score-final">
+                <span class="score-label">Final Score</span>
+                <span class="score-value" [style.color]="getScoreColor(item.final_score)">
+                  {{ item.final_score.toFixed(2) }}
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Action Bar -->
+          <div class="action-bar">
+            <button class="action-btn action-block" (click)="confirmBlock(item)">
+              <span class="action-label">Block</span>
+              <span class="action-shortcut">B</span>
+            </button>
+            <button class="action-btn action-skip" (click)="skipItem()">
+              <span class="action-label">Skip</span>
+              <span class="action-shortcut">S</span>
+            </button>
+            <button class="action-btn action-allow" (click)="allowMessage(item)">
+              <span class="action-label">Allow</span>
+              <span class="action-shortcut">A</span>
+            </button>
+          </div>
+
+          <!-- Keyboard hints -->
+          <div class="keyboard-hints">
+            Press <kbd>B</kbd> Block · <kbd>A</kbd> Allow · <kbd>S</kbd> Skip
+          </div>
+
+        </div>
+      }
+
+    } @else {
+
+      <!-- ═══════ LIST MODE ═══════ -->
+      <div class="list-view">
+        @for (item of pendingItems(); track item.id) {
+          <div class="list-card">
+
+            <!-- Card Header -->
+            <div class="list-card-header">
+              <span class="queue-reason-tag"
+                    [style.color]="getQueueReasonColor(item.queue_reason)"
+                    [style.border-color]="getQueueReasonColor(item.queue_reason)">
+                {{ getQueueReasonLabel(item.queue_reason) }}
+              </span>
+              <span class="waiting-time" [class.urgent]="getWaitingTime(item.submitted_at).isUrgent">
+                {{ getWaitingTime(item.submitted_at).text }}
+              </span>
+            </div>
+
+            <!-- Child Context -->
+            <div class="child-context child-context-compact">
+              <a routerLink="/admin/risk-profiles" class="child-link">
+                <i class="pi pi-user"></i>
+                {{ item.child.name }}
+              </a>
+              <span class="child-risk" [style.color]="getRiskLevelColor(item.child.risk_level)">
+                {{ getRiskLevelLabel(item.child.risk_level) }}
+              </span>
+            </div>
+
+            <!-- Message -->
+            <div class="list-message">
+              <div class="message-header">
+                <span class="label-tag" [style.color]="getLabelColor(item.tentative_label)">
+                  {{ item.tentative_label }}
+                </span>
+                <span class="language-tag">{{ item.language === 'unknown' ? '??' : item.language }}</span>
+              </div>
+              <p class="message-text">"{{ item.full_preview }}"</p>
+              <span class="message-meta">{{ item.contact_number }} · {{ formatTime(item.submitted_at) }}</span>
+            </div>
+
+            <!-- Scores Row -->
+            <div class="scores-row">
+              <div class="score-compact">
+                <span class="score-label">Conf</span>
+                <span class="score-value" [style.color]="getConfidenceColor(item.confidence_score)">{{ item.confidence_score.toFixed(2) }}</span>
+              </div>
+              <div class="score-compact">
+                <span class="score-label">Tox</span>
+                <span class="score-value" [style.color]="getScoreColor(item.toxicity_score)">{{ item.toxicity_score.toFixed(2) }}</span>
+              </div>
+              <div class="score-compact">
+                <span class="score-label">Behav</span>
+                <span class="score-value" [style.color]="getScoreColor(item.behavioral_risk_score)">{{ item.behavioral_risk_score.toFixed(2) }}</span>
+              </div>
+              <div class="score-compact">
+                <span class="score-label">Final</span>
+                <span class="score-value score-final-value" [style.color]="getScoreColor(item.final_score)">{{ item.final_score.toFixed(2) }}</span>
+              </div>
+            </div>
+
+            <!-- LLM Explanation -->
+            @if (item.llm_explanation) {
+              <p class="llm-explanation llm-compact"><span class="llm-label">LLM:</span> {{ item.llm_explanation }}</p>
+            }
+
+            <!-- Actions -->
+            <div class="list-actions">
+              <button class="list-btn list-btn-block" (click)="confirmBlock(item)">Block</button>
+              <button class="list-btn list-btn-allow" (click)="allowMessage(item)">Allow</button>
+            </div>
+
+          </div>
+        }
+      </div>
+
+    }
+
+    </div><!-- /queue-body -->
+  } @else {
+
+    <!-- Empty State -->
+    <div class="empty-state">
+      <div class="empty-icon">
+        <i class="pi pi-check"></i>
+      </div>
+      <h3 class="empty-title">All caught up!</h3>
+      <p class="empty-text">
+        No messages waiting for review. The AI pipeline is handling detections with high confidence.
+      </p>
+      <div class="empty-stats">
+        {{ resolvedCount() }} reviewed · {{ blockedCount() }} blocked · {{ allowedCount() }} allowed
+      </div>
+    </div>
+
+  }
+
+
+</div>

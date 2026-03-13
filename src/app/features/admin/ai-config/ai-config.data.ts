@@ -1,0 +1,117 @@
+import {
+	AgentStatus,
+	DecisionBoundaries,
+	FinalDecision,
+	LlmProviderId,
+	PipelineAgent,
+	SimulationSample,
+	ZoneKey,
+} from '@core/models/ai-config.model';
+
+export interface DecisionZoneMeta {
+	key: ZoneKey;
+	label: string;
+	action: string;
+	rangeLabel: string;
+	tone: 'allow' | 'warn' | 'review' | 'block' | 'critical';
+}
+
+export interface ProviderCard {
+	id: LlmProviderId;
+	name: string;
+	subtitle: string;
+}
+
+export interface ProviderModelOption {
+	label: string;
+	value: string;
+}
+
+export interface LanguageTab {
+	key: 'auto' | 'fr' | 'ar' | 'en';
+	label: string;
+}
+
+export const DEFAULT_BOUNDARIES: DecisionBoundaries = {
+	warn: 0.5,
+	review: 0.65,
+	block: 0.75,
+	critical: 0.9,
+};
+
+export const DECISION_ZONES: DecisionZoneMeta[] = [
+	{ key: 'allow', label: 'AUTORISER', action: 'Allow and archive', rangeLabel: '< 0.50', tone: 'allow' },
+	{ key: 'warn', label: 'AVERTIR', action: 'Soft warning to sender', rangeLabel: '0.50 - 0.65', tone: 'warn' },
+	{ key: 'review', label: 'REVISER', action: 'Send to Review Queue', rangeLabel: '0.65 - 0.75', tone: 'review' },
+	{ key: 'block', label: 'BLOQUER', action: 'Block + notify parent app', rangeLabel: '0.75 - 0.90', tone: 'block' },
+	{ key: 'critical', label: 'CRITIQUE', action: 'SMS + phone escalation', rangeLabel: '>= 0.90', tone: 'critical' },
+];
+
+export const AGENT_CARDS: PipelineAgent[] = [
+	{ id: 1, name: 'Regex Gate', role: 'Pattern detection', model: 'Rule Engine v3', status: 'ACTIVE', latencyMs: 42, enabled: true },
+	{ id: 2, name: 'ML Classification', role: 'Toxicity scoring', model: 'XLM-RoBERTa', status: 'ACTIVE', latencyMs: 124, enabled: true },
+	{
+		id: 3,
+		name: 'Semantic LLM',
+		role: 'Context review',
+		model: 'Groq/Mistral',
+		status: 'DEGRADED',
+		latencyMs: 318,
+		enabled: true,
+		triggerNote: 'Conditional - triggers if confidence < 0.85',
+		degradedWarning: 'Groq API unreachable - falling back to Agent 2',
+	},
+	{ id: 4, name: 'Behavioral Engine', role: 'Victim risk model', model: 'Random Forest', status: 'ACTIVE', latencyMs: 176, enabled: true },
+	{ id: 5, name: 'Decision Orchestrator', role: 'Final policy output', model: 'Policy Runtime', status: 'ACTIVE', latencyMs: 30, enabled: true },
+];
+
+export const PROVIDER_CARDS: ProviderCard[] = [
+	{ id: 'groq', name: 'Groq', subtitle: 'Low latency routing' },
+	{ id: 'mistral', name: 'Mistral', subtitle: 'General-purpose safety' },
+	{ id: 'openai', name: 'OpenAI', subtitle: 'High accuracy fallback' },
+];
+
+export const PROVIDER_MODELS: Record<LlmProviderId, ProviderModelOption[]> = {
+	groq: [
+		{ label: 'mixtral-8x7b-32768', value: 'mixtral-8x7b-32768' },
+		{ label: 'llama3-70b-8192', value: 'llama3-70b-8192' },
+		{ label: 'gemma2-9b-it', value: 'gemma2-9b-it' },
+	],
+	mistral: [
+		{ label: 'mistral-large-latest', value: 'mistral-large-latest' },
+		{ label: 'mistral-small-latest', value: 'mistral-small-latest' },
+		{ label: 'open-mixtral-8x7b', value: 'open-mixtral-8x7b' },
+	],
+	openai: [
+		{ label: 'gpt-4o', value: 'gpt-4o' },
+		{ label: 'gpt-4-turbo', value: 'gpt-4-turbo' },
+		{ label: 'gpt-3.5-turbo', value: 'gpt-3.5-turbo' },
+	],
+};
+
+export const LANGUAGE_TABS: LanguageTab[] = [
+	{ key: 'auto', label: 'Auto-detect' },
+	{ key: 'fr', label: 'FR' },
+	{ key: 'ar', label: 'AR' },
+	{ key: 'en', label: 'EN' },
+];
+
+export const SIMULATION_SAMPLES: SimulationSample[] = [
+	{ text: 'je vais te trouver', language: 'fr', toxicity: 0.78, behavioral: 0.74, explanation: 'Threatening phrasing detected in French.' },
+	{ text: 'this is our secret', language: 'en', toxicity: 0.64, behavioral: 0.71, explanation: 'Grooming-style secrecy cue detected.' },
+	{ text: 'سأؤذيك', language: 'ar', toxicity: 0.93, behavioral: 0.89, explanation: 'Direct violent threat found in Arabic.' },
+];
+
+export const DECISION_LABELS: Record<FinalDecision, string> = {
+	allow: 'AUTORISER',
+	warn: 'AVERTIR',
+	escalate: 'REVISER',
+	block: 'BLOQUER',
+	critical: 'CRITIQUE',
+};
+
+export const AGENT_STATUS_TONE: Record<AgentStatus, 'good' | 'warn' | 'bad'> = {
+	ACTIVE: 'good',
+	DEGRADED: 'warn',
+	OFFLINE: 'bad',
+};

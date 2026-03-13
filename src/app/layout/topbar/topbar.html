@@ -1,1 +1,30 @@
-<p>topbar works!</p>
+<header class="topbar">
+  <div class="topbar-left">
+    <button class="icon-btn" (click)="toggleSidebar.emit()">
+      <i class="pi pi-bars"></i>
+    </button>
+    <span class="company-badge">Smart Automations Technologies</span>
+  </div>
+
+  <div class="topbar-right">
+    <!-- Alert bell -->
+    <button class="icon-btn badge-btn">
+      <i class="pi pi-bell"></i>
+      <span class="badge badge-critical">3</span>
+    </button>
+
+    <!-- Theme toggle -->
+    <button class="icon-btn" (click)="toggleTheme()">
+      <i class="pi" [class.pi-moon]="!darkMode()" [class.pi-sun]="darkMode()"></i>
+    </button>
+
+    <!-- User avatar -->
+    <div class="user-pill">
+      <div class="avatar">A</div>
+      <div class="user-info">
+        <span class="user-name">Admin</span>
+        <span class="user-role">Administrator</span>
+      </div>
+    </div>
+  </div>
+</header>

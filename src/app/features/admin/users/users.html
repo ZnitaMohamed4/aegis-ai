@@ -1,1 +1,443 @@
-<p>users works!</p>
+<p-toast position="top-right" />
+
+<div class="p-4 sm:p-6 w-full">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-1">Users</h1>
+      <p class="text-sm text-[var(--text-muted)]">Manage parent accounts and their linked children</p>
+    </div>
+    <button
+      class="flex items-center gap-2 px-4 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
+      (click)="openCreate()">
+      <i class="pi pi-plus text-xs"></i>
+      Add Parent
+    </button>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <div class="text-xs text-[var(--text-muted)] mb-1">Total Parents</div>
+      <div class="text-3xl font-bold font-mono text-[var(--text-primary)]">{{ users().length }}</div>
+    </div>
+    <div class="bg-[var(--bg-surface)] border border-green-500/30 rounded-xl p-4">
+      <div class="text-xs text-[var(--text-muted)] mb-1">Active</div>
+      <div class="text-3xl font-bold font-mono text-[var(--low)]">{{ activeCount() }}</div>
+    </div>
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <div class="text-xs text-[var(--text-muted)] mb-1">Linked Children</div>
+      <div class="text-3xl font-bold font-mono text-[var(--accent)]">{{ linkedCount() }}</div>
+    </div>
+    <div class="bg-[var(--bg-surface)] border border-orange-500/30 rounded-xl p-4">
+      <div class="text-xs text-[var(--text-muted)] mb-1">Unlinked</div>
+      <div class="text-3xl font-bold font-mono text-[var(--medium)]">{{ unlinkedCount() }}</div>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg px-3 py-2 mb-5 max-w-sm">
+    <i class="pi pi-search text-[var(--text-muted)] text-sm"></i>
+    <input
+      type="text"
+      placeholder="Search by name or email..."
+      class="bg-transparent border-none outline-none text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] w-full"
+      [ngModel]="searchQuery()"
+      (ngModelChange)="searchQuery.set($event)" />
+  </div>
+
+  <!-- User Cards -->
+  <div class="flex flex-col gap-3">
+    @for (user of filteredUsers(); track user.id) {
+
+      <div class="border border-[var(--border)] rounded-xl p-5 hover:border-[var(--accent)] transition-colors"
+           [style.background]="(!user.monitoring_active || !user.linked_child) ? 'color-mix(in srgb, var(--bg-surface) 95%, #F97316 5%)' : 'var(--bg-surface)'">
+        <div class="flex flex-wrap lg:flex-nowrap items-center gap-4 lg:gap-5">
+
+          <!-- Avatar -->
+          <div class="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+               [style.background]="user.status === 'active' ? 'var(--accent)' : '#475569'">
+            {{ getInitials(user.full_name) }}
+          </div>
+
+          <!-- Main Info -->
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-0.5">
+              <span class="text-sm font-bold text-[var(--text-primary)]">{{ user.full_name }}</span>
+              <span [class]="getStatusClass(user.status)">{{ user.status }}</span>
+            </div>
+            <div class="text-xs text-[var(--text-muted)]">{{ user.email }} · {{ user.phone }}</div>
+            <div class="text-xs text-[var(--text-muted)] mt-0.5">
+              Joined {{ user.joined_at }} · Last login {{ user.last_login }}
+            </div>
+          </div>
+
+          <!-- Linked Child -->
+          <div class="flex-shrink-0 w-52">
+            @if (user.linked_child) {
+              <div class="bg-[var(--bg-surface-2)] rounded-lg px-3 py-2">
+                <div class="flex items-center gap-2 mb-1">
+                  <div class="w-2 h-2 rounded-full"
+                       [style.background]="user.linked_child.whatsapp_connected ? 'var(--low)' : '#475569'">
+                  </div>
+                  <span class="text-xs font-semibold text-[var(--text-primary)]">
+                    {{ user.linked_child.identifier }}
+                  </span>
+                  <span class="text-xs font-bold capitalize px-1.5 py-0.5 rounded-full ml-auto"
+                        [style.color]="getRiskHex(user.linked_child.risk_level)"
+                        [style.background]="getRiskHex(user.linked_child.risk_level) + '22'">
+                    {{ user.linked_child.risk_level }}
+                  </span>
+                </div>
+                <div class="text-xs font-mono text-[var(--text-muted)]">
+                  {{ user.linked_child.whatsapp_number }}
+                </div>
+                @if (!user.linked_child.whatsapp_connected) {
+                  <div class="text-xs text-[var(--medium)] mt-1 font-semibold">
+                    ⚠ WhatsApp not connected
+                  </div>
+                }
+              </div>
+            } @else {
+              <div class="bg-orange-500/10 border border-orange-500/20 rounded-lg px-3 py-2">
+                <div class="text-xs font-bold text-[var(--medium)] mb-0.5">⚠ No child linked</div>
+                <div class="text-xs text-[var(--text-muted)]">Monitoring inactive</div>
+              </div>
+            }
+          </div>
+
+          <!-- Monitoring Toggle -->
+          <div class="flex-shrink-0 flex flex-col items-center gap-1">
+            <span class="text-xs text-[var(--text-muted)]">Monitoring</span>
+            <button
+              class="relative w-10 h-5 rounded-full transition-colors flex-shrink-0"
+              [style.background]="user.monitoring_active ? 'var(--accent)' : 'var(--bg-surface-2)'"
+              [style.border]="'1px solid var(--border)'"
+              (click)="toggleMonitoring(user); $event.stopPropagation()">
+              <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
+                    [style.left]="user.monitoring_active ? '20px' : '2px'">
+              </span>
+            </button>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button
+              class="px-3 py-1.5 text-xs font-semibold text-[var(--accent)] bg-[var(--accent)]/10 rounded-lg hover:bg-[var(--accent)]/20 transition-colors"
+              (click)="openView(user)">
+              View
+            </button>
+            <button
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors"
+              [class]="user.status === 'active'
+                ? 'text-[var(--critical)] bg-red-500/10 hover:bg-red-500/20'
+                : 'text-[var(--low)] bg-green-500/10 hover:bg-green-500/20'"
+              (click)="toggleStatus(user)">
+              {{ user.status === 'active' ? 'Deactivate' : 'Activate' }}
+            </button>
+          </div>
+
+        </div>
+      </div>
+    }
+
+    @if (filteredUsers().length === 0) {
+      <div class="text-center py-16 text-[var(--text-muted)]">
+        <i class="pi pi-users text-3xl block mb-3"></i>
+        <p class="text-sm">No users match your search</p>
+      </div>
+    }
+  </div>
+
+</div>
+
+<!-- ── DRAWER ─────────────────────────────────────── -->
+<p-drawer
+  [visible]="drawerVisible()"
+  (visibleChange)="drawerVisible.set($event)"
+  (onHide)="drawerMode.set(null)"
+  position="right"
+  [style]="{ width: 'min(440px, 100vw)' }">
+
+  <!-- VIEW DRAWER -->
+  @if (drawerMode() === 'view' && selectedUser()) {
+    <div class="flex flex-col gap-5 p-1">
+
+      <!-- Identity -->
+      <div class="flex items-center gap-4">
+        <div class="w-14 h-14 rounded-full flex items-center justify-center text-white text-xl font-bold"
+             [style.background]="selectedUser()!.status === 'active' ? 'var(--accent)' : '#475569'">
+          {{ getInitials(selectedUser()!.full_name) }}
+        </div>
+        <div>
+          <div class="text-base font-bold text-[var(--text-primary)]">{{ selectedUser()!.full_name }}</div>
+          <div class="text-xs text-[var(--text-muted)]">{{ selectedUser()!.email }}</div>
+          <span class="text-xs mt-1 inline-block" [class]="getStatusClass(selectedUser()!.status)">
+            {{ selectedUser()!.status }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Account Details -->
+      <div class="bg-[var(--bg-surface-2)] rounded-xl p-4 flex flex-col gap-2">
+        <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">Account</div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Phone</span>
+          <span class="font-mono text-[var(--text-primary)]">{{ selectedUser()!.phone }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Joined</span>
+          <span class="text-[var(--text-primary)]">{{ selectedUser()!.joined_at }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Last login</span>
+          <span class="text-[var(--text-primary)]">{{ selectedUser()!.last_login }}</span>
+        </div>
+      </div>
+
+      <!-- Linked Child -->
+      <div>
+        <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">Linked Child</div>
+        @if (selectedUser()!.linked_child) {
+          <div class="bg-[var(--bg-surface-2)] rounded-xl p-4 flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <span class="text-sm font-bold text-[var(--text-primary)]">
+                {{ selectedUser()!.linked_child!.identifier }}
+              </span>
+              <span class="text-xs font-bold capitalize px-2 py-0.5 rounded-full"
+                    [style.color]="getRiskHex(selectedUser()!.linked_child!.risk_level)"
+                    [style.background]="getRiskHex(selectedUser()!.linked_child!.risk_level) + '22'">
+                {{ selectedUser()!.linked_child!.risk_level }} risk
+              </span>
+            </div>
+            <div class="text-xs font-mono text-[var(--text-muted)]">
+              {{ selectedUser()!.linked_child!.whatsapp_number }}
+            </div>
+            <div class="flex items-center gap-2 text-xs"
+                 [class]="selectedUser()!.linked_child!.whatsapp_connected ? 'text-[var(--low)]' : 'text-[var(--medium)]'">
+              <i [class]="selectedUser()!.linked_child!.whatsapp_connected ? 'pi pi-check-circle' : 'pi pi-exclamation-circle'"></i>
+              {{ selectedUser()!.linked_child!.whatsapp_connected ? 'WhatsApp connected' : 'WhatsApp not connected' }}
+            </div>
+          </div>
+        } @else {
+          <div class="bg-orange-500/10 border border-orange-500/20 rounded-xl p-4 text-center">
+            <i class="pi pi-link text-[var(--medium)] text-xl block mb-2"></i>
+            <p class="text-xs text-[var(--medium)] font-semibold">No child linked yet</p>
+            <p class="text-xs text-[var(--text-muted)] mt-1">Ask the parent to complete WhatsApp setup</p>
+          </div>
+        }
+      </div>
+
+      <!-- Monitoring Settings -->
+      <div>
+        <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
+          Monitoring Settings
+        </div>
+        <div class="bg-[var(--bg-surface-2)] rounded-xl p-4 flex flex-col gap-3">
+
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-[var(--text-primary)]">Monitoring Active</span>
+            <button
+              class="relative w-10 h-5 rounded-full transition-colors"
+              [style.background]="selectedUser()!.monitoring_active ? 'var(--accent)' : 'var(--bg-surface)'"
+              [style.border]="'1px solid var(--border)'"
+              (click)="toggleMonitoring(selectedUser()!)">
+              <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
+                    [style.left]="selectedUser()!.monitoring_active ? '20px' : '2px'">
+              </span>
+            </button>
+          </div>
+
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-[var(--text-muted)]">Alert Threshold</span>
+            <span class="font-mono font-bold text-[var(--accent)]">
+              {{ selectedUser()!.alert_threshold.toFixed(2) }}
+            </span>
+          </div>
+
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-[var(--text-muted)]">SMS Notifications</span>
+            <span [class]="selectedUser()!.sms_notifications ? 'text-[var(--low)]' : 'text-[var(--text-muted)]'">
+              {{ selectedUser()!.sms_notifications ? 'Enabled' : 'Disabled' }}
+            </span>
+          </div>
+
+          <div class="flex items-center justify-between text-sm">
+            <span class="text-[var(--text-muted)]">Email Notifications</span>
+            <span [class]="selectedUser()!.email_notifications ? 'text-[var(--low)]' : 'text-[var(--text-muted)]'">
+              {{ selectedUser()!.email_notifications ? 'Enabled' : 'Disabled' }}
+            </span>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Navigate to risk profile -->
+      @if (selectedUser()!.linked_child) {
+        <a [routerLink]="'/admin/risk-profiles'"
+           class="flex items-center justify-center gap-2 w-full py-2.5 rounded-lg border border-[var(--border)] text-sm font-semibold text-[var(--text-primary)] hover:bg-[var(--bg-surface-2)] transition-colors">
+          <i class="pi pi-shield text-sm"></i>
+          View Child Risk Profile
+        </a>
+      }
+
+    </div>
+  }
+
+  <!-- CREATE DRAWER -->
+  @if (drawerMode() === 'create') {
+    <div class="flex flex-col gap-5 p-1">
+
+      <!-- Step indicator -->
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+               [class]="createStep() === 1 ? 'bg-[var(--accent)] text-white' : 'bg-[var(--low)] text-white'">
+            {{ createStep() === 1 ? '1' : '✓' }}
+          </div>
+          <span class="text-xs font-semibold"
+                [class]="createStep() === 1 ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'">
+            Parent Account
+          </span>
+        </div>
+        <div class="flex-1 h-px bg-[var(--border)]"></div>
+        <div class="flex items-center gap-2">
+          <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+               [class]="createStep() === 2 ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-surface-2)] text-[var(--text-muted)]'">
+            2
+          </div>
+          <span class="text-xs font-semibold"
+                [class]="createStep() === 2 ? 'text-[var(--text-primary)]' : 'text-[var(--text-muted)]'">
+            Link Child
+          </span>
+        </div>
+      </div>
+
+      <!-- Step 1 -->
+      @if (createStep() === 1) {
+        <div class="flex flex-col gap-4">
+          <div class="text-sm font-bold text-[var(--text-primary)]">Parent Information</div>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-[var(--text-muted)]">Full Name</label>
+            <input type="text" placeholder="e.g. Karim Benali"
+                   class="input-field"
+                   [ngModel]="newUser().full_name"
+                   (ngModelChange)="updateNewUserField('full_name', $event)" />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-[var(--text-muted)]">Email Address</label>
+            <input type="email" placeholder="parent@email.com"
+                   class="input-field"
+                   [ngModel]="newUser().email"
+                   (ngModelChange)="updateNewUserField('email', $event)" />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-[var(--text-muted)]">Phone Number</label>
+            <input type="tel" placeholder="+212 6XX XXX XXX"
+                   class="input-field"
+                   [ngModel]="newUser().phone"
+                   (ngModelChange)="updateNewUserField('phone', $event)" />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-[var(--text-muted)]">Alert Threshold</label>
+            <div class="flex items-center gap-3">
+              <input type="range" min="0.5" max="0.95" step="0.05"
+                     class="flex-1 accent-[var(--accent)]"
+                [ngModel]="newUser().alert_threshold"
+                (ngModelChange)="updateNewUserField('alert_threshold', $event)" />
+              <span class="text-sm font-mono font-bold text-[var(--accent)] w-10">
+                {{ newUser().alert_threshold.toFixed(2) }}
+              </span>
+            </div>
+            <div class="text-xs text-[var(--text-muted)]">
+              Alerts are triggered when toxicity exceeds this value
+            </div>
+          </div>
+
+          <button
+            class="w-full py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity mt-2"
+            (click)="proceedToChildStep()">
+            Next — Link a Child →
+          </button>
+        </div>
+      }
+
+      <!-- Step 2 -->
+      @if (createStep() === 2) {
+        <div class="flex flex-col gap-4">
+          <div class="text-sm font-bold text-[var(--text-primary)]">Link a Child</div>
+          <p class="text-xs text-[var(--text-muted)]">
+            Enter the child's WhatsApp number. The parent will complete the connection
+            by scanning the QR code in their dashboard.
+          </p>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-[var(--text-muted)]">Child Identifier</label>
+            <input type="text" placeholder="e.g. Child #E5"
+                   class="input-field"
+                   [ngModel]="newUser().child_identifier"
+                   (ngModelChange)="updateNewUserField('child_identifier', $event)" />
+          </div>
+
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-semibold text-[var(--text-muted)]">Child WhatsApp Number</label>
+            <input type="tel" placeholder="+212 6XX XXX XXX"
+                   class="input-field"
+                   [ngModel]="newUser().child_whatsapp"
+                   (ngModelChange)="updateNewUserField('child_whatsapp', $event)" />
+          </div>
+
+          <!-- Notifications -->
+          <div class="bg-[var(--bg-surface-2)] rounded-xl p-4 flex flex-col gap-3">
+            <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Notifications</div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-[var(--text-primary)]">SMS Alerts</span>
+              <button
+                class="relative w-10 h-5 rounded-full transition-colors"
+                [style.background]="newUser().sms_notifications ? 'var(--accent)' : 'var(--bg-surface)'"
+                [style.border]="'1px solid var(--border)'"
+                (click)="newUser.update(u => ({...u, sms_notifications: !u.sms_notifications}))">
+                <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
+                      [style.left]="newUser().sms_notifications ? '20px' : '2px'">
+                </span>
+              </button>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-[var(--text-primary)]">Email Alerts</span>
+              <button
+                class="relative w-10 h-5 rounded-full transition-colors"
+                [style.background]="newUser().email_notifications ? 'var(--accent)' : 'var(--bg-surface)'"
+                [style.border]="'1px solid var(--border)'"
+                (click)="newUser.update(u => ({...u, email_notifications: !u.email_notifications}))">
+                <span class="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
+                      [style.left]="newUser().email_notifications ? '20px' : '2px'">
+                </span>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex gap-2 mt-2">
+            <button
+              class="flex-1 py-2.5 border border-[var(--border)] text-[var(--text-muted)] text-sm font-semibold rounded-lg hover:bg-[var(--bg-surface-2)] transition-colors"
+              (click)="createStep.set(1)">
+              ← Back
+            </button>
+            <button
+              class="flex-1 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity"
+              (click)="createAccount()">
+              Create Account ✓
+            </button>
+          </div>
+
+        </div>
+      }
+
+    </div>
+  }
+
+</p-drawer>

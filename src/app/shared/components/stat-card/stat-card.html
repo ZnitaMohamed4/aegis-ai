@@ -1,0 +1,16 @@
+<div class="stat-card" [style.border-color]="borderColor() || 'var(--border)'">
+  <div class="text-xs text-[var(--text-muted)] mb-1">{{ label() }}</div>
+  <div class="text-3xl font-bold font-mono mb-1" [style.color]="valueColor() || 'var(--text-primary)'">
+    {{ value() }}
+  </div>
+  @if (sub()) {
+    <div class="text-xs text-[var(--text-muted)]">{{ sub() }}</div>
+  }
+  @if (trend()) {
+    <div class="flex items-center gap-1 mt-1 text-xs font-semibold"
+         [class]="trend()!.startsWith('+') ? 'text-[var(--low)]' : 'text-[var(--critical)]'">
+      <i [class]="trend()!.startsWith('+') ? 'pi pi-arrow-up' : 'pi pi-arrow-down'"></i>
+      {{ trend() }}
+    </div>
+  }
+</div>

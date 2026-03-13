@@ -1,1 +1,297 @@
-<p>channels works!</p>
+<div class="p-4 sm:p-6 w-full flex flex-col gap-5">
+	<app-page-header
+		title="Instance Registry"
+		subtitle="Manage EvolutionAPI instances, monitor connection state, and onboard new child channels.">
+		<button
+			type="button"
+			class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
+			(click)="openConnectDrawer()">
+			<span class="text-base leading-none">+</span>
+			Connect New Instance
+		</button>
+	</app-page-header>
+
+	<!-- Server status bar -->
+	<section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] overflow-hidden">
+		<div class="px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+			<div class="flex items-center gap-2 pr-2 sm:pr-4 sm:border-r sm:border-[var(--border)]">
+				<span class="status-dot status-dot-online"></span>
+				<span class="text-[var(--text-muted)]">Server:</span>
+				<span class="font-mono text-[var(--text-primary)]">{{ serverStatus.serverUrl }}</span>
+				<span class="text-[var(--low)] text-xs font-semibold">{{ serverStatus.status }}</span>
+			</div>
+
+			<div class="flex items-center gap-2 pr-2 sm:pr-4 sm:border-r sm:border-[var(--border)]">
+				<span class="text-[var(--text-muted)]">Version:</span>
+				<span class="font-semibold text-[var(--text-primary)]">{{ serverStatus.version }}</span>
+			</div>
+
+			<div class="flex items-center gap-2 pr-2 sm:pr-4 sm:border-r sm:border-[var(--border)]">
+				<span class="text-[var(--text-muted)]">Active instances:</span>
+				<span class="font-semibold text-[var(--text-primary)]">
+					{{ serverStatus.activeInstances }}/{{ serverStatus.maxInstances }}
+				</span>
+			</div>
+
+			<div class="flex items-center gap-2">
+				<span class="text-[var(--text-muted)]">Webhook:</span>
+				<span class="font-semibold" [class.text-[var(--low)]]="serverStatus.webhook === 'Connected'" [class.text-[var(--critical)]]="serverStatus.webhook === 'Disconnected'">
+					{{ serverStatus.webhook }}
+				</span>
+			</div>
+		</div>
+
+		<div class="warning-banner px-4 py-2 text-xs sm:text-sm">
+			<span class="font-semibold">Warning:</span>
+			{{ serverStatus.warning }}
+		</div>
+	</section>
+
+	<!-- Channel tabs -->
+	<section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-3 sm:p-4">
+		<div class="flex flex-wrap items-center gap-2">
+			@for (tab of channelTabs; track tab.key) {
+				<button
+					type="button"
+					class="tab-btn"
+					[class.tab-btn-active]="activeTab() === tab.key"
+					[class.tab-btn-soon]="tab.comingSoon"
+					(click)="selectTab(tab.key)">
+					<span>{{ tab.label }}</span>
+					@if (tab.comingSoon) {
+						<span class="tab-soon-badge">Coming Soon</span>
+					}
+				</button>
+			}
+		</div>
+	</section>
+
+	<!-- Instances list -->
+	<section class="flex flex-col gap-3">
+		@if (selectedTabMeta().key === 'whatsapp-baileys') {
+			@for (instance of filteredInstances(); track instance.id) {
+				<article
+					class="instance-card"
+					[class.instance-card-disconnected]="instance.status === 'Disconnected'">
+
+					<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+						<div class="flex-1 min-w-0">
+							<div class="flex flex-wrap items-center gap-2 mb-1.5">
+								<span [class]="getStatusDotClass(instance.status)"></span>
+								<span class="font-semibold text-[var(--text-primary)]">
+									{{ instance.childIdentifier }}
+								</span>
+								<span class="text-[var(--text-muted)]">·</span>
+								<span class="font-mono text-sm text-[var(--text-muted)]">{{ instance.phoneNumber }}</span>
+								<span class="connection-badge">{{ instance.connectionType }}</span>
+							</div>
+
+							<div class="text-sm text-[var(--text-muted)] flex flex-wrap items-center gap-x-4 gap-y-1">
+								<span>
+									Status:
+									<span class="font-semibold text-[var(--text-primary)]">{{ instance.status }}</span>
+								</span>
+								<span>Last active: {{ instance.lastActive }}</span>
+								<span>{{ instance.interceptedMessages }} messages intercepted</span>
+							</div>
+
+							@if (instance.status === 'Disconnected') {
+								<div class="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-[var(--critical)] bg-red-500/10 border border-red-500/25 rounded-full px-3 py-1">
+									<i class="pi pi-exclamation-triangle"></i>
+									Monitoring paused
+								</div>
+							}
+						</div>
+
+						<div class="flex items-center gap-2 sm:justify-end">
+							<button
+								type="button"
+								class="action-btn"
+								(click)="reconnectInstance(instance.id)">
+								Reconnect
+							</button>
+							<button
+								type="button"
+								class="action-btn"
+								(click)="disconnectInstance(instance.id)">
+								Disconnect
+							</button>
+							<button
+								type="button"
+								class="action-btn action-btn-danger"
+								(click)="deleteInstance(instance.id)">
+								Delete
+							</button>
+						</div>
+					</div>
+				</article>
+			}
+
+			@if (filteredInstances().length === 0) {
+				<div class="text-sm text-[var(--text-muted)] bg-[var(--bg-surface)] border border-dashed border-[var(--border)] rounded-xl px-4 py-8 text-center">
+					No instances yet. Click "Connect New Instance" to onboard your first child account.
+				</div>
+			}
+		} @else {
+			<div class="text-sm text-[var(--text-muted)] bg-[var(--bg-surface)] border border-dashed border-[var(--border)] rounded-xl px-4 py-8 text-center">
+				<p class="font-semibold text-[var(--text-primary)] mb-1">{{ selectedTabMeta().label }} integration is coming soon.</p>
+				<p>Instance provisioning and webhook mapping for this channel will appear here once enabled.</p>
+			</div>
+		}
+	</section>
+</div>
+
+<p-drawer
+	[(visible)]="drawerVisible"
+	position="right"
+	[style]="{ width: 'min(480px, 100vw)' }"
+	header="Connect New Instance"
+	(onHide)="closeDrawer()">
+
+	<div class="flex flex-col gap-5 p-1">
+
+		<!-- Step indicator -->
+		<div class="step-indicator-wrap">
+			<div class="step-indicator-line"></div>
+			@for (step of [1, 2, 3]; track step) {
+				<div class="step-pill" [class.step-pill-active]="wizardStep() === step" [class.step-pill-done]="wizardStep() > step">
+					{{ step }}
+				</div>
+			}
+			<span class="step-counter">Step {{ wizardStep() }}/3</span>
+		</div>
+
+		@if (wizardStep() === 1) {
+			<section class="flex flex-col gap-4">
+				<div>
+					<h3 class="text-base font-semibold text-[var(--text-primary)] mb-1">Instance Identity</h3>
+					<p class="text-sm text-[var(--text-muted)]">Define this monitored account before generating a QR session.</p>
+				</div>
+
+				<label class="wizard-label">
+					Instance name
+					<input
+						type="text"
+						class="wizard-input"
+						placeholder="child-a1-baileys"
+						[ngModel]="instanceName()"
+						(ngModelChange)="instanceName.set($event)" />
+				</label>
+
+				<label class="wizard-label">
+					Child identifier
+					<input
+						type="text"
+						class="wizard-input"
+						placeholder="Child #A1"
+						[ngModel]="childIdentifier()"
+						(ngModelChange)="childIdentifier.set($event)" />
+				</label>
+
+				<label class="wizard-label">
+					Phone number
+					<input
+						type="tel"
+						class="wizard-input"
+						placeholder="+212 6XX XXX X01"
+						[ngModel]="phoneNumber()"
+						(ngModelChange)="phoneNumber.set($event)" />
+				</label>
+
+				@if (formError()) {
+					<div class="text-xs font-semibold text-[var(--critical)] bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+						{{ formError() }}
+					</div>
+				}
+
+				<button type="button" class="wizard-primary-btn" (click)="nextStepFromForm()">Next: Generate QR</button>
+			</section>
+		}
+
+		@if (wizardStep() === 2) {
+			<section class="flex flex-col gap-4">
+				<div>
+					<h3 class="text-base font-semibold text-[var(--text-primary)] mb-1">Scan QR with Child Device</h3>
+					<p class="text-sm text-[var(--text-muted)]">Open WhatsApp on the phone and scan this code to establish the session.</p>
+				</div>
+
+				<div class="qr-panel">
+					<div class="qr-shell">
+						<div class="scan-line"></div>
+						<svg viewBox="0 0 140 140" class="qr-svg" aria-hidden="true">
+							<rect x="8" y="8" width="124" height="124" fill="#ffffff" />
+							<rect x="16" y="16" width="24" height="24" fill="#101828" />
+							<rect x="22" y="22" width="12" height="12" fill="#ffffff" />
+							<rect x="100" y="16" width="24" height="24" fill="#101828" />
+							<rect x="106" y="22" width="12" height="12" fill="#ffffff" />
+							<rect x="16" y="100" width="24" height="24" fill="#101828" />
+							<rect x="22" y="106" width="12" height="12" fill="#ffffff" />
+							<rect x="52" y="18" width="8" height="8" fill="#101828" />
+							<rect x="62" y="18" width="6" height="6" fill="#101828" />
+							<rect x="72" y="18" width="8" height="8" fill="#101828" />
+							<rect x="50" y="34" width="10" height="10" fill="#101828" />
+							<rect x="66" y="32" width="8" height="8" fill="#101828" />
+							<rect x="80" y="30" width="10" height="10" fill="#101828" />
+							<rect x="44" y="50" width="8" height="8" fill="#101828" />
+							<rect x="58" y="48" width="10" height="10" fill="#101828" />
+							<rect x="76" y="48" width="12" height="12" fill="#101828" />
+							<rect x="92" y="52" width="8" height="8" fill="#101828" />
+							<rect x="44" y="68" width="12" height="12" fill="#101828" />
+							<rect x="62" y="70" width="6" height="6" fill="#101828" />
+							<rect x="72" y="66" width="10" height="10" fill="#101828" />
+							<rect x="88" y="70" width="12" height="12" fill="#101828" />
+							<rect x="46" y="88" width="8" height="8" fill="#101828" />
+							<rect x="60" y="88" width="12" height="12" fill="#101828" />
+							<rect x="78" y="88" width="8" height="8" fill="#101828" />
+							<rect x="92" y="88" width="8" height="8" fill="#101828" />
+							<rect x="54" y="106" width="8" height="8" fill="#101828" />
+							<rect x="68" y="106" width="10" height="10" fill="#101828" />
+							<rect x="84" y="106" width="8" height="8" fill="#101828" />
+							<rect x="96" y="104" width="10" height="10" fill="#101828" />
+						</svg>
+					</div>
+
+					<div class="text-center">
+						<div class="inline-flex items-center gap-2 text-sm font-semibold text-[var(--low)]">
+							<span class="status-dot status-dot-online animate-pulse"></span>
+							Waiting for scan...
+						</div>
+						<p class="text-xs text-[var(--text-muted)] mt-1">Session expires in {{ countdownSeconds() }}s</p>
+					</div>
+
+					<div class="timer-bar" role="progressbar" aria-valuemin="0" aria-valuemax="60" [attr.aria-valuenow]="countdownSeconds()">
+						<div class="timer-bar-fill" [style.width]="qrProgress()"></div>
+					</div>
+
+					@if (countdownSeconds() === 0) {
+						<div class="text-xs font-semibold text-[var(--critical)] bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 text-center">
+							QR expired. Refresh to generate a new code.
+						</div>
+					}
+				</div>
+
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+					<button type="button" class="wizard-secondary-btn" (click)="refreshQr()">Refresh QR</button>
+					<button type="button" class="wizard-primary-btn" (click)="completeScan()">Simulate Scan Complete</button>
+				</div>
+			</section>
+		}
+
+		@if (wizardStep() === 3) {
+			<section class="flex flex-col items-center text-center gap-4 py-4">
+				<div class="success-check">
+					<i class="pi pi-check"></i>
+				</div>
+				<div>
+					<h3 class="text-lg font-semibold text-[var(--text-primary)] mb-1">Connected!</h3>
+					<p class="text-sm text-[var(--text-muted)]">
+						Monitoring is now active for
+						<span class="font-semibold text-[var(--text-primary)]">{{ instanceName() }}</span>.
+					</p>
+				</div>
+				<button type="button" class="wizard-primary-btn w-full" (click)="finishWizard()">Done</button>
+			</section>
+		}
+
+	</div>
+</p-drawer>

@@ -1,1 +1,244 @@
-<p>dashboard works!</p>
+<div class="dashboard">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-subtitle">System overview — real-time monitoring</p>
+    </div>
+    <div class="header-meta">
+      <span class="live-indicator">
+        <span class="live-dot"></span>
+        Live
+      </span>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="stats-grid">
+    @for (stat of stats; track stat.label) {
+      <div class="stat-card">
+        <div class="stat-top">
+          <span class="stat-label">{{ stat.label }}</span>
+          <div class="stat-icon-wrap" [style.background]="'var(--' + stat.color + ')' + '22'">
+            <i class="pi {{ stat.icon }}" [style.color]="'var(--' + stat.color + ')'"></i>
+          </div>
+        </div>
+        <div class="stat-value mono">{{ stat.value }}</div>
+        <div class="stat-trend" [class.trend-up]="stat.trendUp" [class.trend-down]="!stat.trendUp">
+          <i class="pi" [class.pi-arrow-up]="stat.trendUp" [class.pi-arrow-down]="!stat.trendUp"></i>
+          {{ stat.trend }}
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- Live Activity Feed -->
+  <div class="panel feed-panel">
+    <div class="panel-header">
+      <div class="feed-title-row">
+        <span class="live-dot-sm"></span>
+        <span class="panel-title">Live Activity Feed</span>
+      </div>
+      <span class="feed-count mono">{{ feedEvents().length }} events</span>
+    </div>
+    <div class="feed-list">
+      @for (event of feedEvents(); track event.id) {
+        <div class="feed-row" [class.feed-new]="event.id === feedEvents()[0].id">
+          <span class="feed-time mono">{{ event.time }}</span>
+          <div class="feed-dot" [style.background]="getFeedColor(event.type)"></div>
+          <i class="pi {{ event.icon }} feed-icon" [style.color]="getFeedColor(event.type)"></i>
+          <span class="feed-text">{{ event.text }}</span>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Content Grid -->
+  <div class="content-grid">
+
+    
+
+    <!-- Recent Alerts -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Recent Alerts</span>
+        <a class="panel-link" routerLink="/admin/alerts">View all →</a>
+      </div>
+      <div class="alert-list">
+        @for (alert of recentAlerts; track alert.id) {
+          <div class="alert-row">
+            <div class="alert-severity-bar"
+                 [style.background]="getRiskHex(alert.severity)">
+            </div>
+            <div class="alert-body">
+              <div class="alert-preview">{{ alert.preview }}</div>
+              <div class="alert-meta">
+                <span class="alert-category">{{ alert.category }}</span>
+                <span class="alert-time">{{ alert.time }}</span>
+              </div>
+            </div>
+            <div class="alert-decision" [ngClass]="getDecisionClass(alert.decision)">
+              {{ alert.decision }}
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- System Status -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">AI Pipeline Status</span>
+      </div>
+      <div class="agent-list">
+        <div class="agent-row">
+          <div class="agent-dot dot-green"></div>
+          <span class="agent-name">Agent 1 — Preprocessing</span>
+          <span class="agent-latency mono">42ms</span>
+        </div>
+        <div class="agent-row">
+          <div class="agent-dot dot-green"></div>
+          <span class="agent-name">Agent 2 — ML Classifier</span>
+          <span class="agent-latency mono">287ms</span>
+        </div>
+        <div class="agent-row">
+          <div class="agent-dot dot-yellow"></div>
+          <span class="agent-name">Agent 3 — LLM Reasoning</span>
+          <span class="agent-latency mono">1240ms</span>
+        </div>
+        <div class="agent-row">
+          <div class="agent-dot dot-green"></div>
+          <span class="agent-name">Agent 4 — Behavioral</span>
+          <span class="agent-latency mono">95ms</span>
+        </div>
+        <div class="agent-row">
+          <div class="agent-dot dot-green"></div>
+          <span class="agent-name">Agent 5 — Orchestrator</span>
+          <span class="agent-latency mono">12ms</span>
+        </div>
+      </div>
+
+      <div class="panel-divider"></div>
+
+      <div class="panel-header">
+        <span class="panel-title">Review Queue</span>
+        <a class="panel-link" routerLink="/admin/review-queue">Review →</a>
+      </div>
+      <div class="queue-stat">
+        <span class="queue-number mono">7</span>
+        <span class="queue-label">messages awaiting human review</span>
+      </div>
+      <div class="confidence-bar-wrap">
+        <span class="confidence-label">Avg confidence in grey zone</span>
+        <div class="confidence-bar">
+          <div class="confidence-fill" style="width: 70%"></div>
+        </div>
+        <span class="confidence-value mono">0.70</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom Grid -->
+<div class="bottom-grid">
+
+  <!-- Harassment Breakdown -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Harassment Breakdown</span>
+      <span class="panel-subtitle">Today's detections by category</span>
+    </div>
+    <div class="chart-wrap">
+      <p-chart
+        type="doughnut"
+        [data]="harassmentChartData"
+        [options]="harassmentChartOptions"
+        height="220px" />
+    </div>
+  </div>
+
+  <!-- Top At-Risk Children -->
+  <div class="panel panel-wide">
+    <div class="panel-header">
+      <span class="panel-title">Top At-Risk Children</span>
+      <a class="panel-link" routerLink="/admin/risk-profiles">View all →</a>
+    </div>
+    <div class="risk-table">
+      <div class="risk-table-header">
+        <span>Child</span>
+        <span>Risk Score</span>
+        <span>Blocked Today</span>
+        <span>Last Incident</span>
+      </div>
+      @for (child of atRiskChildren; track child.id) {
+        <div class="risk-table-row">
+          <div class="child-info">
+            <div class="child-avatar"
+                 [style.background]="getRiskHex(child.risk_level)">
+              {{ child.name.charAt(0) }}
+            </div>
+            <div>
+              <div class="child-name">{{ child.name }}</div>
+              <div class="child-number mono">{{ child.whatsapp }}</div>
+            </div>
+          </div>
+          <div class="risk-score-cell">
+            <span class="risk-score-value mono"
+                  [style.color]="getRiskHex(child.risk_level)">
+              {{ child.risk_score.toFixed(2) }}
+            </span>
+            <div class="risk-bar">
+              <div class="risk-bar-fill"
+                   [style.width]="getRiskBarWidth(child.risk_score)"
+                   [style.background]="getRiskHex(child.risk_level)">
+              </div>
+            </div>
+          </div>
+          <div class="blocked-count mono"
+               [style.color]="child.blocked_today > 3 ? 'var(--critical)' : 'var(--text-muted)'">
+            {{ child.blocked_today }}
+          </div>
+          <div class="incident-time">{{ child.last_incident }}</div>
+        </div>
+      }
+    </div>
+  </div>
+
+  </div>
+
+
+  <!-- Charts Row -->
+  <div class="charts-row">
+    <!-- Weekly Activity -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Weekly Activity</span>
+        <span class="panel-subtitle">Blocked vs Warned — last 7 days</span>
+      </div>
+      <div class="weekly-chart-wrap">
+        <p-chart
+          type="bar"
+          [data]="weeklyChartData"
+          [options]="weeklyChartOptions"
+          height="180px" />
+      </div>
+    </div>
+
+    <!-- Hourly Threat Detection -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Threat Detection by Hour</span>
+        <span class="panel-subtitle">Today — Threats vs Safe messages</span>
+      </div>
+      <div class="weekly-chart-wrap">
+        <p-chart
+          type="line"
+          [data]="hourlyChartData"
+          [options]="hourlyChartOptions"
+          height="180px" />
+      </div>
+    </div>
+  </div>
+
+</div>

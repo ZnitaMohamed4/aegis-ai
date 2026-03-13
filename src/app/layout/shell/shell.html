@@ -1,1 +1,9 @@
-<p>shell works!</p>
+<div class="shell" [class.sidebar-collapsed]="sidebarCollapsed">
+  <app-sidebar [collapsed]="sidebarCollapsed" />
+  <div class="shell-main">
+    <app-topbar (toggleSidebar)="toggleSidebar()" />
+    <main class="shell-content">
+      <router-outlet />
+    </main>
+  </div>
+</div>

@@ -1,0 +1,159 @@
+:host {
+  display: block;
+}
+
+.section-label {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.zone-segment {
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  border-radius: 0.7rem;
+  text-align: left;
+  padding: 0.65rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 6rem;
+}
+
+.zone-active { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
+.zone-allow { border-color: rgba(5, 150, 105, 0.28); }
+.zone-warn { border-color: rgba(217, 119, 6, 0.28); }
+.zone-review { border-color: rgba(234, 88, 12, 0.3); }
+.zone-block { border-color: rgba(220, 38, 38, 0.28); }
+.zone-critical { border-color: rgba(153, 27, 27, 0.45); }
+
+.threshold-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.critical-card {
+  border: 1px solid rgba(220, 38, 38, 0.26);
+  border-left: 4px solid #b91c1c;
+  border-radius: 0.7rem;
+  background: rgba(185, 28, 28, 0.07);
+  padding: 0.8rem;
+}
+
+.instance-card {
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  border-radius: 0.9rem;
+  padding: 0.9rem;
+}
+
+.instance-card-disconnected { border-left: 4px solid #ef4444; }
+
+.pill-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.12rem 0.52rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-surface-2);
+}
+
+.status-good { color: var(--low); border-color: rgba(16, 185, 129, 0.32); background: rgba(16, 185, 129, 0.12); }
+.status-warn { color: var(--medium); border-color: rgba(245, 158, 11, 0.34); background: rgba(245, 158, 11, 0.1); }
+.status-bad { color: var(--critical); border-color: rgba(239, 68, 68, 0.34); background: rgba(239, 68, 68, 0.12); }
+
+.agent-warning {
+  border: 1px solid rgba(245, 158, 11, 0.36);
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--medium);
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.provider-card {
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+}
+
+.provider-card-active {
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface));
+}
+
+.key-toggle {
+  position: absolute;
+  right: 0.45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+}
+
+.action-btn {
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 0.6rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+}
+
+.action-btn:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+
+.lang-pill {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.32rem 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.lang-pill-active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.result-card {
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--bg-surface-2);
+  padding: 0.85rem;
+  animation: fade-in 180ms ease-out;
+}
+
+.decision-pill {
+  font-size: 0.74rem;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 0.2rem 0.58rem;
+  border: 1px solid transparent;
+}
+
+.decision-allow { color: #10d9a0; background: #10d9a018; border-color: #10d9a045; }
+.decision-warn { color: #ffb020; background: #ffb02018; border-color: #ffb02045; }
+.decision-escalate { color: #ff7a30; background: #ff7a3018; border-color: #ff7a3045; }
+.decision-block { color: #ff4d4d; background: #ff4d4d18; border-color: #ff4d4d45; }
+.decision-critical { color: #ef4444; background: #ef44441f; border-color: #ef444466; }
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
