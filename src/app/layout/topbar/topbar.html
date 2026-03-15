@@ -7,6 +7,26 @@
   </div>
 
   <div class="topbar-right">
+    <!-- Language Switcher -->
+    <div class="lang-switcher">
+      <button class="lang-btn" (click)="toggleLangMenu()">
+        <span class="lang-flag">{{ currentLang().flag }}</span>
+        <span class="lang-code">{{ currentLang().code }}</span>
+        <i class="pi pi-chevron-down ml-1 text-[10px]"></i>
+      </button>
+      
+      @if (showLangMenu()) {
+        <div class="lang-menu">
+          @for (lang of languages; track lang.code) {
+            <button class="lang-item" [class.active]="lang.code === currentLang().code" (click)="selectLanguage(lang)">
+              <span class="lang-flag">{{ lang.flag }}</span>
+              <span class="lang-label">{{ lang.label }}</span>
+            </button>
+          }
+        </div>
+      }
+    </div>
+
     <!-- Alert bell -->
     <button class="icon-btn badge-btn">
       <i class="pi pi-bell"></i>

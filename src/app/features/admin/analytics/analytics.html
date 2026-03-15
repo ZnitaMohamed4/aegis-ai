@@ -1,1 +1,265 @@
-<p>analytics works!</p>
+<div class="p-4 sm:p-6 w-full max-w-7xl mx-auto">
+  <app-page-header title="Analytics & Trends"
+    subtitle="Macro-level insights into digital harassment patterns over time.">
+    <!-- Time Range Selector -->
+    <div class="mt-4 sm:mt-0">
+      <p-selectbutton [options]="timeRangeOptions" [(ngModel)]="selectedRange" optionLabel="label" optionValue="value"
+        [allowEmpty]="false" />
+    </div>
+  </app-page-header>
+
+  <!-- Key Metrics Row (Over Time) -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
+    <app-stat-card label="Total Messages Analyzed" value="234,512" trend="+12%"></app-stat-card>
+    <app-stat-card label="Aggregated Risk Avg" value="0.38" sub="All monitored children"
+      valueColor="var(--medium)"></app-stat-card>
+    <app-stat-card label="False Positive Rate" value="1.2%" trend="-0.4%"
+      sub="Human overrides in review" valueColor="var(--info)"></app-stat-card>
+    <app-stat-card label="Average Latency" value="142ms" trend="-15ms"></app-stat-card>
+  </div>
+
+  <!-- Primary Time-Series Charts -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+    <!-- Risk Evolution -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Risk Score Evolution</h3>
+      <div class="h-64">
+        <p-chart type="line" [data]="riskData" [options]="riskOptions" height="100%"></p-chart>
+      </div>
+    </div>
+
+    <!-- Decisions Trend (Blocked vs Warned vs Allowed) -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Moderation Decisions Trend</h3>
+      <div class="h-64">
+        <p-chart type="bar" [data]="decisionsData" [options]="decisionsOptions" height="100%"></p-chart>
+      </div>
+    </div>
+  </div>
+
+  <!-- Secondary Time-Series Charts -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+
+    <!-- Category Breakdown over time -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Harassment Category Breakdown</h3>
+      <div class="h-64">
+        <p-chart type="bar" [data]="categoriesData" [options]="categoriesOptions" height="100%"></p-chart>
+      </div>
+    </div>
+
+    <!-- Pipeline Latency Trend -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">AI Pipeline Latency Trend</h3>
+      <div class="h-64">
+        <p-chart type="line" [data]="latencyData" [options]="latencyOptions" height="100%"></p-chart>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline Health & Performance (NEW CHARTS) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <!-- Confidence Score Distribution Histogram -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Confidence Score Distribution</h3>
+      <div class="h-64">
+        <p-chart type="bar" [data]="confDistData" [options]="confDistOptions" height="100%"></p-chart>
+      </div>
+    </div>
+
+    <!-- Agent 3 Activation Rate -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Agent 3 (LLM) Activation Rate</h3>
+      <p class="text-xs text-[var(--text-muted)] mb-2">Triggers when XLM-RoBERTa confidence < 0.85</p>
+      <div class="h-56">
+        <p-chart type="line" [data]="agent3Data" [options]="agent3Options" height="100%"></p-chart>
+      </div>
+    </div>
+  </div>
+
+  <!-- Human-in-the-Loop & Drift Metrics -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <!-- False Positive Trend -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">False Positive Trend (Model Drift)</h3>
+      <p class="text-xs text-[var(--text-muted)] mb-2">Overrides tracked from Review Queue decisions</p>
+      <div class="h-56">
+        <p-chart type="line" [data]="falsePosData" [options]="falsePosOptions" height="100%"></p-chart>
+      </div>
+    </div>
+
+    <!-- Review Queue Metrics -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4 flex flex-col">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Review Queue Metrics</h3>
+      <div class="flex-1 flex flex-col sm:flex-row gap-4">
+        <div class="flex-1 rounded-xl bg-[var(--bg-base)] border border-[var(--border)] flex flex-col justify-center items-center p-4">
+           <span class="text-xs text-[var(--text-muted)]">Avg Time to Resolve</span>
+           <span class="text-3xl font-bold font-mono text-[var(--text-primary)] mt-2">{{reviewAvgTime()}}</span>
+        </div>
+        <div class="flex-1 h-40 sm:h-full relative flex items-center justify-center">
+          <p-chart type="doughnut" [data]="reviewPieData" [options]="reviewPieOptions" height="100%"></p-chart>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Peak Activity Heatmap (Hour × Day) -->
+  <div class="mb-6 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+    <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Peak Activity Heatmap (Hour × Day)</h3>
+    <div class="overflow-x-auto">
+      <div class="min-w-[600px] flex flex-col gap-1 pb-2">
+        <!-- hours header -->
+        <div class="flex gap-1 ml-10">
+          @for (h of hours; track h) {
+            <div class="flex-1 text-[10px] text-center text-[var(--text-muted)]">{{h}}h</div>
+          }
+        </div>
+        <!-- grid -->
+        @for (day of days; track day; let d = $index) {
+          <div class="flex gap-1 items-center h-8">
+            <div class="w-10 text-xs font-semibold text-[var(--text-muted)]">{{day}}</div>
+            <div class="flex-1 flex gap-1 h-full">
+              @for (h of hours; track h; let hIdx = $index) {
+                <div class="flex-1 h-full rounded flex items-center justify-center group relative cursor-crosshair hover:ring-2 ring-[var(--accent)]"
+                     [style.background]="heatmapData()[d][hIdx].color"
+                     [title]="heatmapData()[d][hIdx].val + ' messages'">
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Distributions -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <!-- Language Distribution -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Language Distribution</h3>
+      <div class="h-64 flex items-center justify-center">
+        <p-chart type="doughnut" [data]="langData" [options]="langOptions" height="100%"></p-chart>
+      </div>
+    </div>
+
+    <!-- Notification Setup -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <h3 class="text-sm font-semibold text-[var(--text-primary)] mb-4">Notification Delivery Modes</h3>
+      <div class="h-64 flex items-center justify-center">
+        <p-chart type="pie" [data]="notificationData" [options]="notificationOptions" height="100%"></p-chart>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tables (Top Harassers & Per-Child Risk) -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <!-- Top Harassers -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
+      <div class="p-4 border-b border-[var(--border)]">
+        <h3 class="text-sm font-semibold text-[var(--text-primary)]">Top Harassers (Most Blocked Contacts)</h3>
+      </div>
+      <div class="p-0 overflow-x-auto flex-1">
+        <div class="hidden sm:block">
+          <p-table [value]="topHarassers()" styleClass="p-datatable-sm" [tableStyle]="{ 'min-width': '100%' }">
+            <ng-template pTemplate="header">
+              <tr>
+                <th
+                  class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 py-3 bg-[var(--bg-surface)]">
+                  Contact</th>
+                <th
+                  class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 py-3 bg-[var(--bg-surface)] text-center">
+                  Blocked Msgs</th>
+                <th
+                  class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 py-3 bg-[var(--bg-surface)]">
+                  Threat Level</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-harasser>
+              <tr class="border-b border-[var(--border)] bg-[var(--bg-base)]">
+                <td class="px-4 py-3 text-sm">
+                  <div class="font-bold text-[var(--text-primary)]">{{ harasser.contact }}</div>
+                  <div class="text-xs text-[var(--text-muted)]">{{ harasser.name || 'Unknown' }}</div>
+                </td>
+                <td class="px-4 py-3 text-sm text-center font-mono font-bold">{{ harasser.messagesBlocked }}</td>
+                <td class="px-4 py-3 text-sm">
+                  <app-severity-badge [level]="harasser.threatLevel"></app-severity-badge>
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+        <!-- Mobile Table Fallback -->
+        <div class="sm:hidden flex flex-col gap-3 p-4">
+          @for (harasser of topHarassers(); track harasser.contact) {
+          <div
+            class="bg-[var(--bg-surface-2)] rounded-lg p-3 border border-[var(--border)] flex justify-between items-center">
+            <div>
+              <div class="text-sm font-bold text-[var(--text-primary)]">{{ harasser.contact }}</div>
+              <div class="text-xs text-[var(--text-muted)]">{{ harasser.name || 'Unknown' }}</div>
+            </div>
+            <div class="flex flex-col items-end gap-1">
+              <div class="font-mono text-sm font-bold">{{ harasser.messagesBlocked }} blk</div>
+              <app-severity-badge [level]="harasser.threatLevel"></app-severity-badge>
+            </div>
+          </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <!-- Per-Child Risk Evolution -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
+      <div class="p-4 border-b border-[var(--border)]">
+        <h3 class="text-sm font-semibold text-[var(--text-primary)]">Highest Risk Escalation</h3>
+        <p class="text-xs text-[var(--text-muted)] mt-1">Children whose threat profiles worsened the most</p>
+      </div>
+      <div class="p-0 overflow-x-auto flex-1">
+        <div class="hidden sm:block">
+          <p-table [value]="perChildRisk()" styleClass="p-datatable-sm" [tableStyle]="{ 'min-width': '100%' }">
+            <ng-template pTemplate="header">
+              <tr>
+                <th
+                  class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 py-3 bg-[var(--bg-surface)]">
+                  Child</th>
+                <th
+                  class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 py-3 bg-[var(--bg-surface)] text-center">
+                  Score ∆</th>
+                <th
+                  class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] px-4 py-3 bg-[var(--bg-surface)] text-center">
+                  Current</th>
+              </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-child>
+              <tr class="border-b border-[var(--border)] bg-[var(--bg-base)]">
+                <td class="px-4 py-3 text-sm font-bold text-[var(--text-primary)]">{{ child.name }}</td>
+                <td class="px-4 py-3 text-sm text-center">
+                  <span class="text-[var(--critical)] font-mono font-bold">{{ child.trend }}</span>
+                </td>
+                <td class="px-4 py-3 text-sm text-center font-mono font-bold"
+                  [style.color]="getStatColor(child.currentScore)">
+                  {{ child.currentScore | number:'1.2-2' }}
+                </td>
+              </tr>
+            </ng-template>
+          </p-table>
+        </div>
+        <!-- Mobile Table Fallback -->
+        <div class="sm:hidden flex flex-col gap-3 p-4">
+          @for (child of perChildRisk(); track child.name) {
+          <div
+            class="bg-[var(--bg-surface-2)] rounded-lg p-3 border border-[var(--border)] flex justify-between items-center">
+            <div class="font-bold text-[var(--text-primary)]">{{ child.name }}</div>
+            <div class="flex items-center gap-3">
+              <span class="text-[var(--critical)] font-mono text-xs font-bold">{{ child.trend }}</span>
+              <span class="font-mono text-sm font-bold" [style.color]="getStatColor(child.currentScore)">
+                {{ child.currentScore | number:'1.2-2' }}
+              </span>
+            </div>
+          </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

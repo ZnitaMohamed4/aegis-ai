@@ -1,7 +1,21 @@
 <div class="p-4 sm:p-6 w-full flex flex-col gap-5">
-  <app-page-header title="AI Configuration" subtitle="Runtime thresholds, agents, provider routing, and simulation pipeline." />
+  <app-page-header title="AI Control Center" subtitle="Manage your pipeline agents, moderation policies, and LLM infrastructure." />
 
-  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5">
+  <!-- Modern Tab Header -->
+  <div class="tabs-header">
+    <button type="button" class="tab-btn" [class.tab-active]="activeTab() === 'pipeline'" (click)="activeTab.set('pipeline')">
+      <i class="pi pi-bolt"></i> Pipeline & Agents
+    </button>
+    <button type="button" class="tab-btn" [class.tab-active]="activeTab() === 'policy'" (click)="activeTab.set('policy')">
+      <i class="pi pi-shield"></i> Moderation Policy
+    </button>
+    <button type="button" class="tab-btn" [class.tab-active]="activeTab() === 'infrastructure'" (click)="activeTab.set('infrastructure')">
+      <i class="pi pi-server"></i> LLM Infrastructure
+    </button>
+  </div>
+
+  @if (activeTab() === 'policy') {
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5 animate-fade-in">
     <p class="section-label">DECISION THRESHOLDS</p>
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-2 mt-3">
       @for (zone of zones(); track zone.key) {
@@ -28,8 +42,10 @@
       </div>
     </article>
   </section>
+  }
 
-  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5">
+  @if (activeTab() === 'pipeline') {
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5 animate-fade-in">
     <p class="section-label">RUNTIME AGENT STATUS</p>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-3">
       @for (agent of agents(); track agent.id) {
@@ -56,8 +72,10 @@
       }
     </div>
   </section>
+  }
 
-  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5">
+  @if (activeTab() === 'infrastructure') {
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5 animate-fade-in">
     <p class="section-label">LLM PROVIDER CONFIG</p>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
       @for (provider of providerCards; track provider.id) {
@@ -84,8 +102,10 @@
       <p class="text-xs font-semibold mt-3" [class.text-[var(--low)]]="connectionResult()!.ok" [class.text-[var(--critical)]]="!connectionResult()!.ok">{{ connectionResult()!.ok ? '✓' : '✗' }} {{ connectionResult()!.message }}</p>
     }
   </section>
+  }
 
-  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5">
+  @if (activeTab() === 'pipeline') {
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5 animate-fade-in">
     <p class="section-label">SIMULATE A MESSAGE</p>
     <textarea rows="4" class="input-field mt-3" placeholder="Type a message to test the pipeline..." [ngModel]="simulationMessage()" (ngModelChange)="simulationMessage.set($event)"></textarea>
     <div class="flex flex-wrap items-center gap-2 mt-3">
@@ -108,4 +128,5 @@
       </article>
     }
   </section>
+  }
 </div>

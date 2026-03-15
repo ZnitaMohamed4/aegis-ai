@@ -8,6 +8,7 @@ import {
   HARASSMENT_CHART_DATA, HARASSMENT_CHART_OPTIONS,
   WEEKLY_CHART_DATA, WEEKLY_CHART_OPTIONS,
   HOURLY_CHART_DATA, HOURLY_CHART_OPTIONS,
+  LANGUAGE_CHART_DATA, LANGUAGE_CHART_OPTIONS,
   FeedEvent, getNextFeedEvent
 } from './dashboard.data';
 
@@ -28,6 +29,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   weeklyChartOptions = WEEKLY_CHART_OPTIONS;
   hourlyChartData = HOURLY_CHART_DATA;
   hourlyChartOptions = HOURLY_CHART_OPTIONS;
+  languageChartData = LANGUAGE_CHART_DATA;
+  languageChartOptions = LANGUAGE_CHART_OPTIONS;
 
   getRiskHex = getRiskHex;
   getDecisionClass = getDecisionClass;

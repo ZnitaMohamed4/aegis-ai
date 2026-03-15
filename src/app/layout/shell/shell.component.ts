@@ -2,11 +2,12 @@ import { Component } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { TopbarComponent } from '../topbar/topbar.component';
 import { SidebarComponent } from '../sidebar/sidebar.component';
+import { ChatbotWidgetComponent } from '../../features/chatbot/chatbot-widget/chatbot-widget.component';
 
 @Component({
   selector: 'app-shell',
   standalone: true,
-  imports: [RouterOutlet, TopbarComponent, SidebarComponent],
+  imports: [RouterOutlet, TopbarComponent, SidebarComponent, ChatbotWidgetComponent],
   templateUrl: './shell.html',
   styleUrl: './shell.css'
 })

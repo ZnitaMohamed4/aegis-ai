@@ -34,6 +34,9 @@ export class SettingsComponent {
   readonly languageOptions = LANGUAGE_OPTIONS;
 
   readonly selectedThemeId = this.themeService.selectedThemeId;
+  get selectedTheme() {
+    return this.themePresets.find(t => t.id === this.selectedThemeId()) || this.themePresets[0];
+  }
   readonly darkMode = this.themeService.darkMode;
 
   readonly retention = signal<RetentionSettings>({ ...DEFAULT_SETTINGS.retention });

@@ -52,8 +52,14 @@ export class SidebarComponent {
       items: [
         { label: 'AI Config', icon: 'pi-cog', route: '/admin/ai-config' },
         { label: 'Channels', icon: 'pi-mobile', route: '/admin/channels' },
-        { label: 'AI Agents', icon: 'pi-android', route: '/admin/agents' },
         { label: 'Settings', icon: 'pi-sliders-h', route: '/admin/settings' },
+      ]
+    },
+    {
+      title: 'Knowledge Base',
+      items: [
+        { label: 'Document Import', icon: 'pi-cloud-upload', route: '/admin/resources/import' },
+        { label: 'Vector Store', icon: 'pi-database', route: '/admin/resources/knowledge-base' },
       ]
     },
     {

@@ -229,7 +229,7 @@
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">Threat Detection by Hour</span>
-        <span class="panel-subtitle">Today — Threats vs Safe messages</span>
+        <span class="panel-subtitle">Today — Threats vs Safe <span style="margin: 0 8px;">|</span> <strong style="color: var(--critical)">Peak: 22h–23h</strong></span>
       </div>
       <div class="weekly-chart-wrap">
         <p-chart
@@ -237,6 +237,51 @@
           [data]="hourlyChartData"
           [options]="hourlyChartOptions"
           height="180px" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Delivery & Languages Row -->
+  <div class="charts-row" style="margin-top: 1.5rem;">
+    
+    <!-- Notification Channels -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Notifications Sent Today</span>
+        <span class="panel-subtitle">Delivery breakdown by channel</span>
+      </div>
+      <div style="display: flex; gap: 1rem; margin-top: 1rem; height: 180px; align-items: center; justify-content: center;">
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center;">
+          <div style="font-size: 0.75rem; color: var(--info); font-weight: bold; margin-bottom: 0.25rem;">PUSH</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">142</div>
+        </div>
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center;">
+          <div style="font-size: 0.75rem; color: var(--high); font-weight: bold; margin-bottom: 0.25rem;">EMAIL</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">38</div>
+        </div>
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center;">
+          <div style="font-size: 0.75rem; color: var(--medium); font-weight: bold; margin-bottom: 0.25rem;">SMS</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">12</div>
+        </div>
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--critical); padding: 1rem; text-align: center;">
+          <div style="font-size: 0.75rem; color: var(--critical); font-weight: bold; margin-bottom: 0.25rem;">APPEL</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">3</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Language Distribution -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Language Distribution</span>
+        <span class="panel-subtitle">Messages parsed by language today</span>
+      </div>
+      <div style="height: 180px; margin-top: 1rem;">
+        <p-chart
+          type="doughnut"
+          [data]="languageChartData"
+          [options]="languageChartOptions"
+          height="100%" />
       </div>
     </div>
   </div>

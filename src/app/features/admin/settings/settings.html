@@ -16,38 +16,47 @@
 				<h2 class="section-title">Theme & Display</h2>
 			</header>
 
-			<div class="theme-grid">
-				@for (theme of themePresets; track theme.id) {
-					<button
-						type="button"
-						class="theme-card"
-						[class.theme-card-active]="selectedThemeId() === theme.id"
-						(click)="selectTheme(theme.id)">
-						<div class="theme-preview" [style.background]="theme.bgPreview"></div>
-						<div class="theme-content">
-							<span class="theme-name">{{ theme.label }}</span>
-							<span class="theme-accent">Accent {{ theme.accent }}</span>
-						</div>
-						@if (selectedThemeId() === theme.id) {
-							<span class="theme-check" aria-hidden="true">
-								<i class="pi pi-check"></i>
-							</span>
-						}
-					</button>
-				}
-			</div>
+			<div class="field-grid">
+				<label class="field-row">
+					<span class="field-label">System Theme Preset</span>
+					<p-select
+						[options]="themePresets"
+						[(ngModel)]="selectedTheme"
+						(ngModelChange)="selectTheme($event.id)"
+						optionLabel="label"
+						styleClass="settings-select theme-select">
+						<ng-template pTemplate="selectedItem" let-theme>
+							<div class="flex items-center gap-3">
+								<div class="theme-dot" [style.background]="theme.accent"></div>
+								<span class="font-semibold">{{ theme.label }}</span>
+							</div>
+						</ng-template>
+						<ng-template pTemplate="item" let-theme>
+							<div class="flex items-center gap-3 p-2">
+								<div class="theme-dot-large" [style.background]="theme.accent"></div>
+								<div class="flex flex-col">
+									<span class="text-sm font-bold" [style.color]="theme.accent">{{ theme.label }}</span>
+									<span class="text-[10px] uppercase opacity-70 tracking-wider">Accent: {{ theme.accent }}</span>
+								</div>
+							</div>
+						</ng-template>
+					</p-select>
+				</label>
 
-			<div class="switch-row">
-				<div>
-					<p class="row-title">Dark / Light mode</p>
-					<p class="row-caption">Apply display mode across all theme presets</p>
+				<div class="switch-row">
+					<div>
+						<p class="row-title">Dark / Light mode</p>
+						<p class="row-caption">Global toggle for light/dark interface tokens</p>
+					</div>
+					<p-toggleswitch
+						[ngModel]="darkMode()"
+						(ngModelChange)="toggleDarkMode($event)"
+						inputId="dark-mode-toggle" />
 				</div>
-				<p-toggleswitch
-					[ngModel]="darkMode()"
-					(ngModelChange)="toggleDarkMode($event)"
-					inputId="dark-mode-toggle" />
 			</div>
 		</section>
+
+		<div class="section-divider"></div>
 
 		<section class="panel section-card data-retention-card">
 			<header class="section-header">
@@ -197,6 +206,8 @@
 				</div>
 			</div>
 		</section>
+
+		<div class="section-divider"></div>
 
 		<section class="panel section-card">
 			<header class="section-header">

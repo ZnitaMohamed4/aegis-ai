@@ -28,6 +28,14 @@ export interface AtRiskChild {
 
 export const MOCK_STATS: StatCard[] = [
   {
+    label: 'Avg Latency',
+    value: '142ms',
+    icon: 'pi-gauge',
+    trend: '-15ms vs yesterday',
+    trendUp: true,
+    color: 'info'
+  },
+  {
     label: 'Total Alerts Today',
     value: 24,
     icon: 'pi-bell',
@@ -50,14 +58,6 @@ export const MOCK_STATS: StatCard[] = [
     trend: '3 urgent',
     trendUp: false,
     color: 'medium'
-  },
-  {
-    label: 'Active Children',
-    value: 42,
-    icon: 'pi-users',
-    trend: '2 high risk',
-    trendUp: false,
-    color: 'accent'
   }
 ];
 
@@ -181,18 +181,26 @@ export const WEEKLY_CHART_DATA = {
   labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   datasets: [
     {
+      label: 'Critique (≥0.90)',
+      data: [8, 12, 18, 10, 15, 9, 6],
+      backgroundColor: 'rgba(239, 68, 68, 0.75)', // var(--critical)
+      borderColor: '#EF4444',
+      borderWidth: 1,
+      borderRadius: 4,
+    },
+    {
       label: 'Blocked',
-      data: [18, 24, 31, 19, 27, 14, 9],
-      backgroundColor: 'rgba(255,77,77,0.75)',
-      borderColor: '#FF4D4D',
+      data: [10, 12, 13, 9, 12, 5, 3],
+      backgroundColor: 'rgba(249, 115, 22, 0.75)', // var(--high)
+      borderColor: '#F97316',
       borderWidth: 1,
       borderRadius: 4,
     },
     {
       label: 'Warned',
       data: [11, 15, 22, 13, 18, 8, 5],
-      backgroundColor: 'rgba(255,176,32,0.65)',
-      borderColor: '#FFB020',
+      backgroundColor: 'rgba(234, 179, 8, 0.65)', // var(--medium)
+      borderColor: '#EAB308',
       borderWidth: 1,
       borderRadius: 4,
     }
@@ -281,6 +289,35 @@ export const HOURLY_CHART_OPTIONS = {
       beginAtZero: true
     }
   }
+};
+
+// ── Language Distribution Chart ──────────────────────
+export const LANGUAGE_CHART_DATA = {
+  labels: ['FR', 'AR', 'EN'],
+  datasets: [
+    {
+      data: [72, 20, 8],
+      backgroundColor: ['#06B6D4', '#EAB308', '#22C55E'],
+      borderWidth: 0,
+      hoverOffset: 4
+    }
+  ]
+};
+
+export const LANGUAGE_CHART_OPTIONS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      position: 'right' as const,
+      labels: {
+        color: '#94A3B8',
+        boxWidth: 10,
+        font: { size: 11 }
+      }
+    }
+  },
+  cutout: '70%'
 };
 
 // ── Live Activity Feed ──────────────────────────────

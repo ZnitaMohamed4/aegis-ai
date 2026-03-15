@@ -1,0 +1,144 @@
+@if (!isFullPage()) {
+<div class="chatbot-widget-container">
+
+  <!-- ── FAB ── -->
+  <button
+    class="chatbot-fab"
+    (click)="toggleChat()"
+    [class.fab-active]="isOpen()"
+    id="chatbot-fab-trigger"
+    aria-label="Toggle AEGIS AI Assistant"
+  >
+    @if (showPulse() && !isOpen()) {
+      <div class="pulsing-ring"></div>
+    }
+    <div class="icon-container">
+      @if (!isOpen()) {
+        <span class="shield-icon">
+          <i class="pi pi-shield"></i>
+          <i class="pi pi-sparkle sparkle-star"></i>
+        </span>
+      } @else {
+        <i class="pi pi-times"></i>
+      }
+    </div>
+  </button>
+
+  <!-- ── MINI PANEL ── -->
+  @if (isOpen()) {
+    <div
+      class="mini-panel"
+      [class.is-resizing]="isResizing()"
+      [style.width.px]="panelW()"
+      [style.height.px]="panelH()"
+    >
+      <!-- Resize handle: top-left corner -->
+      <div class="resize-handle" (mousedown)="startResize($event)" title="Drag to resize"></div>
+
+      <!-- ── HEADER ── -->
+      <header class="panel-header">
+        <div class="header-glow"></div>
+        <div class="header-left">
+          <div class="bot-avatar">
+            <div class="avatar-ring"></div>
+            <i class="pi pi-shield"></i>
+          </div>
+          <div class="header-meta">
+            <span class="brand-label">Aegis AI</span>
+            <span class="status-line">
+              <span class="status-dot"></span> Active · RAG Grounded
+            </span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="hdr-btn" (click)="openFullChat()" title="Open full workspace">
+            <i class="pi pi-external-link"></i>
+          </button>
+          <button class="hdr-btn hdr-close" (click)="toggleChat()">
+            <i class="pi pi-times"></i>
+          </button>
+        </div>
+      </header>
+
+
+      <!-- ── MESSAGES ── -->
+      <div class="chat-viewport" id="widget-messages">
+        <div class="messages-inner">
+          @for (msg of messages(); track msg.id) {
+            <div class="msg-row" [class.row-bot]="msg.role==='bot'" [class.row-user]="msg.role==='user'">
+
+              @if (msg.role === 'bot') {
+                <div class="mini-bot-avatar"><i class="pi pi-shield"></i></div>
+              }
+
+              <div class="msg-content">
+                @if (msg.isTyping) {
+                  <div class="bubble bubble-bot typing-bubble">
+                    <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                  </div>
+                }
+
+                @if (!msg.isTyping && msg.role === 'bot') {
+                  <div class="bubble bubble-bot">
+                    <p>{{ msg.text }}</p>
+                    @if (msg.sources && msg.sources.length > 0) {
+                      <div class="src-tags">
+                        @for (src of msg.sources; track src) {
+                          <span class="src-tag"><i class="pi pi-bookmark-fill"></i> {{ src }}</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+
+                @if (!msg.isTyping && msg.role === 'user') {
+                  <div class="bubble bubble-user">
+                    <p>{{ msg.text }}</p>
+                  </div>
+                }
+              </div>
+
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- ── CHIPS ── -->
+      @if (messages().length > 0) {
+        <div class="chips-row">
+          @for (chip of contextChips(); track chip) {
+            <button class="chip" (click)="sendChip(chip)">
+              <i class="pi pi-bolt"></i>{{ chip }}
+            </button>
+          }
+        </div>
+      }
+
+      <!-- ── INPUT ── -->
+      <div class="input-zone">
+        <div class="input-shell" [class.input-focused]="isInputFocused()">
+          <input
+            id="widget-input"
+            type="text"
+            [(ngModel)]="inputText"
+            placeholder="Ask Aegis anything…"
+            (keyup.enter)="sendMessage()"
+            (focus)="isInputFocused.set(true)"
+            (blur)="isInputFocused.set(false)"
+          />
+          <button
+            class="send-btn"
+            (click)="sendMessage()"
+            [disabled]="!inputText.trim() || isTyping()"
+          >
+            <i class="pi pi-arrow-up"></i>
+          </button>
+        </div>
+        <p class="grounded-note">Grounded in your knowledge base</p>
+      </div>
+
+    </div>
+  }
+
+</div>
+}

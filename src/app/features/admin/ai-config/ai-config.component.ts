@@ -50,6 +50,8 @@ export class AiConfigComponent {
   readonly providerCards = PROVIDER_CARDS;
   readonly languageTabs = LANGUAGE_TABS;
 
+  readonly activeTab = signal<'pipeline' | 'policy' | 'infrastructure'>('pipeline');
+
   readonly boundaries = signal<DecisionBoundaries>({ ...DEFAULT_BOUNDARIES });
   readonly selectedZone = signal<'allow' | 'warn' | 'review' | 'block' | 'critical'>('review');
   readonly agents = signal<PipelineAgent[]>([...AGENT_CARDS]);

@@ -1,0 +1,225 @@
+<div class="p-4 sm:p-6 w-full flex flex-col gap-5 pb-8">
+  <app-page-header
+    title="Knowledge Base"
+    subtitle="Manage indexed documents and monitor RAGAS evaluation metrics."
+  />
+
+  <!-- High Level Stats -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="stat-card">
+      <div class="flex items-center gap-3">
+        <div class="stat-icon bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+          <i class="pi pi-database"></i>
+        </div>
+        <div>
+          <p class="text-[var(--text-muted)] text-xs font-bold tracking-wider">DOCUMENTS INDEXED</p>
+          <p class="text-[var(--text-primary)] text-2xl font-bold font-mono leading-none mt-1">
+            {{ metrics().totalIndexedDocs }}
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="flex items-center gap-3">
+        <div class="stat-icon bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+          <i class="pi pi-objects-column"></i>
+        </div>
+        <div>
+          <p class="text-[var(--text-muted)] text-xs font-bold tracking-wider">VECTOR CHUNKS</p>
+          <p class="text-[var(--text-primary)] text-2xl font-bold font-mono leading-none mt-1">
+            {{ metrics().totalChunks }}
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="flex items-center gap-3">
+        <div class="stat-icon bg-amber-500/10 text-amber-500 border border-amber-500/20">
+          <i class="pi pi-globe"></i>
+        </div>
+        <div>
+          <p class="text-[var(--text-muted)] text-xs font-bold tracking-wider">SUPPORTED LANGS</p>
+          <div class="flex gap-1.5 mt-2">
+            <span
+              class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg-surface-3)] border border-[var(--border)]"
+              >FR</span
+            >
+            <span
+              class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg-surface-3)] border border-[var(--border)]"
+              >AR</span
+            >
+            <span
+              class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--bg-surface-3)] border border-[var(--border)]"
+              >EN</span
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="stat-card relative overflow-hidden group">
+      <div
+        class="absolute inset-0 bg-gradient-to-br from-[var(--accent)] to-teal-800 opacity-90"
+      ></div>
+      <div class="relative z-10 flex flex-col h-full justify-between">
+        <p class="text-white/80 text-xs font-bold tracking-wider">FAISS INDEX STATUS</p>
+        <div>
+          <p class="text-white font-bold text-lg leading-tight flex items-center gap-2">
+            <i class="pi pi-check-circle text-emerald-400"></i> Healthy
+          </p>
+          <p class="text-white/70 text-[10px] mt-1">
+            Last update: {{ formatDate(metrics().lastUpdate) }}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-4 gap-5 items-start">
+    <!-- Table Section -->
+    <div class="lg:col-span-3 rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+      <h2
+        class="text-sm font-bold text-[var(--text-primary)] tracking-wide mb-4 flex items-center justify-between"
+      >
+        INDEXED DOCUMENTS
+        <span class="text-xs font-normal text-[var(--text-muted)]"
+          >{{ docs().length }} Entries</span
+        >
+      </h2>
+
+      <p-table [value]="docs()" styleClass="p-datatable-sm w-full custom-table">
+        <ng-template pTemplate="header">
+          <tr>
+            <th class="w-1/3">Document Name</th>
+            <th>Category</th>
+            <th>Lang</th>
+            <th>Chunks</th>
+            <th>Size</th>
+            <th>Added At</th>
+            <th class="w-20"></th>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="body" let-doc>
+          <tr>
+            <td
+              class="font-medium text-[var(--text-primary)] truncate max-w-[200px]"
+              [title]="doc.name"
+            >
+              {{ doc.name }}
+            </td>
+            <td class="text-xs uppercase tracking-wider text-[var(--text-muted)]">
+              {{ doc.category }}
+            </td>
+            <td>
+              <span
+                class="text-[10px] font-bold px-2 py-0.5 rounded-full border border-[var(--border)] bg-[var(--bg-surface-3)]"
+              >
+                {{ doc.language | uppercase }}
+              </span>
+            </td>
+            <td class="font-mono text-xs">{{ doc.chunkCount }}</td>
+            <td class="text-xs text-[var(--text-muted)]">{{ formatSize(doc.size) }}</td>
+            <td class="text-xs text-[var(--text-muted)]">{{ formatDate(doc.dateAdded) }}</td>
+            <td>
+              <div class="flex gap-2 justify-end">
+                <button
+                  class="icon-btn text-blue-500 hover:bg-blue-500/10 hover:border-blue-500/30"
+                  title="Test Retrieval"
+                >
+                  <i class="pi pi-search"></i>
+                </button>
+                <button
+                  class="icon-btn text-red-500 hover:bg-red-500/10 hover:border-red-500/30"
+                  title="Remove Document"
+                  (click)="deleteDoc(doc.id)"
+                >
+                  <i class="pi pi-trash"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template pTemplate="emptymessage">
+          <tr>
+            <td colspan="7" class="text-center py-8 text-[var(--text-muted)]">
+              No documents indexed in knowledge base yet.
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <!-- RAG Health Section -->
+    <div class="flex flex-col gap-4">
+      <div class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-5">
+        <h2 class="text-sm font-bold text-[var(--text-primary)] tracking-wide mb-4">
+          RAG HEALTH (RAGAS)
+        </h2>
+
+        <div class="flex flex-col gap-4">
+          <div class="metric-block">
+            <div class="flex justify-between items-end mb-1">
+              <span class="text-xs font-semibold text-[var(--text-muted)]">Faithfulness</span>
+              <span
+                class="font-mono font-bold text-sm"
+                [class.text-[var(--accent)]]="metrics().faithfulness >= 0.85"
+                >{{ metrics().faithfulness.toFixed(2) }}</span
+              >
+            </div>
+            <div class="h-1.5 bg-[var(--bg-surface-3)] rounded-full overflow-hidden">
+              <div
+                class="h-full bg-[var(--accent)] rounded-full"
+                [style.width.%]="metrics().faithfulness * 100"
+              ></div>
+            </div>
+            <p class="text-[10px] text-[var(--text-muted)] mt-1 text-right">Target > 0.85</p>
+          </div>
+
+          <div class="metric-block">
+            <div class="flex justify-between items-end mb-1">
+              <span class="text-xs font-semibold text-[var(--text-muted)]">Answer Relevancy</span>
+              <span
+                class="font-mono font-bold text-sm"
+                [class.text-[var(--accent)]]="metrics().answerRelevancy >= 0.8"
+                >{{ metrics().answerRelevancy.toFixed(2) }}</span
+              >
+            </div>
+            <div class="h-1.5 bg-[var(--bg-surface-3)] rounded-full overflow-hidden">
+              <div
+                class="h-full bg-[var(--accent)] rounded-full"
+                [style.width.%]="metrics().answerRelevancy * 100"
+              ></div>
+            </div>
+            <p class="text-[10px] text-[var(--text-muted)] mt-1 text-right">Target > 0.80</p>
+          </div>
+
+          <div class="metric-block">
+            <div class="flex justify-between items-end mb-1">
+              <span class="text-xs font-semibold text-[var(--text-muted)]">Context Precision</span>
+              <span
+                class="font-mono font-bold text-sm"
+                [class.text-amber-500]="metrics().contextPrecision < 0.8"
+                >{{ metrics().contextPrecision.toFixed(2) }}</span
+              >
+            </div>
+            <div class="h-1.5 bg-[var(--bg-surface-3)] rounded-full overflow-hidden">
+              <div
+                class="h-full bg-amber-500 rounded-full"
+                [style.width.%]="metrics().contextPrecision * 100"
+              ></div>
+            </div>
+            <p class="text-[10px] text-[var(--text-muted)] mt-1 text-right">Target > 0.75</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 flex gap-3">
+        <i class="pi pi-info-circle text-blue-500 mt-0.5"></i>
+        <p class="text-xs text-[var(--text-primary)] leading-relaxed">
+          <strong>Tip:</strong> These metrics reflect the health of your RAG pipeline. If Context
+          Precision drops, consider reviewing your chunking strategy or adding more specific
+          documents.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>

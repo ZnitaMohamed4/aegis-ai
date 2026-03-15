@@ -1,1 +1,197 @@
-<p>chatbot-page works!</p>
+<div class="chatbot-page-container">
+
+  <!-- ═══ LEFT SIDEBAR ═══ -->
+  <aside class="chat-sidebar" [class.collapsed]="!isSidebarOpen()">
+
+    <!-- Header -->
+    <div class="sidebar-top">
+      <div class="sidebar-brand">
+        <div class="brand-icon"><i class="pi pi-shield"></i></div>
+        <span>AEGIS AI</span>
+      </div>
+      <button class="new-chat-btn" (click)="newChat()">
+        <i class="pi pi-plus"></i>
+        New chat
+      </button>
+    </div>
+
+    <!-- Mode Selector (moved from bottom toolbar) -->
+    <div class="sidebar-section-title">Mode</div>
+    <div class="mode-list">
+      <button
+        class="mode-item"
+        [class.mode-active]="!agentModeEnabled() && !webSearchEnabled()"
+        (click)="agentModeEnabled.set(false); webSearchEnabled.set(false)"
+      >
+        <div class="mode-icon mode-rag"><i class="pi pi-database"></i></div>
+        <div>
+          <span class="mode-name">RAG Retrieval</span>
+          <span class="mode-desc">Always on · Knowledge base</span>
+        </div>
+      </button>
+
+      <button
+        class="mode-item"
+        [class.mode-active]="agentModeEnabled() && !webSearchEnabled()"
+        (click)="agentModeEnabled.set(true); webSearchEnabled.set(false)"
+      >
+        <div class="mode-icon mode-agent"><i class="pi pi-share-alt"></i></div>
+        <div>
+          <span class="mode-name">Agent Mode</span>
+          <span class="mode-desc">Multi-step · Chain of thought</span>
+        </div>
+      </button>
+
+      <button
+        class="mode-item"
+        [class.mode-active]="webSearchEnabled()"
+        (click)="webSearchEnabled.set(true); agentModeEnabled.set(false)"
+      >
+        <div class="mode-icon mode-web"><i class="pi pi-globe"></i></div>
+        <div>
+          <span class="mode-name">Web Search</span>
+          <span class="mode-desc">Supplemented from web</span>
+        </div>
+      </button>
+    </div>
+
+
+    <!-- Conversation History -->
+    <div class="sidebar-section-title">History</div>
+    <div class="history-scroll">
+      @for (group of getGroupedConversations(); track group.label) {
+        <div class="history-group">
+          <label>{{ group.label }}</label>
+          @for (chat of group.chats; track chat.id) {
+            <button
+              class="history-item"
+              [class.active]="activeConversationId() === chat.id"
+              (click)="selectConversation(chat.id)">
+              <i class="pi pi-comment"></i>
+              <span>{{ chat.title }}</span>
+            </button>
+          }
+        </div>
+      }
+    </div>
+
+  </aside>
+
+  <!-- ═══ MAIN AREA ═══ -->
+  <main class="chat-main">
+
+    <!-- Top bar -->
+    <div class="chat-topbar">
+      <button class="topbar-toggle" (click)="isSidebarOpen.set(!isSidebarOpen())" title="Toggle sidebar">
+        <i class="pi" [class.pi-sidebar]="isSidebarOpen()" [class.pi-bars]="!isSidebarOpen()"></i>
+      </button>
+      <div class="topbar-info">
+        <span class="topbar-title">{{ activeConversation()?.title || 'AEGIS Assistant' }}</span>
+        <span class="topbar-mode-badge" [class.badge-agent]="agentModeEnabled()" [class.badge-web]="webSearchEnabled()">
+          @if (agentModeEnabled()) {
+            <i class="pi pi-share-alt"></i> Agent Mode
+          } @else if (webSearchEnabled()) {
+            <i class="pi pi-globe"></i> Web Search
+          } @else {
+            <i class="pi pi-database"></i> RAG Retrieval
+          }
+        </span>
+      </div>
+    </div>
+
+    <!-- Messages (scrollable) -->
+    <div class="messages-scroll" id="chat-scroll-container">
+      <div class="messages-track">
+
+        @for (msg of activeConversation()?.messages; track msg.id) {
+          <div class="msg-row" [class.row-user]="msg.role==='user'" [class.row-bot]="msg.role==='bot'">
+
+            @if (msg.role === 'bot') {
+              <div class="bot-avatar-icon">
+                <i class="pi pi-shield"></i>
+              </div>
+            }
+
+            <div class="msg-block">
+
+              <!-- Thinking steps -->
+              @if (msg.thinkingSteps && msg.thinkingSteps.length > 0) {
+                <div class="thinking-card">
+                  <div class="thinking-header">
+                    <i class="pi pi-spin pi-cog"></i>
+                    <span>Thinking…</span>
+                  </div>
+                  <div class="steps-list">
+                    @for (step of msg.thinkingSteps; track step.label) {
+                      <div class="step-row" [class.step-done]="step.status==='done'" [class.step-running]="step.status==='running'">
+                        <div class="step-icon">
+                          @if (step.status === 'running') { <i class="pi pi-spin pi-spinner"></i> }
+                          @else if (step.status === 'done')  { <i class="pi pi-check-circle"></i> }
+                          @else                              { <i class="pi pi-circle"></i> }
+                        </div>
+                        <span>{{ step.label }}</span>
+                      </div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Actual Message -->
+              @if (msg.text) {
+                <div class="bubble" [class.bubble-bot]="msg.role==='bot'" [class.bubble-user]="msg.role==='user'">
+                  <p>{{ msg.text }}</p>
+                  @if (msg.sources && msg.sources.length > 0) {
+                    <details class="src-details">
+                      <summary><i class="pi pi-book"></i> Sources ({{ msg.sources.length }})</summary>
+                      <div class="src-list">
+                        @for (src of msg.sources; track src.name) {
+                          <div class="src-row">
+                            <i class="pi pi-file-pdf"></i>
+                            <span>{{ src.name }}</span>
+                            <span class="src-pct">{{ (src.score * 100).toFixed(0) }}%</span>
+                          </div>
+                        }
+                      </div>
+                    </details>
+                  }
+                </div>
+              } @else if (msg.role === 'bot' && !msg.thinkingSteps) {
+                <div class="bubble bubble-bot typing-bubble">
+                  <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </div>
+              }
+
+            </div>
+
+          </div>
+        }
+
+
+      </div>
+    </div>
+
+    <!-- ═══ INPUT FOOTER ═══ -->
+    <div class="input-footer">
+      <div class="input-row">
+        <div class="input-card">
+          <textarea
+            id="chat-page-input"
+            [(ngModel)]="inputText"
+            placeholder="Ask anything…"
+            rows="1"
+            (keydown.enter)="$event.preventDefault(); sendMessage()"
+          ></textarea>
+        </div>
+        <button
+          class="send-btn-outer"
+          (click)="sendMessage()"
+          [disabled]="!inputText.trim() || isTyping()"
+          title="Send">
+          <i class="pi pi-arrow-up"></i>
+        </button>
+      </div>
+      <p class="grounded-tip">Grounded in your knowledge base · FAISS + Groq LLaMA-3</p>
+    </div>
+
+  </main>
+</div>

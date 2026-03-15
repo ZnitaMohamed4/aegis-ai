@@ -1,0 +1,80 @@
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.upload-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.lang-active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 4px -1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.upload-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  background: var(--bg-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.drop-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-surface-2));
+}
+
+.dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 2rem;
+  z-index: 10;
+}
+
+.upload-icon-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.browse-btn {
+  padding: 0.6rem 1.5rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.browse-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.upload-task-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-surface-2);
+}

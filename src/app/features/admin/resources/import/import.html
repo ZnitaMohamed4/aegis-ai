@@ -1,0 +1,155 @@
+<div class="p-4 sm:p-6 w-full flex flex-col gap-5 pb-8">
+  <app-page-header
+    title="Document Import"
+    subtitle="Feed knowledge into the FAISS vectorstore for the RAG pipeline."
+  />
+
+  <section class="panel upload-section">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-sm font-bold text-[var(--text-primary)] tracking-wide">INGESTION PIPELINE</h2>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold text-[var(--text-muted)] tracking-wider"
+          >Document Category</label
+        >
+        <p-select
+          [options]="categories"
+          [(ngModel)]="selectedCategory"
+          optionLabel="label"
+          optionValue="value"
+          styleClass="w-full bg-[var(--bg-surface-2)] border-[var(--border)]"
+        />
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <label class="text-xs font-semibold text-[var(--text-muted)] tracking-wider"
+          >Target Language</label
+        >
+        <div class="flex bg-[var(--bg-surface-2)] border border-[var(--border)] rounded-md p-1">
+          <button
+            class="flex-1 py-1.5 text-sm font-semibold rounded"
+            [class.lang-active]="selectedLang() === 'fr'"
+            (click)="selectedLang.set('fr')"
+          >
+            FR
+          </button>
+          <button
+            class="flex-1 py-1.5 text-sm font-semibold rounded"
+            [class.lang-active]="selectedLang() === 'ar'"
+            (click)="selectedLang.set('ar')"
+          >
+            AR
+          </button>
+          <button
+            class="flex-1 py-1.5 text-sm font-semibold rounded"
+            [class.lang-active]="selectedLang() === 'en'"
+            (click)="selectedLang.set('en')"
+          >
+            EN
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drag & Drop Zone -->
+    <div
+      class="upload-dropzone"
+      [class.drop-active]="isDragging()"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)"
+      (drop)="onDrop($event)"
+    >
+      <div class="dropzone-content">
+        <div class="upload-icon-ring">
+          <i class="pi pi-cloud-upload text-3xl text-[var(--accent)]"></i>
+        </div>
+        <p class="text-[var(--text-primary)] font-bold text-lg mt-3">Drag & drop files to index</p>
+        <p class="text-[var(--text-muted)] text-sm mb-4 mt-1">
+          Accepts PDF, DOCX, TXT. Multilingual MPNet embedding.
+        </p>
+
+        <input
+          type="file"
+          #fileInput
+          multiple
+          accept=".pdf,.docx,.txt"
+          class="hidden"
+          (change)="onFileSelected($event)"
+        />
+        <button class="browse-btn" (click)="fileInput.click()">Browse Files</button>
+      </div>
+    </div>
+  </section>
+
+  @if (activeUploads().length > 0) {
+    <section class="panel">
+      <h2 class="text-sm font-bold text-[var(--text-primary)] tracking-wide mb-4">
+        RECENT PIPELINE ACTIVITY
+      </h2>
+
+      <div class="flex flex-col gap-3">
+        @for (task of activeUploads(); track task.id) {
+          <article class="upload-task-card">
+            <div class="flex justify-between items-start mb-2">
+              <div class="flex items-center gap-3">
+                <i
+                  class="pi"
+                  [ngClass]="{
+                    'pi-file-pdf': task.file.name.endsWith('.pdf'),
+                    'pi-file-word': task.file.name.endsWith('.docx'),
+                    'pi-file':
+                      !task.file.name.endsWith('.pdf') && !task.file.name.endsWith('.docx'),
+                  }"
+                ></i>
+                <div>
+                  <h3 class="text-sm font-semibold text-[var(--text-primary)]">
+                    {{ task.file.name }}
+                  </h3>
+                  <div class="flex items-center gap-2 mt-0.5 text-xs text-[var(--text-muted)]">
+                    <span>{{ formatSize(task.file.size) }}</span>
+                    <span>•</span>
+                    <span class="uppercase font-mono">{{ task.category }}</span>
+                    <span>•</span>
+                    <span class="uppercase font-bold">{{ task.language }}</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Status Badge -->
+              @if (task.status === 'completed') {
+                <span
+                  class="pill-status px-2 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 text-xs font-bold rounded-md"
+                  >Indexed</span
+                >
+              } @else if (task.status === 'failed') {
+                <span
+                  class="pill-status px-2 py-0.5 bg-red-500/10 text-red-500 border border-red-500/20 text-xs font-bold rounded-md"
+                  >Failed</span
+                >
+              } @else {
+                <span
+                  class="pill-status px-2 py-0.5 bg-blue-500/10 text-blue-500 border border-blue-500/20 text-xs font-bold rounded-md capitalize"
+                  ><i class="pi pi-spin pi-spinner text-[10px] mr-1"></i> {{ task.status }}...</span
+                >
+              }
+            </div>
+
+            <!-- Progress Bar inside Card -->
+            <div
+              class="progress-track mt-3 bg-[var(--bg-surface-3)] h-1.5 rounded-full overflow-hidden w-full relative"
+            >
+              <div
+                class="progress-fill h-full bg-[var(--accent)] absolute top-0 left-0 transition-all duration-300 ease-out"
+                [style.width.%]="task.progress"
+                [class.bg-emerald-500]="task.status === 'completed'"
+                [class.bg-red-500]="task.status === 'failed'"
+              ></div>
+            </div>
+          </article>
+        }
+      </div>
+    </section>
+  }
+</div>
