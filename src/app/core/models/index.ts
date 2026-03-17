@@ -5,3 +5,4 @@ export * from './conversation.model';
 export * from './behavioral-profile.model';
 export * from './harassment.model';
 export * from './ai-config.model';
+export * from './report.model';

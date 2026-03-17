@@ -1,15 +1,21 @@
 import { Routes } from '@angular/router';
+import { authGuard, adminGuard, parentGuard } from '@core/guards/auth.guard';
 
 export const routes: Routes = [
   {
     path: '',
-    redirectTo: 'admin/dashboard',
+    redirectTo: 'login',
     pathMatch: 'full'
+  },
+  {
+    path: 'login',
+    loadComponent: () => import('@features/auth/login/login.component').then(c => c.LoginComponent)
   },
 
   // Admin shell
   {
     path: 'admin',
+    canActivate: [authGuard, adminGuard],
     loadComponent: () =>
       import('@layout/shell/shell.component').then(c => c.ShellComponent),
     children: [
@@ -33,6 +39,7 @@ export const routes: Routes = [
   // Parent shell
   {
     path: 'parent',
+    canActivate: [authGuard, parentGuard],
     loadComponent: () =>
       import('@layout/shell/shell.component').then(c => c.ShellComponent),
     children: [
@@ -49,5 +56,5 @@ export const routes: Routes = [
     ]
   },
 
-  { path: '**', redirectTo: 'admin/dashboard' }
+  { path: '**', redirectTo: 'login' }
 ];

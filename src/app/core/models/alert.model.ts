@@ -13,3 +13,18 @@ export interface Alert {
   resolved_at: string | null;
   parent_notified: boolean;
 }
+
+export interface MockAlert {
+  id: string;
+  preview: string;
+  severity: AlertSeverity;
+  category: string;
+  decision: string;
+  toxicity_score: number;
+  confidence_score: number;
+  llm_triggered: boolean;
+  llm_explanation: string | null;
+  is_resolved: boolean;
+  sent_at: string;
+  language: string;
+}

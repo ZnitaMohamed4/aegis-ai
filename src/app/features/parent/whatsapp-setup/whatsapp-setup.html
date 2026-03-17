@@ -1,1 +1,160 @@
-<p>whatsapp-setup works!</p>
+<div class="whatsapp-setup-page">
+  <div class="setup-container">
+    
+    <!-- Header Area -->
+    <div class="setup-header">
+      <div class="whatsapp-icon-bg">
+        <i class="pi pi-whatsapp"></i>
+      </div>
+      <h1 class="page-title">Connect your child's WhatsApp</h1>
+      <p class="page-subtitle">Link their account to begin monitoring messages for safety.</p>
+    </div>
+
+    <!-- Stepper Indicator -->
+    <div class="stepper-container">
+      <div class="step" [class.completed]="connectionStatus() !== 'idle'" [class.active]="connectionStatus() === 'idle'">
+        <div class="step-circle">1</div>
+        <span class="step-label">Create session</span>
+      </div>
+      <div class="step-line" [class.active]="connectionStatus() !== 'idle'"></div>
+      
+      <div class="step" [class.completed]="connectionStatus() === 'connected'" [class.active]="connectionStatus() === 'qr_displayed'">
+        <div class="step-circle">2</div>
+        <span class="step-label">Scan QR</span>
+      </div>
+      <div class="step-line" [class.active]="connectionStatus() === 'connected'"></div>
+      
+      <div class="step" [class.completed]="connectionStatus() === 'connected'" [class.active]="connectionStatus() === 'connected'">
+        <div class="step-circle">3</div>
+        <span class="step-label">Confirmed</span>
+      </div>
+    </div>
+
+    <div class="card-content">
+      
+      <!-- STATE 1: IDLE -->
+      <div class="state-idle" *ngIf="connectionStatus() === 'idle'">
+        <div class="visual-explainer">
+          <div class="explainer-step">
+            <div class="icon-circle"><i class="pi pi-mobile"></i></div>
+            <p>1. Open WhatsApp on their phone</p>
+          </div>
+          <i class="pi pi-arrow-right explainer-arrow"></i>
+          
+          <div class="explainer-step">
+            <div class="icon-circle"><i class="pi pi-link"></i></div>
+            <p>2. Go to Linked Devices</p>
+          </div>
+          <i class="pi pi-arrow-right explainer-arrow"></i>
+          
+          <div class="explainer-step">
+            <div class="icon-circle"><i class="pi pi-qrcode"></i></div>
+            <p>3. Scan the code</p>
+          </div>
+        </div>
+
+        <div class="info-box">
+          <i class="pi pi-info-circle"></i>
+          <p>The connection is secure and invisible to your child. They will not receive a notification that you have linked a device.</p>
+        </div>
+
+        <button class="primary-btn btn-lg pulse-btn" (click)="generateQr()">
+          Generate QR Code
+        </button>
+      </div>
+
+
+      <!-- STATE 2: QR DISPLAYED -->
+      <div class="state-qr" *ngIf="connectionStatus() === 'qr_displayed'">
+        <div class="qr-wrapper">
+          <!-- Placeholder for actual EvolutionAPI Base64 QR -->
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=aegis-ai-mock-qr" alt="Scan this QR code" class="qr-image" [class.expired]="qrTimeRemaining() === 0">
+          
+          <div class="qr-overlay" *ngIf="qrTimeRemaining() === 0">
+            <div class="overlay-content">
+              <i class="pi pi-refresh"></i>
+              <p>QR Code Expired</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="qr-status-section">
+          <div class="timer-container" *ngIf="qrTimeRemaining() > 0">
+            <p class="timer-text">QR expires in {{ qrTimeRemaining() }} seconds</p>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" [style.width]="(qrTimeRemaining() / 45 * 100) + '%'"></div>
+            </div>
+          </div>
+
+          <div class="waiting-indicator" *ngIf="qrTimeRemaining() > 0">
+            <span class="pulsing-dot"></span>
+            <p>Waiting for scan...</p>
+          </div>
+
+          <button class="secondary-btn" *ngIf="qrTimeRemaining() === 0" (click)="refreshQr()">
+            Refresh QR Code
+          </button>
+
+          <!-- Mock Phase Button -->
+          <div class="mock-actions">
+            <div class="divider"><span>Development ONLY</span></div>
+            <button class="ghost-btn" (click)="simulateScan()" *ngIf="qrTimeRemaining() > 0">
+              <i class="pi pi-wrench"></i> Simulate API Scan Success
+            </button>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- STATE 3: CONNECTED -->
+      <div class="state-connected" *ngIf="connectionStatus() === 'connected'">
+        <div class="success-animation">
+          <div class="success-circle">
+            <i class="pi pi-check"></i>
+          </div>
+        </div>
+        
+        <h2 class="success-title">Successfully Connected</h2>
+        
+        <div class="connection-details">
+          <div class="detail-row">
+            <span class="detail-label">Connected Number</span>
+            <span class="detail-value number-font">{{ connectedNumber }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Connection Date</span>
+            <span class="detail-value">{{ connectionDate }}</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Status</span>
+            <span class="detail-value status-active">
+              <span class="active-dot"></span> Actively Monitoring
+            </span>
+          </div>
+        </div>
+
+        <button class="danger-btn outline" (click)="promptDisconnect()">
+          <i class="pi pi-unlink"></i> Disconnect WhatsApp
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Disconnect Confirmation Dialog -->
+<div class="dialog-backdrop" *ngIf="showDisconnectDialog()">
+  <div class="dialog-modal">
+    <div class="dialog-icon danger">
+      <i class="pi pi-exclamation-triangle"></i>
+    </div>
+    <h3 class="dialog-title">Disconnect WhatsApp?</h3>
+    <p class="dialog-text">
+      This will immediately stop monitoring your child's messages. This action is irreversible, and you will need access to their phone to scan a new QR code if you wish to reconnect.
+    </p>
+    <div class="dialog-actions">
+      <button class="ghost-btn" (click)="cancelDisconnect()">Cancel</button>
+      <button class="danger-btn" (click)="confirmDisconnect()">Yes, Disconnect</button>
+    </div>
+  </div>
+</div>

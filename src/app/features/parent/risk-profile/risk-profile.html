@@ -1,1 +1,100 @@
-<p>risk-profile works!</p>
+<div class="p-4 sm:p-6 w-full max-w-5xl mx-auto flex flex-col gap-6">
+
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">Risk Profile: Emma L.</h1>
+      <p class="text-sm text-[var(--text-muted)]">Detailed behavioral and threat analysis</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-mono px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-2)]">
+        {{ childNumber }}
+      </span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- Score Card -->
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6 flex flex-col items-center justify-center text-center">
+      <div class="text-sm font-semibold text-[var(--text-muted)] mb-4 uppercase tracking-wider">Overall Risk Score</div>
+      <div class="relative w-32 h-32 flex items-center justify-center rounded-full border-[10px]"
+           [style.border-color]="getRiskHex(currentRiskLevel)">
+        <span class="text-4xl font-bold font-mono text-[var(--text-primary)]">{{ currentRiskScore.toFixed(2) }}</span>
+      </div>
+      <div class="mt-6 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest"
+           [style.color]="getRiskHex(currentRiskLevel)"
+           [style.background]="getRiskHex(currentRiskLevel) + '22'">
+        {{ currentRiskLevel }} Risk
+      </div>
+      <p class="text-xs text-[var(--text-muted)] mt-4">Based on analysis of 1.2k recent interactions</p>
+    </div>
+
+    <!-- Trend Chart -->
+    <div class="md:col-span-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6 flex flex-col">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-bold text-[var(--text-primary)]">Risk Trend (Last 30 Days)</h3>
+        <span class="text-xs text-[var(--low)] flex items-center gap-1 font-semibold">
+          <i class="pi pi-arrow-down-right"></i> Improving
+        </span>
+      </div>
+      
+      <div class="flex-1 w-full bg-[var(--bg-surface-2)]/50 border border-[var(--border)]/50 rounded-lg flex items-center justify-center min-h-[220px]">
+        <div class="flex flex-col items-center gap-2">
+          <i class="pi pi-chart-line text-2xl text-[var(--text-muted)] opacity-50"></i>
+          <span class="text-xs text-[var(--text-muted)] font-medium">Risk trend chart embedded here</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Identified Threat Actors -->
+  <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl flex flex-col mt-2">
+    <div class="p-5 border-b border-[var(--border)] flex justify-between items-end">
+      <div>
+        <h3 class="font-bold text-[var(--text-primary)] mb-1">Identified Threat Actors</h3>
+        <p class="text-xs text-[var(--text-muted)]">Contacts communicating with Emma exhibiting high-risk behavior</p>
+      </div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-left border-collapse min-w-[600px]">
+        <thead>
+          <tr class="bg-[var(--bg-surface-2)]/50 text-xs text-[var(--text-muted)] uppercase tracking-wider">
+            <th class="px-5 py-3 font-semibold border-b border-[var(--border)]">Contact / Number</th>
+            <th class="px-5 py-3 font-semibold border-b border-[var(--border)]">Score</th>
+            <th class="px-5 py-3 font-semibold border-b border-[var(--border)]">Key Patterns</th>
+            <th class="px-5 py-3 font-semibold border-b border-[var(--border)] text-right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (actor of threatActors; track actor.id) {
+            <tr class="border-b border-[var(--border)] hover:bg-[var(--bg-surface-2)] transition-colors">
+              <td class="px-5 py-4">
+                <div class="font-medium text-sm text-[var(--text-primary)] mb-0.5">{{ actor.name }}</div>
+                <div class="text-xs font-mono text-[var(--text-muted)]">{{ actor.number }}</div>
+              </td>
+              <td class="px-5 py-4">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-bold font-mono" [style.color]="getRiskHex(actor.level)">{{ actor.score.toFixed(2) }}</span>
+                  <div class="w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" [style.background]="getRiskHex(actor.level)" [style.shadow-color]="getRiskHex(actor.level)"></div>
+                </div>
+              </td>
+              <td class="px-5 py-4">
+                <div class="flex gap-1.5 flex-wrap">
+                  @for (tag of actor.patterns; track tag) {
+                    <span class="text-[0.65rem] font-semibold bg-[var(--bg-surface-2)] text-[var(--text-muted)] px-2 py-1 rounded-md border border-[var(--border)]">{{ tag }}</span>
+                  }
+                </div>
+              </td>
+              <td class="px-5 py-4 text-right">
+                <button class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-[var(--bg-surface-2)] text-[var(--text-primary)] hover:bg-[var(--accent)] hover:text-white transition-colors border border-[var(--border)] hover:border-transparent">
+                  Review Logs
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>

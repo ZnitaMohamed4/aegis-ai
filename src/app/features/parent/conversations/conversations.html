@@ -1,1 +1,9 @@
-<p>conversations works!</p>
+<app-conversation-viewer
+  [contacts]="contacts()"
+  [messages]="messages()"
+  [isAdmin]="false"
+  title="My Child's Conversations"
+  subtitle="Read your child's flagged chat history"
+  (openRiskProfileEvent)="onOpenRiskProfile($event)"
+  (goToReportsEvent)="onGoToReports()">
+</app-conversation-viewer>

@@ -1,1 +1,37 @@
-<p>login works!</p>
+<div class="login-wrapper">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="logo-circle">
+        <i class="pi pi-shield"></i>
+      </div>
+      <h1 class="login-title">AegisAI</h1>
+      <p class="login-subtitle">Select your role to continue into the dashboard.</p>
+    </div>
+
+    <div class="role-buttons">
+      <button class="role-btn admin-btn" (click)="loginAs('admin')">
+        <div class="btn-icon">
+          <i class="pi pi-lock"></i>
+        </div>
+        <div class="btn-text">
+          <span class="btn-primary">Continue as Admin</span>
+          <span class="btn-secondary">Platform monitoring & configuration</span>
+        </div>
+      </button>
+
+      <button class="role-btn parent-btn" (click)="loginAs('parent')">
+        <div class="btn-icon">
+          <i class="pi pi-users"></i>
+        </div>
+        <div class="btn-text">
+          <span class="btn-primary">Continue as Parent</span>
+          <span class="btn-secondary">Safety alerts & risk insights</span>
+        </div>
+      </button>
+    </div>
+
+    <div class="login-footer">
+      <p>This is a simulated authentication experience for demonstration purposes.</p>
+    </div>
+  </div>
+</div>

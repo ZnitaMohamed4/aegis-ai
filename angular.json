@@ -38,10 +38,15 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
+                  "maximumWarning": "10kB",
+                  "maximumError": "20kB"
                 }
               ],
+              "optimization": {
+                "fonts": {
+                  "inline": false
+                }
+              },
               "outputHashing": "all"
             },
             "development": {

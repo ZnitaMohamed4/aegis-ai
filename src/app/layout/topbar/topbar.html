@@ -34,17 +34,20 @@
     </button>
 
     <!-- Theme toggle -->
-    <button class="icon-btn" (click)="toggleTheme()">
+    <button class="icon-btn" (click)="toggleTheme()" title="Toggle theme">
       <i class="pi" [class.pi-moon]="!darkMode()" [class.pi-sun]="darkMode()"></i>
     </button>
 
-    <!-- User avatar -->
-    <div class="user-pill">
-      <div class="avatar">A</div>
+    <!-- User avatar / Logout Action -->
+    <div class="user-pill flex items-center gap-3 cursor-pointer" (click)="logout()" title="Log out">
+      <div class="avatar" [style.background]="isParentView() ? '#25d366' : 'var(--accent)'">
+        {{ isParentView() ? 'P' : 'A' }}
+      </div>
       <div class="user-info">
-        <span class="user-name">Admin</span>
-        <span class="user-role">Administrator</span>
+        <span class="user-name">{{ isParentView() ? 'Parent User' : 'Admin' }}</span>
+        <span class="user-role flex items-center gap-1"><i class="pi pi-sign-out text-[10px]"></i> Sign out</span>
       </div>
     </div>
+
   </div>
 </header>

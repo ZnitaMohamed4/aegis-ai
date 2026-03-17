@@ -1,0 +1,165 @@
+.platform-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.platform-wa {
+  color: #25d366;
+  background: rgba(37, 211, 102, 0.12);
+  border-color: rgba(37, 211, 102, 0.3);
+}
+
+.platform-tg {
+  color: #40a7e3;
+  background: rgba(64, 167, 227, 0.12);
+  border-color: rgba(64, 167, 227, 0.3);
+}
+
+.platform-sim {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+  border-color: rgba(167, 139, 250, 0.3);
+}
+
+.header-link {
+  color: var(--accent);
+  font-weight: 600;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.header-link:hover {
+  text-decoration: underline;
+}
+
+.header-action {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  border: 1px solid var(--accent);
+  border-radius: 0.45rem;
+  padding: 0.4rem 0.65rem;
+  cursor: pointer;
+}
+
+.first-contact-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: #ffb020;
+  background: rgba(255, 176, 32, 0.1);
+  border-bottom: 1px solid rgba(255, 176, 32, 0.3);
+  padding: 0.55rem 1.5rem;
+}
+
+.lang-chip {
+  font-size: 0.62rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.flagged-message {
+  border-radius: 0.75rem;
+  border: 1px solid;
+  padding: 0.75rem 0.9rem;
+  cursor: pointer;
+  background: transparent;
+  width: 100%;
+}
+
+.flagged-block {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.flagged-block i,
+.flagged-block span:first-of-type {
+  color: var(--critical);
+}
+
+.flagged-warn {
+  border-color: rgba(255, 176, 32, 0.4);
+  background: rgba(255, 176, 32, 0.12);
+}
+
+.flagged-warn i,
+.flagged-warn span:first-of-type {
+  color: #ffb020;
+}
+
+.score-badge {
+  font-size: 0.68rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  color: #ffb020;
+  background: rgba(255, 176, 32, 0.16);
+  border: 1px solid rgba(255, 176, 32, 0.28);
+  border-radius: 0.35rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.alert-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 40;
+}
+
+.alert-drawer {
+  position: fixed;
+  right: 0;
+  top: 64px;
+  height: calc(100vh - 64px);
+  width: min(360px, 92vw);
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+  z-index: 50;
+  padding: 1rem;
+  overflow-y: auto;
+  box-shadow: -12px 0 28px rgba(0, 0, 0, 0.16);
+}
+
+.drawer-meta {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  display: flex;
+  justify-content: space-between;
+}
+
+.drawer-meta span {
+  color: var(--text-muted);
+}
+
+.drawer-meta strong {
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.drawer-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  text-decoration: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+}

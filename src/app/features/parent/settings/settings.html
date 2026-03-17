@@ -1,1 +1,185 @@
-<p>settings works!</p>
+<p-toast position="top-right" />
+<div class="settings-page p-4 sm:p-6 w-full">
+	<app-page-header
+		title="Surveillance Settings"
+		subtitle="Manage notification preferences, display themes, and your account profile.">
+		<button class="save-btn-header" (click)="saveSettings()">
+			<i class="pi pi-save"></i>
+			Save
+		</button>
+	</app-page-header>
+
+	<div class="settings-grid">
+		<section class="panel section-card">
+			<header class="section-header">
+				<span class="section-label">APPEARANCE</span>
+				<h2 class="section-title">Theme & Display</h2>
+			</header>
+
+			<div class="field-grid">
+				<label class="field-row">
+					<span class="field-label">System Theme Preset</span>
+					<p-select
+						[options]="themePresets"
+						[(ngModel)]="selectedTheme"
+						(ngModelChange)="selectTheme($event.id)"
+						optionLabel="label"
+						styleClass="settings-select theme-select">
+						<ng-template pTemplate="selectedItem" let-theme>
+							<div class="flex items-center gap-3">
+								<div class="theme-dot" [style.background]="theme.accent"></div>
+								<span class="font-semibold">{{ theme.label }}</span>
+							</div>
+						</ng-template>
+						<ng-template pTemplate="item" let-theme>
+							<div class="flex items-center gap-3 p-2">
+								<div class="theme-dot-large" [style.background]="theme.accent"></div>
+								<div class="flex flex-col">
+									<span class="text-sm font-bold" [style.color]="theme.accent">{{ theme.label }}</span>
+									<span class="text-[10px] uppercase opacity-70 tracking-wider">Accent: {{ theme.accent }}</span>
+								</div>
+							</div>
+						</ng-template>
+					</p-select>
+				</label>
+
+				<div class="switch-row">
+					<div>
+						<p class="row-title">Dark / Light mode</p>
+						<p class="row-caption">Global toggle for light/dark interface tokens</p>
+					</div>
+					<p-toggleswitch
+						[ngModel]="darkMode()"
+						(ngModelChange)="toggleDarkMode($event)"
+						inputId="dark-mode-toggle" />
+				</div>
+			</div>
+		</section>
+
+		<div class="section-divider"></div>
+
+		<section class="panel section-card">
+			<header class="section-header">
+				<span class="section-label">NOTIFICATIONS</span>
+				<h2 class="section-title">AI Alert Preferences</h2>
+			</header>
+
+			<div class="switch-stack">
+				<div class="switch-row">
+					<p class="row-title">Email notifications</p>
+					<p-toggleswitch
+						[ngModel]="notifications().emailNotifications"
+						(ngModelChange)="updateNotification('emailNotifications', $event)"
+						inputId="notif-email" />
+				</div>
+
+				<div class="switch-row">
+					<p class="row-title">In-app notifications</p>
+					<p-toggleswitch
+						[ngModel]="notifications().inAppNotifications"
+						(ngModelChange)="updateNotification('inAppNotifications', $event)"
+						inputId="notif-in-app" />
+				</div>
+
+				<div class="switch-row">
+					<p class="row-title">Notify when messages are BLOCKED</p>
+					<p-toggleswitch
+						[ngModel]="notifications().notifyOnBlock"
+						(ngModelChange)="updateNotification('notifyOnBlock', $event)"
+						inputId="notif-block" />
+				</div>
+
+				<div class="switch-row">
+					<p class="row-title">Notify on low-risk warnings</p>
+					<p-toggleswitch
+						[ngModel]="notifications().notifyOnWarn"
+						(ngModelChange)="updateNotification('notifyOnWarn', $event)"
+						inputId="notif-warn" />
+				</div>
+
+				<div class="quiet-hours-row">
+					<span class="field-label">Quiet hours (Suspend alerts)</span>
+					<div class="time-range-wrap">
+						<input
+							type="time"
+							class="input-field"
+							[ngModel]="notifications().quietHoursStart"
+							(ngModelChange)="updateNotification('quietHoursStart', $event)" />
+						<span class="range-separator">-</span>
+						<input
+							type="time"
+							class="input-field"
+							[ngModel]="notifications().quietHoursEnd"
+							(ngModelChange)="updateNotification('quietHoursEnd', $event)" />
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<div class="section-divider"></div>
+
+		<section class="panel section-card">
+			<header class="section-header">
+				<span class="section-label">PARENT ACCOUNT</span>
+				<h2 class="section-title">Profile & Access</h2>
+			</header>
+
+			<div class="field-grid">
+				<label class="field-row">
+					<span class="field-label">Display name</span>
+					<input
+						type="text"
+						class="input-field"
+						[ngModel]="parentAccount().displayName"
+						(ngModelChange)="updateParentAccount('displayName', $event)" />
+				</label>
+
+				<label class="field-row">
+					<span class="field-label">Email</span>
+					<input
+						type="email"
+						class="input-field"
+						[ngModel]="parentAccount().email"
+						(ngModelChange)="updateParentAccount('email', $event)" />
+				</label>
+
+				<div class="field-row">
+					<span class="field-label">Password</span>
+					<button type="button" class="ghost-btn" (click)="togglePasswordForm()">
+						{{ showPasswordForm() ? 'Cancel password change' : 'Change password' }}
+					</button>
+				</div>
+
+				@if (showPasswordForm()) {
+					<div class="password-inline-form">
+						<input
+							type="password"
+							class="input-field"
+							placeholder="Current password"
+							[ngModel]="passwordForm().currentPassword"
+							(ngModelChange)="updatePasswordField('currentPassword', $event)" />
+						<input
+							type="password"
+							class="input-field"
+							placeholder="New password"
+							[ngModel]="passwordForm().newPassword"
+							(ngModelChange)="updatePasswordField('newPassword', $event)" />
+						<input
+							type="password"
+							class="input-field"
+							placeholder="Confirm new password"
+							[ngModel]="passwordForm().confirmPassword"
+							(ngModelChange)="updatePasswordField('confirmPassword', $event)" />
+						<button type="button" class="inline-save-btn" (click)="savePassword()">Save password</button>
+					</div>
+				}
+
+				<div class="field-row">
+					<span class="field-label">Last login</span>
+					<p class="readonly-value mono">{{ parentAccount().lastLogin }}</p>
+				</div>
+			</div>
+		</section>
+	</div>
+
+</div>

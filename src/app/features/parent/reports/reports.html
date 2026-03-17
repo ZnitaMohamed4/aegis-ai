@@ -1,1 +1,143 @@
-<p>reports works!</p>
+<div class="p-4 sm:p-6 w-full">
+
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">My Child's Reports</h1>
+      <p class="text-sm text-[var(--text-muted)]">AI-generated incident reports for your reference</p>
+    </div>
+    <button
+      class="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity w-full sm:w-auto"
+      (click)="openRequest()">
+      <i class="pi pi-plus text-xs"></i>
+      Request Report
+    </button>
+  </div>
+
+  <!-- Stats -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
+      <div class="text-xs text-[var(--text-muted)] mb-1">Total Reports</div>
+      <div class="text-2xl sm:text-3xl font-bold font-mono text-[var(--text-primary)]">
+        {{ reports().length }}
+      </div>
+    </div>
+    <div class="bg-[var(--bg-surface)] border border-green-500/30 rounded-xl p-4">
+      <div class="text-xs text-[var(--text-muted)] mb-1">Ready</div>
+      <div class="text-2xl sm:text-3xl font-bold font-mono text-[var(--low)]">
+        {{ reports().filter(r => r.status === 'ready').length }}
+      </div>
+    </div>
+    <div class="bg-[var(--bg-surface)] border border-yellow-500/30 rounded-xl p-4">
+      <div class="text-xs text-[var(--text-muted)] mb-1">Generating</div>
+      <div class="text-2xl sm:text-3xl font-bold font-mono text-[var(--medium)]">
+        {{ reports().filter(r => r.status === 'generating').length }}
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex flex-wrap gap-2 mb-5">
+    <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
+      @for (s of ['all', 'ready', 'generating']; track s) {
+        <button
+          class="px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all"
+          [class]="filterStatus() === s
+            ? 'bg-[var(--accent)] text-white'
+            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'"
+          (click)="filterStatus.set(s)">
+          {{ s }}
+        </button>
+      }
+    </div>
+    <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
+      @for (t of ['all', 'summary', 'full', 'legal']; track t) {
+        <button
+          class="px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all"
+          [class]="filterType() === t
+            ? 'bg-[var(--accent)] text-white'
+            : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'"
+          (click)="filterType.set(t)">
+          {{ t }}
+        </button>
+      }
+    </div>
+  </div>
+
+  <!-- Reports Grid via shared component -->
+  <app-report-card
+    [reports]="filteredReports()"
+    [isAdmin]="false">
+  </app-report-card>
+
+</div>
+
+<!-- ── REQUEST REPORT DRAWER ──────────────────────── -->
+<p-drawer
+  [(visible)]="requestDrawerVisible"
+  position="right"
+  [style]="{ width: 'min(440px, 100vw)' }"
+  header="Request a Report for Emma">
+
+  <div class="flex flex-col gap-5 p-1">
+
+    <p class="text-sm text-[var(--text-muted)]">
+      The AI pipeline will analyze all messages in the selected period and generate
+      a structured report. Generation typically takes 10–30 seconds.
+    </p>
+
+    <!-- Period -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-semibold text-[var(--text-muted)]">From</label>
+        <input type="date" class="input-field"
+               [(ngModel)]="requestForm().period_start" />
+      </div>
+      <div class="flex flex-col gap-1">
+        <label class="text-xs font-semibold text-[var(--text-muted)]">To</label>
+        <input type="date" class="input-field"
+               [(ngModel)]="requestForm().period_end" />
+      </div>
+    </div>
+
+    <!-- Report Type -->
+    <div class="flex flex-col gap-2">
+      <label class="text-xs font-semibold text-[var(--text-muted)]">Report Type</label>
+      <div class="flex flex-col gap-2">
+        @for (type of [
+          { value: 'summary', label: 'Summary', desc: 'Quick overview + AI narrative' },
+          { value: 'full', label: 'Full Analysis', desc: 'Complete data + threat actors + charts' }
+        ]; track type.value) {
+          <button
+            class="flex items-start gap-3 p-3 rounded-lg border text-left transition-all"
+            [class]="requestForm().report_type === type.value
+              ? 'border-[var(--accent)] bg-[var(--accent)]/5'
+              : 'border-[var(--border)] hover:border-[var(--accent)]/50'"
+            (click)="setReportType(type.value)">
+            <div class="w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5"
+                 [class]="requestForm().report_type === type.value
+                   ? 'border-[var(--accent)]'
+                   : 'border-[var(--border)]'">
+              @if (requestForm().report_type === type.value) {
+                <div class="w-2 h-2 rounded-full bg-[var(--accent)]"></div>
+              }
+            </div>
+            <div>
+              <div class="text-sm font-semibold text-[var(--text-primary)]">{{ type.label }}</div>
+              <div class="text-xs text-[var(--text-muted)]">{{ type.desc }}</div>
+            </div>
+          </button>
+        }
+      </div>
+    </div>
+
+    <button
+      class="w-full py-3 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity mt-2"
+      (click)="submitRequest()">
+      <i class="pi pi-sparkles mr-2"></i>
+      Generate Report
+    </button>
+
+  </div>
+
+</p-drawer>

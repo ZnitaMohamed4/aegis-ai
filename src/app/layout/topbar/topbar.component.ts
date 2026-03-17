@@ -1,6 +1,10 @@
-import { Component, EventEmitter, inject, Output, signal } from '@angular/core';
+import { Component, computed, EventEmitter, inject, Output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router, NavigationEnd } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { filter } from 'rxjs/operators';
 import { ThemeService } from '@core/services/theme.service';
+import { AuthService } from '@core/services/auth.service';
 
 @Component({
   selector: 'app-topbar',
@@ -13,7 +17,25 @@ export class TopbarComponent {
   @Output() toggleSidebar = new EventEmitter<void>();
 
   private readonly themeService = inject(ThemeService);
+  private readonly authService = inject(AuthService);
+  private readonly router = inject(Router);
   readonly darkMode = this.themeService.darkMode;
+
+  /**
+   * We convert router events to a signal to trigger reactivity in our computed signals.
+   */
+  private navEvents = toSignal(
+    this.router.events.pipe(filter(event => event instanceof NavigationEnd))
+  );
+
+  isParentView = computed(() => {
+    this.navEvents(); // Register as dependency
+    return this.router.url.startsWith('/parent');
+  });
+
+  logout() {
+    this.authService.logout();
+  }
 
   languages = [
     { label: 'English', code: 'EN', flag: '🇬🇧' },

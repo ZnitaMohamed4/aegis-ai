@@ -1,1 +1,123 @@
-<p>dashboard works!</p>
+<div class="p-4 sm:p-6 w-full flex flex-col gap-6">
+
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div>
+      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">Emma's Dashboard</h1>
+      <p class="text-sm text-[var(--text-muted)]">Real-time monitoring and threat prevention for your child</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-[var(--low)] rounded-lg text-xs font-bold uppercase tracking-wider border border-[var(--low)]/20">
+        <span class="w-2 h-2 rounded-full bg-[var(--low)] animate-pulse"></span>
+        Surveillance Active
+      </span>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    @for (stat of stats; track stat.label) {
+      <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between">
+        <div class="flex items-start justify-between mb-3">
+          <span class="text-xs text-[var(--text-muted)] font-semibold">{{ stat.label }}</span>
+          <div class="w-8 h-8 rounded-lg flex items-center justify-center" [style.background]="'var(--' + stat.color + ')' + '22'">
+            <i class="pi {{ stat.icon }} text-sm" [style.color]="'var(--' + stat.color + ')'"></i>
+          </div>
+        </div>
+        <div>
+          <div class="text-2xl font-bold font-mono text-[var(--text-primary)]">{{ stat.value }}</div>
+          <div class="text-xs font-semibold mt-1 flex items-center gap-1" [ngClass]="stat.trendUp ? 'text-[var(--low)]' : 'text-[var(--critical)]'">
+            <i class="pi" [ngClass]="stat.trendUp ? 'pi-arrow-up' : 'pi-arrow-down'"></i>
+            {{ stat.trend }}
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left Column: Feed & Alerts -->
+    <div class="lg:col-span-8 flex flex-col gap-6">
+      
+      <!-- Recent Alerts -->
+      <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl flex flex-col">
+        <div class="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-surface-2)]/50 rounded-t-xl">
+          <span class="font-bold text-[var(--text-primary)]">Recent Alerts</span>
+          <a class="text-xs font-semibold text-[var(--accent)] hover:underline" routerLink="/parent/alerts">View all →</a>
+        </div>
+        <div class="flex flex-col">
+          @for (alert of recentAlerts; track alert.id) {
+            <div class="flex items-center p-4 border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-surface-2)] transition-colors gap-4">
+              <div class="w-1 h-10 rounded-full flex-shrink-0" [style.background]="getRiskHex(alert.severity)"></div>
+              <div class="flex-1 min-w-0">
+                <div class="text-sm text-[var(--text-primary)] truncate font-medium">{{ alert.preview }}</div>
+                <div class="flex items-center gap-2 mt-1 text-xs text-[var(--text-muted)]">
+                  <span class="font-semibold uppercase tracking-wider">{{ alert.category }}</span>
+                  <span>•</span>
+                  <span>{{ alert.time }}</span>
+                </div>
+              </div>
+              <div class="text-xs font-bold font-mono px-2 py-1 rounded" [ngClass]="getDecisionClass(alert.decision)">
+                {{ alert.decision }}
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Feed -->
+    <div class="lg:col-span-4 flex flex-col gap-6">
+      
+      <!-- Live Activity Feed -->
+      <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl flex flex-col h-[320px]">
+        <div class="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-surface-2)]/50 rounded-t-xl">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-[var(--low)] animate-pulse"></span>
+            <span class="font-bold text-[var(--text-primary)]">Activity Feed</span>
+          </div>
+          <span class="text-xs font-mono text-[var(--text-muted)]">{{ feedEvents().length }} events</span>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+          @for (event of feedEvents(); track event.id) {
+            <div class="flex items-start gap-3 text-sm">
+              <span class="text-xs font-mono text-[var(--text-muted)] mt-0.5 whitespace-nowrap">{{ event.time }}</span>
+              <div class="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" [style.background]="getFeedColor(event.type)"></div>
+              <div class="flex-1 text-[var(--text-primary)] leading-tight text-xs">{{ event.text }}</div>
+            </div>
+          }
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Charts Row -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5">
+      <div class="mb-4">
+        <h3 class="font-bold text-[var(--text-primary)] flex items-center gap-2">
+          <i class="pi pi-chart-bar text-[var(--accent)]"></i>
+          Interventions
+        </h3>
+        <p class="text-xs text-[var(--text-muted)]">Past 7 days overview of blocked/warned messages</p>
+      </div>
+      <p-chart type="bar" [data]="weeklyChartData" [options]="weeklyChartOptions" height="220px"></p-chart>
+    </div>
+    
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5">
+      <div class="mb-4">
+        <h3 class="font-bold text-[var(--text-primary)] flex items-center gap-2">
+          <i class="pi pi-chart-pie text-[var(--accent)]"></i>
+          Harassment Breakdown
+        </h3>
+        <p class="text-xs text-[var(--text-muted)]">Categories of intercepted threats</p>
+      </div>
+      <p-chart type="doughnut" [data]="harassmentChartData" [options]="harassmentChartOptions" height="220px"></p-chart>
+    </div>
+  </div>
+
+</div>

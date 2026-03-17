@@ -1,0 +1,321 @@
+<!-- Reports Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+  @if (isLoading()) {
+    @for (i of skeletonItems; track i) {
+      <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5 flex flex-col gap-4">
+        <div class="flex items-start justify-between">
+          <div class="flex flex-col gap-2">
+            <p-skeleton width="3rem" height="1rem"></p-skeleton>
+            <p-skeleton width="8rem" height="1.2rem"></p-skeleton>
+            <p-skeleton width="6rem" height="1rem"></p-skeleton>
+          </div>
+          <div class="flex flex-col items-end gap-2">
+            <p-skeleton width="4rem" height="1rem" borderRadius="16px"></p-skeleton>
+            <p-skeleton width="5rem" height="1rem" borderRadius="16px"></p-skeleton>
+          </div>
+        </div>
+        <p-skeleton width="100%" height="2rem" borderRadius="8px"></p-skeleton>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="flex flex-col items-center gap-1"><p-skeleton width="2rem" height="1.5rem"></p-skeleton><p-skeleton width="3rem" height="0.8rem"></p-skeleton></div>
+          <div class="flex flex-col items-center gap-1"><p-skeleton width="2rem" height="1.5rem"></p-skeleton><p-skeleton width="4rem" height="0.8rem"></p-skeleton></div>
+          <div class="flex flex-col items-center gap-1"><p-skeleton width="2rem" height="1.5rem"></p-skeleton><p-skeleton width="4rem" height="0.8rem"></p-skeleton></div>
+        </div>
+        <div class="flex items-center justify-between pt-3 border-t border-[var(--border)] mt-auto">
+          <p-skeleton width="5rem" height="1rem"></p-skeleton>
+          <div class="flex gap-2">
+            <p-skeleton width="3rem" height="1.5rem"></p-skeleton>
+            <p-skeleton width="4rem" height="1.5rem" borderRadius="8px"></p-skeleton>
+          </div>
+        </div>
+      </div>
+    }
+  } @else {
+    @for (report of reports(); track report.id) {
+
+    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5 flex flex-col gap-4 hover:border-[var(--accent)] transition-colors border-l-4"
+         [style.border-left-color]="getThreatHex(report.stats.risk_score_end)">
+
+      <!-- Card Header -->
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xs font-mono font-bold text-[var(--text-muted)]">{{ report.id }}</span>
+            @if (report.flagged_legal) {
+              <span class="text-xs font-bold text-[var(--critical)] bg-red-500/10 px-1.5 py-0.5 rounded">
+                ⚖ Legal
+              </span>
+            }
+          </div>
+          <div class="text-sm font-bold text-[var(--text-primary)]">{{ report.child_identifier }}</div>
+          <div class="text-xs text-[var(--text-muted)] mt-0.5">by {{ report.requested_by }}</div>
+        </div>
+
+        <!-- Status -->
+        <div class="flex flex-col items-end gap-1">
+          <span class="text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
+                [style.color]="getStatusConfig(report.status).color"
+                [style.background]="getStatusConfig(report.status).bg">
+            <i [class]="'pi text-xs ' + getStatusConfig(report.status).icon"></i>
+            {{ getStatusConfig(report.status).label }}
+          </span>
+          <span class="text-xs font-bold px-2 py-0.5 rounded-full"
+                [style.color]="getTypeConfig(report.report_type).color"
+                [style.background]="getTypeConfig(report.report_type).bg">
+            {{ getTypeConfig(report.report_type).label }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Period -->
+      <div class="bg-[var(--bg-surface-2)] rounded-lg px-3 py-2 flex items-center gap-2">
+        <i class="pi pi-calendar text-[var(--text-muted)] text-xs"></i>
+        <span class="text-xs text-[var(--text-muted)]">
+          {{ report.period_start }} → {{ report.period_end }}
+        </span>
+      </div>
+
+      <!-- Stats (only if ready) -->
+      @if (report.status === 'ready') {
+        <div class="grid grid-cols-3 gap-2">
+          <div class="text-center">
+            <div class="text-lg font-bold font-mono text-[var(--critical)]">
+              {{ report.stats.total_blocked }}
+            </div>
+            <div class="text-xs text-[var(--text-muted)]">blocked</div>
+          </div>
+          <div class="text-center">
+            <div class="text-lg font-bold font-mono text-[var(--high)]">
+              {{ report.stats.unique_harassers }}
+            </div>
+            <div class="text-xs text-[var(--text-muted)]">harassers</div>
+          </div>
+          <div class="text-center">
+            <div class="text-lg font-bold font-mono text-[var(--medium)]">
+              {{ report.stats.escalations }}
+            </div>
+            <div class="text-xs text-[var(--text-muted)]">escalations</div>
+          </div>
+        </div>
+      }
+
+      @if (report.status === 'generating') {
+        <div class="flex items-center gap-3 py-2">
+          <div class="flex-1 h-1.5 bg-[var(--bg-surface-2)] rounded-full overflow-hidden relative">
+            <div class="progress-fill absolute inset-y-0 left-0 bg-[var(--accent)] animate-[pulse_2s_cubic-bezier(0.4,0,0.6,1)_infinite]" style="width: 100%"></div>
+          </div>
+          <span class="text-xs text-[var(--text-muted)]">AI generating...</span>
+        </div>
+      }
+
+      <!-- Footer -->
+      <div class="flex items-center justify-between pt-3 border-t border-[var(--border)] mt-auto">
+        <span class="text-xs text-[var(--text-muted)]">{{ report.requested_at }}</span>
+        <div class="flex items-center gap-2">
+          @if (report.status === 'ready') {
+            <button
+              class="text-xs font-semibold text-[var(--accent)] hover:underline"
+              (click)="openReport(report)">
+              View →
+            </button>
+            <button
+              class="flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 bg-[var(--accent)]/10 text-[var(--accent)] rounded-lg hover:bg-[var(--accent)]/20 transition-colors">
+              <i class="pi pi-download text-xs"></i>
+              PDF
+            </button>
+          }
+        </div>
+      </div>
+
+    </div>
+  }
+  }
+
+  @if (reports().length === 0 && !isLoading()) {
+    <div class="col-span-full bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl py-20 flex flex-col items-center justify-center text-center px-4">
+      <div class="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center mb-4">
+        <i class="pi pi-file text-3xl text-[var(--accent)]"></i>
+      </div>
+      <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">No reports available</h3>
+      <p class="text-sm text-[var(--text-muted)] max-w-sm">No reports match the current criteria.</p>
+    </div>
+  }
+</div>
+
+<!-- ── VIEW REPORT DRAWER ──────────────────────────── -->
+<p-drawer
+  [(visible)]="drawerVisible"
+  position="right"
+  [style]="{ width: 'min(560px, 100vw)' }"
+  (onHide)="closeDrawer()"
+  header="Report Detail">
+
+  @if (selectedReport()) {
+    <div class="flex flex-col gap-5 p-1">
+
+      <!-- Header -->
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-xs font-mono font-bold text-[var(--text-muted)]">
+          {{ selectedReport()!.id }}
+        </span>
+        <span class="text-xs font-bold px-2 py-0.5 rounded-full"
+              [style.color]="getTypeConfig(selectedReport()!.report_type).color"
+              [style.background]="getTypeConfig(selectedReport()!.report_type).bg">
+          {{ getTypeConfig(selectedReport()!.report_type).label }}
+        </span>
+        @if (selectedReport()!.flagged_legal) {
+          <span class="text-xs font-bold text-[var(--critical)] bg-red-500/10 px-2 py-0.5 rounded">
+            ⚖ Flagged for Legal Use
+          </span>
+        }
+      </div>
+
+      <!-- Meta -->
+      <div class="bg-[var(--bg-surface-2)] rounded-xl p-4 flex flex-col gap-2">
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Child</span>
+          <span class="font-semibold text-[var(--text-primary)]">{{ selectedReport()!.child_identifier }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Requested by</span>
+          <span class="text-[var(--text-primary)]">{{ selectedReport()!.requested_by }}</span>
+        </div>
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Period</span>
+          <span class="text-[var(--text-primary)] font-mono text-xs">
+            {{ selectedReport()!.period_start }} → {{ selectedReport()!.period_end }}
+          </span>
+        </div>
+      </div>
+
+      <!-- AI Narrative -->
+      <div class="bg-[var(--accent)]/5 border border-[var(--accent)]/20 rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <i class="pi pi-sparkles text-[var(--accent)] text-sm"></i>
+          <span class="text-xs font-semibold text-[var(--accent)] uppercase tracking-wider">
+            AI Generated Summary
+          </span>
+        </div>
+        <p class="text-sm text-[var(--text-primary)] leading-relaxed">
+          {{ displayedNarrative() }}
+          <span class="inline-block w-1.5 h-4 bg-[var(--accent)] ml-1 animate-pulse align-middle" *ngIf="displayedNarrative().length < (selectedReport()?.ai_narrative?.length || 0)"></span>
+        </p>
+      </div>
+
+      <!-- Key Stats -->
+      <div>
+        <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
+          Key Statistics
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
+            <div class="text-xs text-[var(--text-muted)] mb-1">Total Messages</div>
+            <div class="text-xl font-bold font-mono text-[var(--text-primary)]">
+              {{ selectedReport()!.stats.total_messages }}
+            </div>
+          </div>
+          <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
+            <div class="text-xs text-[var(--text-muted)] mb-1">Blocked</div>
+            <div class="text-xl font-bold font-mono text-[var(--critical)]">
+              {{ selectedReport()!.stats.total_blocked }}
+            </div>
+          </div>
+          <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
+            <div class="text-xs text-[var(--text-muted)] mb-1">Unique Harassers</div>
+            <div class="text-xl font-bold font-mono text-[var(--high)]">
+              {{ selectedReport()!.stats.unique_harassers }}
+            </div>
+          </div>
+          <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
+            <div class="text-xs text-[var(--text-muted)] mb-1">Escalations</div>
+            <div class="text-xl font-bold font-mono text-[var(--medium)]">
+              {{ selectedReport()!.stats.escalations }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk Evolution -->
+      <div class="bg-[var(--bg-surface-2)] rounded-xl p-4">
+        <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
+          Risk Score Evolution
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="text-center">
+            <div class="text-xs text-[var(--text-muted)] mb-1">Start</div>
+            <div class="text-2xl font-bold font-mono text-[var(--low)]">
+              {{ selectedReport()!.stats.risk_score_start.toFixed(2) }}
+            </div>
+          </div>
+          <div class="flex-1 flex items-center gap-1">
+            <div class="flex-1 h-px bg-[var(--border)]"></div>
+            <i class="pi pi-arrow-right text-[var(--critical)] text-sm"></i>
+            <div class="flex-1 h-px bg-[var(--border)]"></div>
+          </div>
+          <div class="text-center">
+            <div class="text-xs text-[var(--text-muted)] mb-1">End</div>
+            <div class="text-2xl font-bold font-mono text-[var(--critical)]">
+              {{ selectedReport()!.stats.risk_score_end.toFixed(2) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Threat Actors -->
+      @if (selectedReport()!.threat_actors.length > 0) {
+        <div>
+          <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">
+            Threat Actors
+          </div>
+          <div class="flex flex-col gap-2">
+            @for (actor of selectedReport()!.threat_actors; track actor.number) {
+              <div class="bg-[var(--bg-surface-2)] rounded-lg px-4 py-3 flex flex-wrap items-center gap-3">
+                <div class="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0"
+                     [style.background]="getThreatHex(actor.threat_score) + '33'">
+                  <i class="pi pi-user text-xs"
+                     [style.color]="getThreatHex(actor.threat_score)"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-xs font-mono font-bold text-[var(--text-primary)] truncate">
+                    {{ actor.number }}
+                  </div>
+                  <div class="text-xs text-[var(--text-muted)]">{{ actor.dominant_category }}</div>
+                </div>
+                <div class="text-right flex-shrink-0">
+                  <div class="text-xs font-mono font-bold"
+                       [style.color]="getThreatHex(actor.threat_score)">
+                    {{ actor.threat_score.toFixed(2) }}
+                  </div>
+                  <div class="text-xs text-[var(--text-muted)]">
+                    {{ actor.blocked }}/{{ actor.messages_sent }} blocked
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Actions -->
+      <div class="flex flex-col sm:flex-row gap-2 pt-2">
+        <button
+          class="flex-1 flex items-center justify-center gap-2 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity">
+          <i class="pi pi-download text-xs"></i>
+          Download PDF
+        </button>
+        @if (isAdmin()) {
+          <button
+            class="flex-1 flex items-center justify-center gap-2 py-2.5 border text-sm font-semibold rounded-lg transition-colors"
+            [class]="selectedReport()!.flagged_legal
+              ? 'border-red-500/30 text-[var(--critical)] hover:bg-red-500/10'
+              : 'border-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--bg-surface-2)]'"
+            (click)="onToggleLegal(selectedReport()!)">
+            <i class="pi pi-flag text-xs"></i>
+            {{ selectedReport()!.flagged_legal ? 'Remove Legal Flag' : 'Flag for Legal Use' }}
+          </button>
+        }
+      </div>
+
+    </div>
+  }
+
+</p-drawer>

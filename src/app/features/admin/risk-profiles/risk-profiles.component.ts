@@ -4,14 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DialogModule } from 'primeng/dialog';
 import { ChartModule } from 'primeng/chart';
 import { getRiskHex } from '@shared/utils/severity.utils';
-import {
-  RiskLevel,
-  ChildProfile,
-  ContactProfile,
-  MOCK_CHILDREN,
-  MOCK_CONTACTS,
-  RiskSnapshot
-} from './risk-profiles.data';
+import { MOCK_CHILDREN, MOCK_CONTACTS } from './risk-profiles.data';
+import { RiskLevel, ChildProfile, ContactProfile, RiskSnapshot } from '@core/models';
 
 @Component({
   selector: 'app-risk-profiles',

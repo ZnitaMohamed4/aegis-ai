@@ -1,5 +1,8 @@
-<div class="shell" [class.sidebar-collapsed]="sidebarCollapsed">
-  <app-sidebar [collapsed]="sidebarCollapsed" />
+<div class="shell" [class.sidebar-collapsed]="sidebarCollapsed" [class.sidebar-mobile-open]="mobileSidebarOpen">
+  @if (mobileSidebarOpen) {
+    <div class="sidebar-overlay" (click)="mobileSidebarOpen = false"></div>
+  }
+  <app-sidebar [collapsed]="sidebarCollapsed && !isMobile" />
   <div class="shell-main">
     <app-topbar (toggleSidebar)="toggleSidebar()" />
     <main class="shell-content">

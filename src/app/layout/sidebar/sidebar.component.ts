@@ -1,6 +1,9 @@
-import { Component, Input } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { filter } from 'rxjs/operators';
+
 
 interface NavItem {
   label: string;
@@ -22,7 +25,60 @@ interface NavGroup {
   styleUrl: './sidebar.css'
 })
 export class SidebarComponent {
-  @Input() collapsed = false;
+  collapsed = input<boolean>(false);
+  
+  private router = inject(Router);
+
+  /**
+   * We convert router events to a signal to trigger reactivity in our computed signals.
+   * This ensures isParentView updates automatically on every NavigationEnd.
+   */
+  private navEvents = toSignal(
+    this.router.events.pipe(filter(event => event instanceof NavigationEnd))
+  );
+
+  isParentView = computed(() => {
+    // Accessing navEvents() registers this computed as a dependent of router navigation
+    this.navEvents(); 
+    return this.router.url.startsWith('/parent');
+  });
+
+  parentNav: NavGroup[] = [
+    {
+      title: 'Overview',
+      items: [
+        { label: 'Dashboard', icon: 'pi-home', route: '/parent/dashboard' },
+      ]
+    },
+    {
+      title: 'Surveillance',
+      items: [
+        { label: 'Live Alerts', icon: 'pi-bell', route: '/parent/alerts', dot: 'pulse' },
+        { label: 'Blocked Messages', icon: 'pi-ban', route: '/parent/blocked-messages' },
+        { label: 'Conversations', icon: 'pi-comments', route: '/parent/conversations' },
+        { label: 'Risk Profile', icon: 'pi-chart-line', route: '/parent/risk-profile' },
+      ]
+    },
+    {
+      title: 'Management',
+      items: [
+        { label: 'Reports', icon: 'pi-file', route: '/parent/reports' },
+      ]
+    },
+    {
+      title: 'Configuration',
+      items: [
+        { label: 'WhatsApp Setup', icon: 'pi-whatsapp', route: '/parent/whatsapp-setup' },
+        { label: 'Settings', icon: 'pi-sliders-h', route: '/parent/settings' },
+      ]
+    },
+    {
+      title: 'Education',
+      items: [
+        { label: 'Chatbot', icon: 'pi-graduation-cap', route: '/parent/chatbot' },
+      ]
+    }
+  ];
 
   adminNav: NavGroup[] = [
     {

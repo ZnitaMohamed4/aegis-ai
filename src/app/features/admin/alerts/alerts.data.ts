@@ -1,19 +1,4 @@
-import { AlertSeverity } from '@core/models';
-
-export interface MockAlert {
-  id: string;
-  preview: string;
-  severity: AlertSeverity;
-  category: string;
-  decision: string;
-  toxicity_score: number;
-  confidence_score: number;
-  llm_triggered: boolean;
-  llm_explanation: string | null;
-  is_resolved: boolean;
-  sent_at: string;
-  language: string;
-}
+import { MockAlert, AlertSeverity } from '@core/models';
 
 export const MOCK_ALERTS: MockAlert[] = [
   {
