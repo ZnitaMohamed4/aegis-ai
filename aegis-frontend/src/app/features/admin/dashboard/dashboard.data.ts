@@ -324,7 +324,7 @@ export const LANGUAGE_CHART_OPTIONS = {
 export type FeedEventType = 'block' | 'escalate' | 'warn' | 'allow' | 'review' | 'risk';
 
 export interface FeedEvent {
-  id: number;
+  id: number | string;
   time: string;
   type: FeedEventType;
   icon: string;

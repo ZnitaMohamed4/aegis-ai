@@ -11,5 +11,5 @@ import { ThemeService } from '@core/services/theme.service';
 })
 export class App {
   private readonly theme = inject(ThemeService);
-  protected readonly title = signal('aegis-ai-dashboard');
+  protected readonly title = signal('aegis-ai');
 }

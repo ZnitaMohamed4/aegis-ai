@@ -1,0 +1,74 @@
+# ==============================================================================
+# GLOBAL AEGIS .GITIGNORE
+# Handles Python Backend, Angular Frontend, and AI Models
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. PYTHON / DJANGO BACKEND
+# ------------------------------------------------------------------------------
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Environment files (CRITICAL: Do not leak secrets)
+.env
+.env.*
+
+# Python compilation files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# SQLite Database (if used locally)
+*.sqlite3
+db.sqlite3
+
+# ------------------------------------------------------------------------------
+# 2. MACHINE LEARNING / AI MODELS
+# ------------------------------------------------------------------------------
+# CRITICAL: GitHub rejects files > 100MB. Block all model files!
+aegis-backend/ml_pipeline/models/
+*.safetensors
+*.pt
+*.bin
+*.pth
+*.h5
+*.onnx
+
+# ------------------------------------------------------------------------------
+# 3. ANGULAR FRONTEND & NODE.JS
+# ------------------------------------------------------------------------------
+# Node modules
+node_modules/
+aegis-frontend/node_modules/
+
+# Angular cache and builds
+.angular/
+aegis-frontend/.angular/
+dist/
+aegis-frontend/dist/
+tmp/
+out-tsc/
+bazel-out/
+
+# NPM Error Logs
+npm-debug.log
+yarn-error.log
+
+# ------------------------------------------------------------------------------
+# 4. OS & EDITOR CONFIGS
+# ------------------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ------------------------------------------------------------------------------
+# 5. SPECIFIC EXCLUSIONS AS REQUESTED
+# ------------------------------------------------------------------------------
+docs/
+aegis-backend/docs/
+evolution-api/

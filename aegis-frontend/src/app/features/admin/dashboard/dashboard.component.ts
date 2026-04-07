@@ -1,4 +1,4 @@
-import { Component, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, signal, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ChartModule } from 'primeng/chart';
@@ -11,6 +11,8 @@ import {
   LANGUAGE_CHART_DATA, LANGUAGE_CHART_OPTIONS,
   FeedEvent, getNextFeedEvent
 } from './dashboard.data';
+import { AlertService, WebSocketAlertPayload } from '../../../core/services/alert.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-dashboard',
@@ -41,6 +43,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private feedInterval: ReturnType<typeof setInterval> | null = null;
   private readonly MAX_FEED = 20;
 
+  // 1. INJECT THE WEBSOCKET SERVICE (Modern Angular v16+)
+  private alertService = inject(AlertService);
+  private alertSub?: Subscription;
+
   ngOnInit() {
     // Seed with 5 initial events
     for (let i = 0; i < 5; i++) {
@@ -55,10 +61,30 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return next.slice(0, this.MAX_FEED);
       });
     }, 6000);
+
+    // 2. SUBSCRIBE TO THE WEBSOCKET LOUDSPEAKER
+    this.alertSub = this.alertService.alerts$.subscribe((alert: WebSocketAlertPayload) => {
+      // Map the incoming Django AI payload to the frontend Feed Event
+      const newEvent: FeedEvent = {
+        id: alert.id,
+        time: new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        type: alert.decision as any, // e.g., 'block', 'escalate', 'allow'
+        icon: alert.decision === 'escalate' || alert.decision === 'block' ? 'pi-exclamation-triangle' : 'pi-shield',
+        text: `[${alert.primary_class.toUpperCase()}] detected with ${Math.round(alert.m1_score * 100)}% severity from ${alert.sender.substring(0, 8)}...`
+      };
+
+      // 3. UPDATE THE SIGNAL (Instantly repaints the screen)
+      this.feedEvents.update(list => {
+        const next = [newEvent, ...list];
+        return next.slice(0, this.MAX_FEED);
+      });
+    });
   }
 
   ngOnDestroy() {
     if (this.feedInterval) clearInterval(this.feedInterval);
+    // Always clean up your subscriptions to prevent memory leaks!
+    if (this.alertSub) this.alertSub.unsubscribe();
   }
 
   getFeedColor(type: string): string {

@@ -6,7 +6,7 @@
   },
   "newProjectRoot": "projects",
   "projects": {
-    "aegis-ai-dashboard": {
+    "aegis-ai": {
       "projectType": "application",
       "schematics": {},
       "root": "",
@@ -61,10 +61,10 @@
           "builder": "@angular/build:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "aegis-ai-dashboard:build:production"
+              "buildTarget": "aegis-ai:build:production"
             },
             "development": {
-              "buildTarget": "aegis-ai-dashboard:build:development"
+              "buildTarget": "aegis-ai:build:development"
             }
           },
           "defaultConfiguration": "development"
