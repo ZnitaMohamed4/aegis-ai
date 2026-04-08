@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.conf import settings
@@ -9,9 +10,17 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from .evolution_api import delete_message_from_whatsapp, send_aegis_warning
+
+# for calculating some stats in the fly
+from django.utils import timezone
+from django.db.models import Count
 
 from .models import ModerationResult, UserBehaviorProfile, SecurityAlert
 from .serializers import ModerationResultSerializer
+
+# import llm agent for grey zone classification
+from ml_pipeline.llm_agent import analyze_grey_zone
 
 # Import the ML pipeline (Real or Stub)
 if getattr(settings, 'AEGIS_STUB_MODE', False):
@@ -96,12 +105,18 @@ def webhook_messages(request):
     inner_data = data.get("message", data) if isinstance(data, dict) and "message" in data and "key" in data["message"] else data
     
     key = inner_data.get("key", {})
+    message_key_id = key.get("id", None)
     message = inner_data.get("message", {})
     
-    # Print the absolute raw payload so we can debug it perfectly!
-    # print(f"\\n--- WEBHOOK RECEIVED [Event: {body.get('event')}] ---")
-    # print(json.dumps(body, indent=2))
-    # print("------------------------------------------\\n")
+    # 1.5 Ignore old messages so we don't process backlog on restart
+    message_timestamp = inner_data.get("messageTimestamp", 0)
+    try:
+        # messageTimestamp is in seconds in Evolution API
+        if message_timestamp and (int(time.time()) - int(message_timestamp) > 120):
+            print("[AEGIS-DEBUG] Ignoring message because it is older than 2 minutes (backlog).")
+            return JsonResponse({"status": "ignored", "reason": "message_too_old"})
+    except (ValueError, TypeError):
+        pass
 
     # Extract conversation text. Evolution API nests this depending on the message type.
     raw_text = ""
@@ -142,7 +157,26 @@ def webhook_messages(request):
 
     # 3. 🧠 SEND TO AI PIPELINE
     result = run_pipeline(raw_text)
-    
+
+    # --- NEW: AGENT 3 (LLM) INTERVENTION ---
+    llm_explanation = None
+    llm_triggered = False
+
+    # If it is NOT completely safe, AND confidence is low (< 0.75), call Groq!
+    if result.decision != 'ALLOW' and result.m2_confidence is not None and result.m2_confidence < 0.75:
+        print(f"│ 🤖 [AGENT 3] Low confidence ({result.m2_confidence:.2f} -> {result.primary_class}). Asking Groq...")
+        
+        llm_response = analyze_grey_zone(raw_text, result.primary_class, result.m2_confidence, result.m1_score)
+        
+        # Override the ML's decisions with Groq's smart decisions
+        result.decision = llm_response.get("decision", "REVISE") 
+        result.primary_class = llm_response.get("category", result.primary_class)
+        llm_explanation = llm_response.get("explanation", "")
+        llm_triggered = True
+        
+        print(f"│ ✨ [AGENT 3] Groq says: {result.decision} ({result.primary_class}) - {llm_explanation}")
+    # ---------------------------------------
+
     # Print the AI Brain Predictions
     if result.decision == 'ALLOW':
         print(f"│ 🟢 M1 (GATE):  {result.m1_score:.2f} -> SAFE")
@@ -161,12 +195,13 @@ def webhook_messages(request):
         sender_jid=sender_jid,
         raw_text=raw_text,
         normalized_text=result.normalized_text,
+        message_key_id=message_key_id,
         toxicity_score=result.m1_score,
         confidence_score=result.m2_confidence or 0.0,
         final_score=result.m1_score, # Can be adjusted later based on behavioral score 
         decision=result.decision,
-        # Defaulting LLM for now, can be updated if 'REVISE' is triggered
-        llm_triggered=(result.decision == 'REVISE'), 
+        llm_triggered=llm_triggered,            
+        llm_explanation=llm_explanation,
     )
 
     # 5. Agent 4: Update behavior profile
@@ -190,6 +225,20 @@ def webhook_messages(request):
         
         _push_websocket_alert(alerte, moderation, result)
 
+        # --- SPRINT 2: ACTIVE SHIELD (DELETE MESSAGE) ---
+        # If the AI decided to BLOCK or ESCALATE, we remove the message from WhatsApp
+        if moderation.decision in ['BLOCK', 'ESCALATE']:
+            if message_key_id:
+                # 'instance' was extracted from the Evolution API payload above
+                delete_message_from_whatsapp(instance, message_key_id, sender_jid, is_from_me)
+
+        # --- SPRINT 2: ACTIVE SHIELD (AUTO-REPLY) ---
+        # Send a warning back to the attacker for all harmful decisions
+        if moderation.decision in ['BLOCK', 'ESCALATE', 'WARN', 'REVISE']:
+            # We now pass `is_from_me` and `decision` so the warning text changes appropriately
+            send_aegis_warning(instance, sender_jid, result.primary_class, is_from_me, moderation.decision)
+        # -----------------------------------------------
+
     # 7. Return 200 OK so Evolution API knows we received it
     return JsonResponse({
         "status": "success",
@@ -205,3 +254,54 @@ def alert_list(request):
     alerts = ModerationResult.objects.filter(decision__in=['BLOCK', 'ESCALATE', 'REVISE']).order_by('-created_at')[:50]
     serializer = ModerationResultSerializer(alerts, many=True)
     return Response(serializer.data)
+
+
+@api_view(['GET'])
+def dashboard_stats(request):
+    """GET /api/v1/stats/dashboard/ - Live stats from PostgreSQL"""
+    today = timezone.now().date()
+    
+    # 1. Grab all moderation results for today
+    today_results = ModerationResult.objects.filter(created_at__date=today)
+    
+    # 2. Count the core metrics
+    total_messages = today_results.count()
+    total_blocked = today_results.filter(decision__in=['BLOCK', 'ESCALATE']).count()
+    
+    # 3. Alerts are any message that isn't 'ALLOW'
+    total_alerts = SecurityAlert.objects.filter(sent_at__date=today).count()
+    
+    # 4. Pending Review are messages in the grey zone ('REVISE')
+    pending_review = ModerationResult.objects.filter(decision='REVISE').count()
+    
+    # 5. At-Risk Children (Agent 4 Behavior)
+    # We sort by total blocked messages to find the worst offenders
+    risky_profiles = UserBehaviorProfile.objects.order_by('-total_blocked_messages')[:5]
+    at_risk_users = [
+        {
+            "id": str(p.id),
+            "whatsapp": p.user_jid,
+            "risk_score": p.risk_score,
+            "risk_level": p.risk_level,
+            "blocked_total": p.total_blocked_messages,
+            "sent_total": p.total_messages_sent
+        }
+        for p in risky_profiles
+    ]
+    
+    # 6. We group by decision to see the breakdown
+    decision_counts = today_results.values('decision').annotate(count=Count('id'))
+    decision_breakdown = {item['decision']: item['count'] for item in decision_counts}
+
+    # 7. Send the "Package" back to Angular
+    return Response({
+        "stats": {
+            "total_messages_today": total_messages,
+            "total_alerts_today": total_alerts,
+            "total_blocked_today": total_blocked,
+            "pending_review": pending_review,
+            "avg_latency_ms": 115, # Hardcoded default for now
+        },
+        "decision_breakdown": decision_breakdown,
+        "at_risk_users": at_risk_users
+    })

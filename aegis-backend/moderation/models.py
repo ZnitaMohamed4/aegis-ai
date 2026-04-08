@@ -20,6 +20,7 @@ class ModerationResult(models.Model):
     sender_jid = models.CharField(max_length=255, help_text="WhatsApp ID of the sender")
     raw_text = models.TextField(help_text="Original message text")
     normalized_text = models.TextField(help_text="Message text after V3 normalization")
+    message_key_id = models.CharField(max_length=255, null=True, blank=True, help_text="Evolution API message key for deletion")
 
     # AI Scores (Agent 2 & 4)
     toxicity_score = models.FloatField(help_text="M1 toxicity score (0-1)")

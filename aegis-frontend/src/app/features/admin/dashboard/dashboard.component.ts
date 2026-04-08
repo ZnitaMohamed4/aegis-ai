@@ -11,7 +11,8 @@ import {
   LANGUAGE_CHART_DATA, LANGUAGE_CHART_OPTIONS,
   FeedEvent, getNextFeedEvent
 } from './dashboard.data';
-import { AlertService, WebSocketAlertPayload } from '../../../core/services/alert.service';
+import { ApiService } from '@core/services/api.service';
+import { AlertService, WebSocketAlertPayload } from '@core/services/alert.service';
 import { Subscription } from 'rxjs';
 
 @Component({
@@ -47,6 +48,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private alertService = inject(AlertService);
   private alertSub?: Subscription;
 
+  // 2. Inject the new API Service
+  private apiService = inject(ApiService);
+
   ngOnInit() {
     // Seed with 5 initial events
     for (let i = 0; i < 5; i++) {
@@ -79,6 +83,61 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return next.slice(0, this.MAX_FEED);
       });
     });
+      // 4. FETCH REAL LIVE STATS FROM POSTGRESQL
+      this.apiService.getDashboardStats().subscribe({
+        next: (data) => {
+          console.log('[AEGIS] ✅ Dashboard Stats Loaded:', data);
+          
+          // Here we update our dashboard properties with real data!
+          // We map the backend stats to the "MOCK_STATS" structure so the UI updates
+          this.stats = [
+            {
+              label: 'Avg Latency',
+              value: data.stats.avg_latency_ms + 'ms',
+              icon: 'pi-gauge',
+              trend: 'stable',
+              trendUp: true,
+              color: 'info'
+            },
+            {
+              label: 'Total Alerts Today',
+              value: data.stats.total_alerts_today,
+              icon: 'pi-bell',
+              trend: 'Live from DB',
+              trendUp: true,
+              color: 'critical'
+            },
+            {
+              label: 'Messages Blocked',
+              value: data.stats.total_blocked_today,
+              icon: 'pi-ban',
+              trend: 'Live from DB',
+              trendUp: true,
+              color: 'high'
+            },
+            {
+              label: 'Pending Review',
+              value: data.stats.pending_review,
+              icon: 'pi-clock',
+              trend: 'Grey Zone',
+              trendUp: false,
+              color: 'medium'
+            }
+          ];
+
+          // Update the at-risk children table too!
+          this.atRiskChildren = data.at_risk_users.map(user => ({
+            id: user.id,
+            name: user.whatsapp.split('@')[0], // Show number instead of name for now
+            whatsapp: user.whatsapp,
+            risk_score: user.risk_score,
+            risk_level: user.risk_level.toLowerCase(),
+            blocked_today: user.blocked_total,
+            last_incident: 'Recently'
+          }));
+        },
+        error: (err) => console.error('[AEGIS] ❌ Failed to load stats:', err)
+      });
   }
 
   ngOnDestroy() {

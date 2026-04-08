@@ -7,4 +7,7 @@ urlpatterns = [
     
     # 2. REST API - Angular fetches history from here
     path('alerts/', views.alert_list, name='alert-list'),
+
+    # 3. REST API - Dashboard live stats
+    path('stats/dashboard/', views.dashboard_stats, name='dashboard-stats'),
 ]

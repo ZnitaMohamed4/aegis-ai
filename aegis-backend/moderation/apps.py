@@ -15,6 +15,13 @@ class ModerationConfig(AppConfig):
         """
         from django.conf import settings
         from ml_pipeline.inference import AEGISPipeline
+        import sys
+
+        # 0. STOP! If we are just migrating or making migrations, DO NOT load the models.
+        # This keeps your terminal fast and saves RAM.
+        ignored_commands = ['makemigrations', 'migrate', 'collectstatic', 'test', 'shell']
+        if any(cmd in sys.argv for cmd in ignored_commands):
+            return
 
         # 1. Check if we are in "Stub Mode" (Fake AI for testing)
         stub_mode = getattr(settings, 'AEGIS_STUB_MODE', False)
