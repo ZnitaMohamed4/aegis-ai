@@ -21,6 +21,7 @@ class ModerationResult(models.Model):
     raw_text = models.TextField(help_text="Original message text")
     normalized_text = models.TextField(help_text="Message text after V3 normalization")
     message_key_id = models.CharField(max_length=255, null=True, blank=True, help_text="Evolution API message key for deletion")
+    primary_class = models.CharField(max_length=50, null=True, blank=True, help_text="M2 detected category (e.g. threat, sexual_harassment)")
 
     # AI Scores (Agent 2 & 4)
     toxicity_score = models.FloatField(help_text="M1 toxicity score (0-1)")

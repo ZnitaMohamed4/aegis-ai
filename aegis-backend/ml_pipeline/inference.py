@@ -94,8 +94,18 @@ def run_pipeline(raw_text: str) -> PipelineResult:
     with torch.no_grad():
         probs = torch.softmax(pipeline.m1_model(**inputs).logits, dim=-1)
     
-    m1_score = probs[0][1].item()  # Assuming Label 1 is HARMFUL
-    is_harmful = m1_score >= pipeline.threshold
+    m1_score = probs[0][1].item()  # Label 1 is HARMFUL
+    
+    # [AEGIS-SECURITY] M1 Bypass Logic
+    # Toxic models often misclassify "compliment grooming" as SAFE.
+    # We force sexual context keywords into M2 regardless of M1 score.
+    SEXUAL_KEYWORDS = [
+        'hot', 'sexy', 'beautiful body', 'dress', 'undress', 'pics', 'photo', 
+        'send me', 'cute', 'gorgeous', 'meet up', 'come over', 'alone', 'secret'
+    ]
+    has_sexual_context = any(kw in text.lower() for kw in SEXUAL_KEYWORDS)
+    
+    is_harmful = m1_score >= pipeline.threshold or has_sexual_context
 
     if not is_harmful:
         return PipelineResult(text, m1_score, False, 'safe', None, None, 'ALLOW')

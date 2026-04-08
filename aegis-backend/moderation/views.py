@@ -34,51 +34,75 @@ logger = logging.getLogger(__name__)
 def _update_behavioral_profile(sender_jid: str, result):
     """
     Agent 4 Logic:
-    Updates the sender's historically tracked behavior.
+    Updates the sender's historically tracked behavior and computes risk score.
     """
     profile, created = UserBehaviorProfile.objects.get_or_create(user_jid=sender_jid)
     
-    profile.total_messages_sent = F('total_messages_sent') + 1
+    profile.total_messages_sent += 1
+    
+    # Exponential moving average for toxicity (recent messages matter more)
+    alpha = 0.3 
+    profile.average_toxicity_score = (profile.average_toxicity_score * (1 - alpha)) + (result.toxicity_score * alpha)
+    
     if result.decision != ModerationResult.Decision.ALLOW:
-        profile.total_blocked_messages = F('total_blocked_messages') + 1
+        profile.total_blocked_messages += 1
 
-    # Fake Risk Level Logic (This could be expanded to real Random Forest later)
-    profile.save()
-    profile.refresh_from_db() # Refresh F() expressions from database
+    # Real-world mathematical Risk Score (0.0 to 1.0)
+    # A high absolute volume of blocked messages is the strongest indicator of risk
     
-    if profile.total_blocked_messages >= 10:
+    # 1. Volume Penalty: +8% risk for EVERY blocked message. 
+    # (e.g. 10 blocked messages = 80% baseline risk automatically!)
+    volume_penalty = profile.total_blocked_messages * 0.08
+    
+    # 2. Ratio Penalty: Up to +20% risk if a high percentage of their overall messages are bad
+    blocked_ratio = profile.total_blocked_messages / max(1, profile.total_messages_sent)
+    ratio_penalty = blocked_ratio * 0.20
+    
+    # 3. Toxicity Penalty: Up to +30% based on how severe the AI scores their texts on average
+    toxicity_penalty = profile.average_toxicity_score * 0.30
+    
+    raw_risk = volume_penalty + ratio_penalty + toxicity_penalty
+        
+    profile.risk_score = min(1.0, max(0.0, raw_risk))
+    
+    # Map back to Risk Level for the Angular Dashboard icons
+    if profile.risk_score >= 0.8:
         profile.risk_level = 'CRITICAL'
-    elif profile.total_blocked_messages >= 5:
+    elif profile.risk_score >= 0.5:
         profile.risk_level = 'HIGH'
-    elif profile.total_blocked_messages >= 2:
+    elif profile.risk_score >= 0.25:
         profile.risk_level = 'MEDIUM'
-    
+    else:
+        profile.risk_level = 'LOW'
+        
     profile.save()
 
 
-def _push_websocket_alert(alerte: SecurityAlert, moderation: ModerationResult, result):
+def _broadcast_moderation_event(moderation: ModerationResult, result, alerte: SecurityAlert = None):
     """
-    Pushes an alert via Django Channels to the Angular Dashboard.
+    Pushes an event via Django Channels to the Angular Dashboard.
+    If it's an Alert, it includes severity. If just a log, severity is none.
     """
     channel_layer = get_channel_layer()
     payload = {
-        "id": str(alerte.id),
+        "id": str(alerte.id) if alerte else str(moderation.id),
+        "type": "alert" if alerte else "log",
         "sender": moderation.sender_jid,
-        "text": moderation.raw_text[:120],
+        "text": moderation.raw_text,
         "decision": moderation.decision.lower(),
-        "primary_class": result.primary_class,
-        "secondary_class": result.secondary_class,
+        "primary_class": getattr(result, 'primary_class', 'safe') or 'safe',
         "m1_score": round(moderation.toxicity_score, 4),
         "m2_confidence": round(moderation.confidence_score, 4) if moderation.confidence_score else None,
-        "severity": alerte.severity,
-        "timestamp": alerte.sent_at.isoformat(),
+        "llm_triggered": moderation.llm_triggered,
+        "llm_explanation": moderation.llm_explanation,
+        "severity": alerte.severity if alerte else "none",
+        "timestamp": (alerte.sent_at if alerte else moderation.created_at).isoformat(),
     }
     try:
         async_to_sync(channel_layer.group_send)(
             "alerts",
             {"type": "alert.message", "data": payload}
         )
-        print(f"  👉 📡 [WS] SUCCESS: Alert pushed to Angular Dashboard!")
     except Exception as e:
         print(f"  👉 ❌ [WS] FAILED to push alert: {e}")
 
@@ -196,6 +220,7 @@ def webhook_messages(request):
         raw_text=raw_text,
         normalized_text=result.normalized_text,
         message_key_id=message_key_id,
+        primary_class=getattr(result, 'primary_class', 'safe'),
         toxicity_score=result.m1_score,
         confidence_score=result.m2_confidence or 0.0,
         final_score=result.m1_score, # Can be adjusted later based on behavioral score 
@@ -223,7 +248,7 @@ def webhook_messages(request):
             message_preview=raw_text[:200]
         )
         
-        _push_websocket_alert(alerte, moderation, result)
+        _broadcast_moderation_event(moderation, result, alerte)
 
         # --- SPRINT 2: ACTIVE SHIELD (DELETE MESSAGE) ---
         # If the AI decided to BLOCK or ESCALATE, we remove the message from WhatsApp
@@ -238,6 +263,9 @@ def webhook_messages(request):
             # We now pass `is_from_me` and `decision` so the warning text changes appropriately
             send_aegis_warning(instance, sender_jid, result.primary_class, is_from_me, moderation.decision)
         # -----------------------------------------------
+    else:
+        # It's SAFE! Broadcast it so the Activity Feed shows the system actively ignoring good messages
+        _broadcast_moderation_event(moderation, result)
 
     # 7. Return 200 OK so Evolution API knows we received it
     return JsonResponse({
@@ -271,11 +299,10 @@ def dashboard_stats(request):
     # 3. Alerts are any message that isn't 'ALLOW'
     total_alerts = SecurityAlert.objects.filter(sent_at__date=today).count()
     
-    # 4. Pending Review are messages in the grey zone ('REVISE')
-    pending_review = ModerationResult.objects.filter(decision='REVISE').count()
+    # 4. Agent 3 Interventions (LLM triggered)
+    llm_interventions = ModerationResult.objects.filter(llm_triggered=True, created_at__date=today).count()
     
     # 5. At-Risk Children (Agent 4 Behavior)
-    # We sort by total blocked messages to find the worst offenders
     risky_profiles = UserBehaviorProfile.objects.order_by('-total_blocked_messages')[:5]
     at_risk_users = [
         {
@@ -289,19 +316,108 @@ def dashboard_stats(request):
         for p in risky_profiles
     ]
     
-    # 6. We group by decision to see the breakdown
-    decision_counts = today_results.values('decision').annotate(count=Count('id'))
-    decision_breakdown = {item['decision']: item['count'] for item in decision_counts}
+    # 6. We group by primary_class (Fixed from decision)
+    category_counts = today_results.exclude(primary_class='safe').values('primary_class').annotate(count=Count('id'))
+    category_breakdown = {item['primary_class']: item['count'] for item in category_counts}
 
-    # 7. Send the "Package" back to Angular
+    # 7. Weekly Activity (Bar Chart - last 7 days)
+    seven_days_ago = today - timezone.timedelta(days=6)
+    recent_results = ModerationResult.objects.filter(created_at__date__gte=seven_days_ago)
+    weekly_data = []
+    for i in range(7):
+        day_date = today - timezone.timedelta(days=6-i)
+        day_results = recent_results.filter(created_at__date=day_date)
+        weekly_data.append({
+            "day": day_date.strftime("%a"),
+            "blocked": day_results.filter(decision__in=['BLOCK', 'ESCALATE']).count(),
+            "warned": day_results.filter(decision__in=['WARN', 'REVISE']).count(),
+            "safe": day_results.filter(decision='ALLOW').count()
+        })
+
+    # 8. Hourly Activity (Today)
+    from django.db.models.functions import ExtractHour
+    hourly_counts = today_results.annotate(hour=ExtractHour('created_at')).values('hour', 'decision').annotate(count=Count('id'))
+    
+    hourly_data = {
+        "labels": ['00h', '02h', '04h', '06h', '08h', '10h', '12h', '14h', '16h', '18h', '20h', '22h'],
+        "threats": [0] * 12,
+        "safe": [0] * 12
+    }
+    
+    for entry in hourly_counts:
+        hour = entry['hour']
+        bucket_idx = hour // 2
+        if entry['decision'] in ['BLOCK', 'ESCALATE', 'WARN', 'REVISE']:
+            hourly_data["threats"][bucket_idx] += entry['count']
+        elif entry['decision'] == 'ALLOW':
+            hourly_data["safe"][bucket_idx] += entry['count']
+
+    # 9. Language Distribution (Stub API)
+    language_distribution = {
+        "labels": ['FR', 'AR', 'EN'],
+        "data": [72, 20, 8]  # Simulated percentage values
+    }
+
+    # Send the "Package" back to Angular
     return Response({
         "stats": {
             "total_messages_today": total_messages,
             "total_alerts_today": total_alerts,
             "total_blocked_today": total_blocked,
-            "pending_review": pending_review,
+            "llm_interventions": llm_interventions,
             "avg_latency_ms": 115, # Hardcoded default for now
         },
-        "decision_breakdown": decision_breakdown,
-        "at_risk_users": at_risk_users
+        "category_breakdown": category_breakdown,
+        "weekly_activity": weekly_data,
+        "at_risk_users": at_risk_users,
+        "hourly_activity": hourly_data,
+        "language_distribution": language_distribution
     })
+
+@api_view(['GET'])
+def llm_audit_list(request):
+    """GET /api/v1/audits/llm/ - History of LLM interventions"""
+    audits = ModerationResult.objects.filter(llm_triggered=True).order_by('-created_at')[:50]
+    
+    data = []
+    for a in audits:
+        data.append({
+            "id": str(a.id),
+            "preview": a.raw_text[:60] + "..." if len(a.raw_text) > 60 else a.raw_text,
+            "full_preview": a.raw_text,
+            "tentative_label": a.primary_class or "safe",
+            "queue_reason": "SCORE_AMBIGU" if a.confidence_score and a.confidence_score < 0.75 else "LANGUE_NON_IDENTIFIABLE",
+            "confidence_score": a.confidence_score or 0.0,
+            "toxicity_score": a.toxicity_score,
+            "behavioral_risk_score": 0.5, # Safe fallback
+            "final_score": a.toxicity_score,
+            "language": "unknown",
+            "agents_used": ["Agent 1", "Agent 2", "Agent 3"],
+            "llm_explanation": a.llm_explanation,
+            "submitted_at": a.created_at.isoformat(),
+            "contact_number": a.sender_jid.split('@')[0],
+            "decision": a.decision,
+            "child": {
+                "id": a.sender_jid,
+                "name": a.sender_jid.split('@')[0],
+                "risk_level": "medium",
+                "risk_score": 0.5
+            },
+            "previous_messages": []
+        })
+    return Response(data)
+
+@csrf_exempt
+@api_view(['POST'])
+def override_llm_decision(request, moderation_id):
+    """POST /api/v1/audits/llm/<id>/override/ - Admin overriding LLM"""
+    try:
+        body = json.loads(request.body)
+        new_decision = body.get("decision", "ALLOW")
+        
+        mod = ModerationResult.objects.get(id=moderation_id)
+        mod.decision = new_decision
+        mod.save()
+        return Response({"status": "success", "new_decision": mod.decision})
+    except Exception as e:
+        return Response({"status": "error", "reason": str(e)}, status=400)

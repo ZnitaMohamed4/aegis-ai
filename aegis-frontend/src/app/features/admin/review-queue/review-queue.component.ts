@@ -1,7 +1,8 @@
 import { Component, signal, computed, HostListener, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { ReviewItem, MOCK_REVIEW_ITEMS, SIMILAR_DECISIONS, SimilarDecision, QueueReason, RiskLevel } from './review-queue.data';
+import { ApiService } from '../../../core/services/api.service';
+import { SimilarDecision, QueueReason, RiskLevel } from './review-queue.data';
 
 @Component({
   selector: 'app-review-queue',
@@ -12,11 +13,11 @@ import { ReviewItem, MOCK_REVIEW_ITEMS, SIMILAR_DECISIONS, SimilarDecision, Queu
 })
 export class ReviewQueueComponent implements OnInit {
 
-  items = signal<ReviewItem[]>(MOCK_REVIEW_ITEMS);
+  items = signal<any[]>([]);
   resolvedCount = signal(0);
   blockedCount = signal(0);
   allowedCount = signal(0);
-  totalCount = MOCK_REVIEW_ITEMS.length;
+  totalCount = 0;
 
   // Flashcard mode
   flashcardMode = signal(true);
@@ -46,8 +47,16 @@ export class ReviewQueueComponent implements OnInit {
     return Math.round((this.modelAgreements() / reviewed) * 100);
   });
 
+  constructor(private apiService: ApiService) {}
+
   ngOnInit() {
-    // Focus the component for keyboard shortcuts
+    this.apiService.getLLMAudits().subscribe({
+      next: (data) => {
+        this.items.set(data);
+        this.totalCount = data.length;
+      },
+      error: (err) => console.error('Failed to load LLM Audits:', err)
+    });
   }
 
   // Keyboard shortcuts: B = Block, A = Allow, S = Skip
@@ -68,15 +77,8 @@ export class ReviewQueueComponent implements OnInit {
     }
   }
 
-  getSimilarDecisions(label: string): SimilarDecision[] {
-    return SIMILAR_DECISIONS[label] ?? [];
-  }
-
   getBlockPercent(label: string): number {
-    const similar = this.getSimilarDecisions(label);
-    if (similar.length === 0) return 0;
-    const blocked = similar.filter(s => s.decision === 'BLOCK').length;
-    return Math.round((blocked / similar.length) * 100);
+    return 0; // Mock disabled
   }
 
   getQueueReasonLabel(reason: QueueReason): string {
@@ -131,50 +133,52 @@ export class ReviewQueueComponent implements OnInit {
     return '#10D9A0';
   }
 
-  confirmBlock(item: ReviewItem) {
-    // Model suggested block if confidence > 0.65 and toxicity > 0.65
-    const modelSuggestedBlock = item.toxicity_score > 0.65;
-    if (modelSuggestedBlock) {
-      this.modelAgreements.update(c => c + 1);
+  confirmBlock(item: any) {
+    if (item.decision === 'BLOCK') {
+      // Already blocked, just dismiss
+      this.blockedCount.update(c => c + 1);
+      if (this.flashcardMode()) {
+        this.animateAndRemove(item, 'out-left');
+      } else {
+        this.removeItem(item);
+      }
+      return;
     }
 
-    // Update item with audit trail
-    const updatedItem = { 
-      ...item, 
-      reviewed_by: 'Admin',
-      reviewed_at: new Date().toISOString()
-    };
-
-    this.blockedCount.update(c => c + 1);
-    
-    if (this.flashcardMode()) {
-      this.animateAndRemove(updatedItem, 'out-left');
-    } else {
-      this.removeItem(updatedItem);
-    }
+    this.apiService.overrideLLMDecision(item.id, 'BLOCK').subscribe({
+      next: () => {
+        this.blockedCount.update(c => c + 1);
+        if (this.flashcardMode()) {
+          this.animateAndRemove(item, 'out-left');
+        } else {
+          this.removeItem(item);
+        }
+      }
+    });
   }
 
-  allowMessage(item: ReviewItem) {
-    // Model suggested allow if confidence < 0.7 and toxicity < 0.6
-    const modelSuggestedAllow = item.toxicity_score < 0.6;
-    if (modelSuggestedAllow) {
-      this.modelAgreements.update(c => c + 1);
+  allowMessage(item: any) {
+    if (item.decision === 'ALLOW') {
+      // Already allowed, just dismiss
+      this.allowedCount.update(c => c + 1);
+      if (this.flashcardMode()) {
+        this.animateAndRemove(item, 'out-right');
+      } else {
+        this.removeItem(item);
+      }
+      return;
     }
 
-    // Update item with audit trail
-    const updatedItem = { 
-      ...item, 
-      reviewed_by: 'Admin',
-      reviewed_at: new Date().toISOString()
-    };
-
-    this.allowedCount.update(c => c + 1);
-    
-    if (this.flashcardMode()) {
-      this.animateAndRemove(updatedItem, 'out-right');
-    } else {
-      this.removeItem(updatedItem);
-    }
+    this.apiService.overrideLLMDecision(item.id, 'ALLOW').subscribe({
+      next: () => {
+        this.allowedCount.update(c => c + 1);
+        if (this.flashcardMode()) {
+          this.animateAndRemove(item, 'out-right');
+        } else {
+          this.removeItem(item);
+        }
+      }
+    });
   }
 
   skipItem() {
@@ -197,7 +201,7 @@ export class ReviewQueueComponent implements OnInit {
     }, 250);
   }
 
-  private animateAndRemove(item: ReviewItem, direction: 'out-left' | 'out-right') {
+  private animateAndRemove(item: any, direction: 'out-left' | 'out-right') {
     this.animating.set(direction);
     setTimeout(() => {
       this.animating.set(null);
@@ -205,7 +209,7 @@ export class ReviewQueueComponent implements OnInit {
     }, 250);
   }
 
-  private removeItem(item: ReviewItem) {
+  private removeItem(item: any) {
     this.items.update(list => list.filter(i => i.id !== item.id));
     this.resolvedCount.update(c => c + 1);
     if (this.currentIndex() >= this.items().length && this.items().length > 0) {

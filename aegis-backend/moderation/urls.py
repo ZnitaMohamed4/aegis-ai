@@ -10,4 +10,8 @@ urlpatterns = [
 
     # 3. REST API - Dashboard live stats
     path('stats/dashboard/', views.dashboard_stats, name='dashboard-stats'),
+
+    # 4. Agent 3 Audits 
+    path('audits/llm/', views.llm_audit_list, name='llm-audit-list'),
+    path('audits/llm/<int:moderation_id>/override/', views.override_llm_decision, name='override-llm-decision'),
 ]

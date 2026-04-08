@@ -6,6 +6,7 @@ import { Alert } from '../models/alert.model'; // We will use your models
 
 export interface WebSocketAlertPayload {
   id: string;
+  type?: 'alert' | 'log';
   sender: string;
   text: string;
   decision: string;
@@ -13,6 +14,8 @@ export interface WebSocketAlertPayload {
   secondary_class: string | null;
   m1_score: number;
   m2_confidence: number | null;
+  llm_triggered?: boolean;
+  llm_explanation?: string | null;
   severity: 'low' | 'medium' | 'high' | 'critical';
   timestamp: string;
 }

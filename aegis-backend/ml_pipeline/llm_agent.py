@@ -17,24 +17,26 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score):
         logger.error("[AEGIS] ❌ GROQ API KEY MISSING")
         return {"decision": "REVISE", "category": primary_class, "explanation": "API Key missing."}
 
-    # The Prompt - We act as a strict instructor
-    prompt = f"""You are AEGIS, an expert AI safety agent protecting children on WhatsApp.
-A message was flagged as potentially harmful by our local ML classifier.
+    # The Prompt - High Precision, Minimal Length
+    # High-Precision Kernel Directive
+    prompt = f"""[SYSTEM: AEGIS CORE]
+Resolve ML Classifier ambiguity. Default to independent verification.
+DATA: {{msg: "{raw_text}", suggestion: {primary_class}, confidence: {confidence:.2f}}}
 
-Message: "{raw_text}"
-ML Initial Category: {primary_class} (confidence: {confidence:.2f})
-Toxicity Score: {m1_score:.2f}
+SEMANTIC BOUNDARIES:
+1. THREAT: Implied/direct physical violence or real-world consequence.
+2. DISCRIMINATION: Must target a SPECIFIC protected characteristic (race, religion, gender, family). If no specific identity is clear, default to verbal_harassment.
+3. SEXUAL_HARASSMENT: Predatory avancées, advances, or objectification. Categorize as this even if disguised as a compliment (e.g. "you look hot").
+4. VERBAL_HARASSMENT: General insults or rudeness WITHOUT targeting a protected identity or physical harm.
+5. SAFE: Sarcasm, friendly banter, or benign criticism.
 
-Your task is to correct the ML model. DO NOT simply agree with the ML Initial Category. Think independently.
+DECISION TREE:
+- Hard identifiers (Identity/Violence) -> BLOCK.
+- General Personal Insults -> WARN.
+- No clear harm -> ALLOW.
 
-CRITICAL RULES:
-1. Physical violence or implied consequences (e.g., "strangle", "see what happens") = 'threat' + BLOCK.
-2. Targeting race, religion, nationality, group, or family = 'discrimination' + BLOCK.
-3. General insults/rudeness without violence or prejudice = 'verbal_harassment' + WARN.
-4. Pure sarcasm or safe chat = ALLOW.
-
-Respond ONLY in valid JSON format, nothing else:
-{{"decision": "BLOCK|WARN|ALLOW", "category": "threat|sexual_harassment|discrimination|verbal_harassment", "explanation": "Short 1 sentence reason."}}"""
+OUTPUT ONLY JSON:
+{{"decision": "BLOCK|WARN|ALLOW", "category": "threat|sexual_harassment|discrimination|verbal_harassment", "explanation": "Logic summary."}}"""
 
     try:
         response = requests.post(

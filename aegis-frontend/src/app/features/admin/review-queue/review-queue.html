@@ -3,9 +3,9 @@
   <!-- Header -->
   <header class="review-header">
     <div>
-      <h1 class="review-title">Review Queue</h1>
+      <h1 class="review-title">Agent 3 Audit Logger</h1>
       <p class="review-subtitle">
-        Messages in the grey zone — confidence 0.65–0.75 or language unidentifiable. Your call.
+        Reviewing historical overrides where LLM (Agent 3) intervened on Edge cases.
       </p>
     </div>
     <div class="header-actions">
@@ -86,46 +86,80 @@
               </a>
             </div>
 
-            <!-- Previous Messages Context -->
-            @if (item.previous_messages.length > 0) {
-              <div class="prev-messages">
-                <span class="prev-messages-label">Previous messages:</span>
-                @for (msg of item.previous_messages; track msg.sent_at) {
-                  <div class="prev-message" [class.was-blocked]="msg.is_blocked">
-                    <span class="prev-time">{{ formatPrevMessageTime(msg.sent_at) }}</span>
-                    <span class="prev-content">"{{ msg.content_preview }}"</span>
-                    @if (msg.is_blocked) {
-                      <span class="prev-blocked-tag">blocked</span>
-                    }
+            <!-- Middle scrollable zone -->
+            <div class="flashcard-body">
+
+              <!-- Previous Messages Context -->
+              @if (item.previous_messages.length > 0) {
+                <div class="prev-messages">
+                  <span class="prev-messages-label">Previous messages:</span>
+                  @for (msg of item.previous_messages; track msg.sent_at) {
+                    <div class="prev-message" [class.was-blocked]="msg.is_blocked">
+                      <span class="prev-time">{{ formatPrevMessageTime(msg.sent_at) }}</span>
+                      <span class="prev-content">"{{ msg.content_preview }}"</span>
+                      @if (msg.is_blocked) {
+                        <span class="prev-blocked-tag">blocked</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+
+              <!-- Main Message -->
+              <div class="main-message">
+                <div class="message-header">
+                  <span class="label-tag" [style.color]="getLabelColor(item.tentative_label)">
+                    {{ item.tentative_label }}
+                  </span>
+                  <span class="language-tag">{{ item.language === 'unknown' ? '??' : item.language }}</span>
+                  @if (item.agents_used.includes('Agent 3')) {
+                    <span class="llm-tag">LLM</span>
+                  }
+                </div>
+                <p class="message-text">"{{ item.full_preview }}"</p>
+                <div class="message-meta">
+                  <span>From {{ item.contact_number }}</span>
+                  <span>{{ formatTime(item.submitted_at) }}</span>
+                </div>
+              </div>
+
+              <!-- Agent 3 LLM Analysis Section -->
+              @if (item.llm_explanation) {
+                <div class="llm-agent-box">
+                  <div class="llm-agent-header">
+                    <div class="llm-agent-label">
+                      <i class="pi pi-bolt"></i>
+                      Agent 3 — LLM Analysis
+                    </div>
                   </div>
-                }
-              </div>
-            }
 
-            <!-- Main Message -->
-            <div class="main-message">
-              <div class="message-header">
-                <span class="label-tag" [style.color]="getLabelColor(item.tentative_label)">
-                  {{ item.tentative_label }}
-                </span>
-                <span class="language-tag">{{ item.language === 'unknown' ? '??' : item.language }}</span>
-                @if (item.agents_used.includes('Agent 3')) {
-                  <span class="llm-tag">LLM</span>
-                }
-              </div>
-              <p class="message-text">"{{ item.full_preview }}"</p>
-              <div class="message-meta">
-                <span>From {{ item.contact_number }}</span>
-                <span>{{ formatTime(item.submitted_at) }}</span>
-              </div>
-            </div>
+                  <div class="llm-meta-row">
+                    <div class="llm-meta-item">
+                      <span class="llm-meta-key">M2 Prediction</span>
+                      <span class="llm-meta-val">{{ (item.tentative_label || 'safe').toLowerCase() }}</span>
+                    </div>
+                    <div class="llm-meta-item">
+                      <span class="llm-meta-key">Confidence</span>
+                      <span class="llm-meta-val">{{ (item.confidence_score * 100).toFixed(0) }}%</span>
+                    </div>
+                    <div class="llm-meta-item">
+                      <span class="llm-meta-key">LLM Override</span>
+                      <span class="decision-badge"
+                            [class.badge-allow]="item.decision === 'ALLOW'"
+                            [class.badge-block]="item.decision === 'BLOCK'"
+                            [class.badge-warn]="item.decision === 'WARN'"
+                            [class.badge-escalate]="item.decision === 'ESCALATE'"
+                            [class.badge-revise]="item.decision === 'REVISE'">
+                        {{ item.decision }}
+                      </span>
+                    </div>
+                  </div>
 
-            <!-- LLM Explanation (muted, no box) -->
-            @if (item.llm_explanation) {
-              <p class="llm-explanation"><span class="llm-label">LLM:</span> {{ item.llm_explanation }}</p>
-            }
+                  <p class="llm-reasoning">"{{ item.llm_explanation }}"</p>
+                </div>
+              }
 
-            <!-- All 4 Scores -->
+            </div><!-- /flashcard-body -->
             <div class="scores-grid">
               <div class="score-item">
                 <span class="score-label">Confidence</span>
@@ -241,9 +275,25 @@
               </div>
             </div>
 
-            <!-- LLM Explanation -->
+            <!-- Agent 3 LLM in List Mode -->
             @if (item.llm_explanation) {
-              <p class="llm-explanation llm-compact"><span class="llm-label">LLM:</span> {{ item.llm_explanation }}</p>
+              <div class="llm-agent-box">
+                <div class="llm-agent-label" style="margin-bottom: 0.5rem;">
+                  <i class="pi pi-bolt"></i> Agent 3 Override
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;">
+                  <span class="decision-badge"
+                        [class.badge-allow]="item.decision === 'ALLOW'"
+                        [class.badge-block]="item.decision === 'BLOCK'"
+                        [class.badge-warn]="item.decision === 'WARN'"
+                        [class.badge-escalate]="item.decision === 'ESCALATE'"
+                        [class.badge-revise]="item.decision === 'REVISE'">
+                    {{ item.decision }}
+                  </span>
+                  <span style="font-size: 0.75rem; color: var(--text-muted);">was: {{ item.tentative_label }} ({{ (item.confidence_score * 100).toFixed(0) }}%)</span>
+                </div>
+                <p class="llm-reasoning">"{{ item.llm_explanation }}"</p>
+              </div>
             }
 
             <!-- Actions -->

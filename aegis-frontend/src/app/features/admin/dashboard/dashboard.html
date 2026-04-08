@@ -16,20 +16,27 @@
 
   <!-- Stat Cards -->
   <div class="stats-grid">
-    @for (stat of stats; track stat.label) {
-      <div class="stat-card">
-        <div class="stat-top">
-          <span class="stat-label">{{ stat.label }}</span>
-          <div class="stat-icon-wrap" [style.background]="'var(--' + stat.color + ')' + '22'">
-            <i class="pi {{ stat.icon }}" [style.color]="'var(--' + stat.color + ')'"></i>
+    @if (stats) {
+      @for (stat of stats; track stat.label) {
+        <div class="stat-card">
+          <div class="stat-top">
+            <span class="stat-label">{{ stat.label }}</span>
+            <div class="stat-icon-wrap" [style.background]="'var(--' + stat.color + ')' + '22'">
+              <i class="pi {{ stat.icon }}" [style.color]="'var(--' + stat.color + ')'"></i>
+            </div>
+          </div>
+          <div class="stat-value mono">{{ stat.value }}</div>
+          <div class="stat-trend" [class.trend-up]="stat.trendUp" [class.trend-down]="!stat.trendUp">
+            <i class="pi" [class.pi-arrow-up]="stat.trendUp" [class.pi-arrow-down]="!stat.trendUp"></i>
+            {{ stat.trend }}
           </div>
         </div>
-        <div class="stat-value mono">{{ stat.value }}</div>
-        <div class="stat-trend" [class.trend-up]="stat.trendUp" [class.trend-down]="!stat.trendUp">
-          <i class="pi" [class.pi-arrow-up]="stat.trendUp" [class.pi-arrow-down]="!stat.trendUp"></i>
-          {{ stat.trend }}
-        </div>
-      </div>
+      }
+    } @else {
+      <div class="stat-card" style="padding: 1.5rem; justify-content: center;"><p-skeleton width="100%" height="60px"></p-skeleton></div>
+      <div class="stat-card" style="padding: 1.5rem; justify-content: center;"><p-skeleton width="100%" height="60px"></p-skeleton></div>
+      <div class="stat-card" style="padding: 1.5rem; justify-content: center;"><p-skeleton width="100%" height="60px"></p-skeleton></div>
+      <div class="stat-card" style="padding: 1.5rem; justify-content: center;"><p-skeleton width="100%" height="60px"></p-skeleton></div>
     }
   </div>
 
@@ -66,22 +73,28 @@
         <a class="panel-link" routerLink="/admin/alerts">View all →</a>
       </div>
       <div class="alert-list">
-        @for (alert of recentAlerts; track alert.id) {
-          <div class="alert-row">
-            <div class="alert-severity-bar"
-                 [style.background]="getRiskHex(alert.severity)">
-            </div>
-            <div class="alert-body">
-              <div class="alert-preview">{{ alert.preview }}</div>
-              <div class="alert-meta">
-                <span class="alert-category">{{ alert.category }}</span>
-                <span class="alert-time">{{ alert.time }}</span>
+        @if (recentAlerts) {
+          @for (alert of recentAlerts; track alert.id) {
+            <div class="alert-row">
+              <div class="alert-severity-bar"
+                   [style.background]="getRiskHex(alert.severity)">
+              </div>
+              <div class="alert-body">
+                <div class="alert-preview">{{ alert.preview }}</div>
+                <div class="alert-meta">
+                  <span class="alert-category">{{ alert.category }}</span>
+                  <span class="alert-time">{{ alert.time }}</span>
+                </div>
+              </div>
+              <div class="alert-decision" [ngClass]="getDecisionClass(alert.decision)">
+                {{ alert.decision }}
               </div>
             </div>
-            <div class="alert-decision" [ngClass]="getDecisionClass(alert.decision)">
-              {{ alert.decision }}
-            </div>
-          </div>
+          }
+        } @else {
+          <div style="padding: 1rem;"><p-skeleton width="100%" height="50px" styleClass="mb-2"></p-skeleton></div>
+          <div style="padding: 1rem;"><p-skeleton width="100%" height="50px" styleClass="mb-2"></p-skeleton></div>
+          <div style="padding: 1rem;"><p-skeleton width="100%" height="50px" styleClass="mb-2"></p-skeleton></div>
         }
       </div>
     </div>
@@ -150,11 +163,15 @@
       <span class="panel-subtitle">Today's detections by category</span>
     </div>
     <div class="chart-wrap">
-      <p-chart
-        type="doughnut"
-        [data]="harassmentChartData"
-        [options]="harassmentChartOptions"
-        height="220px" />
+      @if (harassmentChartData) {
+        <p-chart
+          type="doughnut"
+          [data]="harassmentChartData"
+          [options]="harassmentChartOptions"
+          height="220px" />
+      } @else {
+        <p-skeleton width="220px" height="220px" shape="circle" styleClass="mt-3 flex mx-auto"></p-skeleton>
+      }
     </div>
   </div>
 
@@ -171,36 +188,42 @@
         <span>Blocked Today</span>
         <span>Last Incident</span>
       </div>
-      @for (child of atRiskChildren; track child.id) {
-        <div class="risk-table-row">
-          <div class="child-info">
-            <div class="child-avatar"
-                 [style.background]="getRiskHex(child.risk_level)">
-              {{ child.name.charAt(0) }}
-            </div>
-            <div>
-              <div class="child-name">{{ child.name }}</div>
-              <div class="child-number mono">{{ child.whatsapp }}</div>
-            </div>
-          </div>
-          <div class="risk-score-cell">
-            <span class="risk-score-value mono"
-                  [style.color]="getRiskHex(child.risk_level)">
-              {{ child.risk_score.toFixed(2) }}
-            </span>
-            <div class="risk-bar">
-              <div class="risk-bar-fill"
-                   [style.width]="getRiskBarWidth(child.risk_score)"
+      @if (atRiskChildren) {
+        @for (child of atRiskChildren; track child.id) {
+          <div class="risk-table-row">
+            <div class="child-info">
+              <div class="child-avatar"
                    [style.background]="getRiskHex(child.risk_level)">
+                {{ child.name.charAt(0) }}
+              </div>
+              <div>
+                <div class="child-name">{{ child.name }}</div>
+                <div class="child-number mono">{{ child.whatsapp }}</div>
               </div>
             </div>
+            <div class="risk-score-cell">
+              <span class="risk-score-value mono"
+                    [style.color]="getRiskHex(child.risk_level)">
+                {{ child.risk_score.toFixed(2) }}
+              </span>
+              <div class="risk-bar">
+                <div class="risk-bar-fill"
+                     [style.width]="getRiskBarWidth(child.risk_score)"
+                     [style.background]="getRiskHex(child.risk_level)">
+                </div>
+              </div>
+            </div>
+            <div class="blocked-count mono"
+                 [style.color]="child.blocked_today > 3 ? 'var(--critical)' : 'var(--text-muted)'">
+              {{ child.blocked_today }}
+            </div>
+            <div class="incident-time">{{ child.last_incident }}</div>
           </div>
-          <div class="blocked-count mono"
-               [style.color]="child.blocked_today > 3 ? 'var(--critical)' : 'var(--text-muted)'">
-            {{ child.blocked_today }}
-          </div>
-          <div class="incident-time">{{ child.last_incident }}</div>
-        </div>
+        }
+      } @else {
+        <div style="padding: 1rem;"><p-skeleton width="100%" height="40px" styleClass="mb-2"></p-skeleton></div>
+        <div style="padding: 1rem;"><p-skeleton width="100%" height="40px" styleClass="mb-2"></p-skeleton></div>
+        <div style="padding: 1rem;"><p-skeleton width="100%" height="40px" styleClass="mb-2"></p-skeleton></div>
       }
     </div>
   </div>
@@ -217,11 +240,15 @@
         <span class="panel-subtitle">Blocked vs Warned — last 7 days</span>
       </div>
       <div class="weekly-chart-wrap">
-        <p-chart
-          type="bar"
-          [data]="weeklyChartData"
-          [options]="weeklyChartOptions"
-          height="180px" />
+        @if (weeklyChartData) {
+          <p-chart
+            type="bar"
+            [data]="weeklyChartData"
+            [options]="weeklyChartOptions"
+            height="180px" />
+        } @else {
+          <p-skeleton width="100%" height="180px" styleClass="mt-2"></p-skeleton>
+        }
       </div>
     </div>
 
