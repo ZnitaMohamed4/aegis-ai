@@ -13,13 +13,16 @@ class ModerationConfig(AppConfig):
         We use this to load heavy AI models into memory so they are instantly
         available when a WhatsApp message arrives.
         """
+        # Always import signals so ParentProfile auto-creation works
+        import moderation.signals  # noqa: F401
+
         from django.conf import settings
         from ml_pipeline.inference import AEGISPipeline
         import sys
 
         # 0. STOP! If we are just migrating or making migrations, DO NOT load the models.
         # This keeps your terminal fast and saves RAM.
-        ignored_commands = ['makemigrations', 'migrate', 'collectstatic', 'test', 'shell']
+        ignored_commands = ['makemigrations', 'migrate', 'collectstatic', 'test', 'shell', 'backfill_languages']
         if any(cmd in sys.argv for cmd in ignored_commands):
             return
 

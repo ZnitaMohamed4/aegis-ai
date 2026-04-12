@@ -12,6 +12,7 @@ export interface WebSocketAlertPayload {
   decision: string;
   primary_class: string;
   secondary_class: string | null;
+  language?: string;
   m1_score: number;
   m2_confidence: number | null;
   llm_triggered?: boolean;

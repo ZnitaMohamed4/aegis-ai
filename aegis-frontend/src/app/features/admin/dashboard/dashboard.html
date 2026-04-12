@@ -51,7 +51,7 @@
     </div>
     <div class="feed-list">
       @for (event of feedEvents(); track event.id) {
-        <div class="feed-row" [class.feed-new]="event.id === feedEvents()[0].id">
+        <div class="feed-row cursor-pointer hover:bg-[var(--bg-surface-2)] transition-colors" [class.feed-new]="event.id === feedEvents()[0].id" (click)="showFeedDetails(event)">
           <span class="feed-time mono">{{ event.time }}</span>
           <div class="feed-dot" [style.background]="getFeedColor(event.type)"></div>
           <i class="pi {{ event.icon }} feed-icon" [style.color]="getFeedColor(event.type)"></i>
@@ -100,54 +100,53 @@
     </div>
 
     <!-- System Status -->
-    <div class="panel">
+    <div class="panel" style="display: flex; flex-direction: column;">
       <div class="panel-header">
         <span class="panel-title">AI Pipeline Status</span>
       </div>
-      <div class="agent-list">
+      <div class="agent-list" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="agent-row">
           <div class="agent-dot dot-green"></div>
           <span class="agent-name">Agent 1 — Preprocessing</span>
-          <span class="agent-latency mono">42ms</span>
+          <span class="agent-latency mono">{{ latencies ? latencies.agent_1 : 42 }}ms</span>
         </div>
         <div class="agent-row">
           <div class="agent-dot dot-green"></div>
           <span class="agent-name">Agent 2 — ML Classifier</span>
-          <span class="agent-latency mono">287ms</span>
+          <span class="agent-latency mono">{{ latencies ? latencies.agent_2 : 287 }}ms</span>
         </div>
         <div class="agent-row">
           <div class="agent-dot dot-yellow"></div>
           <span class="agent-name">Agent 3 — LLM Reasoning</span>
-          <span class="agent-latency mono">1240ms</span>
+          <span class="agent-latency mono" [style.color]="latencies && latencies.agent_3 > 0 ? 'var(--text-primary)' : 'var(--text-muted)'">{{ latencies ? latencies.agent_3 : 1240 }}ms</span>
         </div>
         <div class="agent-row">
           <div class="agent-dot dot-green"></div>
           <span class="agent-name">Agent 4 — Behavioral</span>
-          <span class="agent-latency mono">95ms</span>
+          <span class="agent-latency mono">{{ latencies ? latencies.agent_4 : 95 }}ms</span>
         </div>
         <div class="agent-row">
           <div class="agent-dot dot-green"></div>
           <span class="agent-name">Agent 5 — Orchestrator</span>
-          <span class="agent-latency mono">12ms</span>
+          <span class="agent-latency mono">{{ latencies ? latencies.agent_5 : 12 }}ms</span>
         </div>
       </div>
 
       <div class="panel-divider"></div>
 
       <div class="panel-header">
-        <span class="panel-title">Review Queue</span>
-        <a class="panel-link" routerLink="/admin/review-queue">Review →</a>
+        <span class="panel-title">LLM Precision</span>
       </div>
       <div class="queue-stat">
-        <span class="queue-number mono">7</span>
-        <span class="queue-label">messages awaiting human review</span>
+        <span class="queue-number mono">{{ stats ? stats[3].value : 0 }}</span>
+        <span class="queue-label">messages reviewed by Agent 3 today</span>
       </div>
       <div class="confidence-bar-wrap">
-        <span class="confidence-label">Avg confidence in grey zone</span>
+        <span class="confidence-label">LLM Precision</span>
         <div class="confidence-bar">
-          <div class="confidence-fill" style="width: 70%"></div>
+          <div class="confidence-fill" style="width: 92%"></div>
         </div>
-        <span class="confidence-value mono">0.70</span>
+        <span class="confidence-value mono">92.0%</span>
       </div>
     </div>
 
@@ -165,6 +164,7 @@
     <div class="chart-wrap">
       @if (harassmentChartData) {
         <p-chart
+          #harassmentChart
           type="doughnut"
           [data]="harassmentChartData"
           [options]="harassmentChartOptions"
@@ -242,6 +242,7 @@
       <div class="weekly-chart-wrap">
         @if (weeklyChartData) {
           <p-chart
+            #weeklyChart
             type="bar"
             [data]="weeklyChartData"
             [options]="weeklyChartOptions"
@@ -260,6 +261,7 @@
       </div>
       <div class="weekly-chart-wrap">
         <p-chart
+          #hourlyChart
           type="line"
           [data]="hourlyChartData"
           [options]="hourlyChartOptions"
@@ -280,19 +282,19 @@
       <div style="display: flex; gap: 1rem; margin-top: 1rem; height: 180px; align-items: center; justify-content: center;">
         <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center;">
           <div style="font-size: 0.75rem; color: var(--info); font-weight: bold; margin-bottom: 0.25rem;">PUSH</div>
-          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">142</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">{{ pushNotificationsCount }}</div>
         </div>
-        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center;">
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center; opacity: 0.5;">
           <div style="font-size: 0.75rem; color: var(--high); font-weight: bold; margin-bottom: 0.25rem;">EMAIL</div>
-          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">38</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">0</div>
         </div>
-        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center;">
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center; opacity: 0.5;">
           <div style="font-size: 0.75rem; color: var(--medium); font-weight: bold; margin-bottom: 0.25rem;">SMS</div>
-          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">12</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">0</div>
         </div>
-        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--critical); padding: 1rem; text-align: center;">
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center; opacity: 0.5;">
           <div style="font-size: 0.75rem; color: var(--critical); font-weight: bold; margin-bottom: 0.25rem;">APPEL</div>
-          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">3</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">0</div>
         </div>
       </div>
     </div>
@@ -305,6 +307,7 @@
       </div>
       <div style="height: 180px; margin-top: 1rem;">
         <p-chart
+          #languageChart
           type="doughnut"
           [data]="languageChartData"
           [options]="languageChartOptions"
@@ -314,3 +317,35 @@
   </div>
 
 </div>
+
+  <!-- Feed Details Popup -->
+  <p-dialog header="Activity Details" [(visible)]="feedDialogVisible" [modal]="true" [style]="{width: 'max(400px, 40vw)'}" [dismissableMask]="true">
+    @if (selectedFeedEvent) {
+      <div class="flex flex-col gap-4 text-[var(--text-primary)]">
+        <div class="font-bold flex items-center gap-2">
+          <i class="pi" [ngClass]="selectedFeedEvent.icon" [style.color]="getFeedColor(selectedFeedEvent.type)"></i> 
+          {{ selectedFeedEvent.time }}
+        </div>
+        <div class="bg-[var(--bg-surface-2)] p-4 rounded-lg break-words whitespace-pre-wrap font-mono text-sm leading-relaxed" style="max-height: 300px; overflow-y: auto;">{{ selectedFeedEvent.fullText }}</div>
+        
+        <!-- Flag for Review Action -->
+        @if (selectedFeedEvent.id) {
+          <div class="flex justify-end pt-2 border-t border-[var(--border)] mt-2">
+            <button 
+              class="text-xs font-semibold px-4 py-2 rounded-lg transition-colors"
+              [class.bg-purple-500/10]="!selectedFeedEvent.flagged"
+              [class.text-purple-400]="!selectedFeedEvent.flagged"
+              [class.bg-green-500/10]="selectedFeedEvent.flagged"
+              [class.text-green-500]="selectedFeedEvent.flagged"
+              (click)="flagForReview(selectedFeedEvent)">
+              @if (selectedFeedEvent.flagged) {
+                <i class="pi pi-check mr-1"></i> Sent to Queue
+              } @else {
+                <i class="pi pi-flag mr-1"></i> Flag for human review
+              }
+            </button>
+          </div>
+        }
+      </div>
+    }
+  </p-dialog>

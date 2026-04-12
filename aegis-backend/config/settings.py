@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',                  # For our API endpoints
+    'rest_framework_simplejwt',        # For JWT authentication
     'corsheaders',                     # Allows Angular to talk to Django
     'channels',                        # Enables WebSockets
     'moderation',                      # Our custom app (we will build this next)
@@ -109,3 +110,22 @@ USE_I18N = True
 USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Custom user model (UML Package 1 — must be set before first migration)
+AUTH_USER_MODEL = 'moderation.AegisUser'
+
+# JWT Authentication config
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ],
+}
+
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'SIGNING_KEY': SECRET_KEY,
+    'AUTH_HEADER_TYPES': ('Bearer',),
+}

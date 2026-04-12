@@ -1,123 +1,285 @@
-<div class="p-4 sm:p-6 w-full flex flex-col gap-6">
+<div class="dashboard">
+  <p-toast position="top-right" />
 
   <!-- Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+  <div class="page-header">
     <div>
-      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">Emma's Dashboard</h1>
-      <p class="text-sm text-[var(--text-muted)]">Real-time monitoring and threat prevention for your child</p>
+      <h1 class="page-title">
+        @if (childInfo) {
+          {{ childInfo.name }}'s Dashboard
+        } @else {
+          My Child's Dashboard
+        }
+      </h1>
+      <p class="page-subtitle">Real-time monitoring and threat prevention for your child</p>
     </div>
-    <div class="flex items-center gap-2">
-      <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-[var(--low)] rounded-lg text-xs font-bold uppercase tracking-wider border border-[var(--low)]/20">
-        <span class="w-2 h-2 rounded-full bg-[var(--low)] animate-pulse"></span>
+    <div class="header-meta">
+      <span class="live-indicator">
+        <span class="live-dot"></span>
         Surveillance Active
       </span>
     </div>
   </div>
 
-  <!-- Stat Cards -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-    @for (stat of stats; track stat.label) {
-      <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4 flex flex-col justify-between">
-        <div class="flex items-start justify-between mb-3">
-          <span class="text-xs text-[var(--text-muted)] font-semibold">{{ stat.label }}</span>
-          <div class="w-8 h-8 rounded-lg flex items-center justify-center" [style.background]="'var(--' + stat.color + ')' + '22'">
-            <i class="pi {{ stat.icon }} text-sm" [style.color]="'var(--' + stat.color + ')'"></i>
-          </div>
+  <!-- Child Status Banner -->
+  @if (childInfo) {
+    <div class="child-banner">
+      <div class="child-banner-left">
+        <div class="child-banner-avatar" [style.background]="getRiskHex(childInfo.risk_level)">
+          {{ childInfo.name.charAt(0) }}
         </div>
-        <div>
-          <div class="text-2xl font-bold font-mono text-[var(--text-primary)]">{{ stat.value }}</div>
-          <div class="text-xs font-semibold mt-1 flex items-center gap-1" [ngClass]="stat.trendUp ? 'text-[var(--low)]' : 'text-[var(--critical)]'">
-            <i class="pi" [ngClass]="stat.trendUp ? 'pi-arrow-up' : 'pi-arrow-down'"></i>
+        <div class="child-banner-info">
+          <span class="child-banner-name">{{ childInfo.name }}</span>
+          <span class="child-banner-number mono">{{ childInfo.display_number || childInfo.whatsapp_jid }}</span>
+        </div>
+      </div>
+      <div class="child-banner-right">
+        <span class="child-risk-badge" [style.background]="getRiskHex(childInfo.risk_level) + '22'" [style.color]="getRiskHex(childInfo.risk_level)" [style.border-color]="getRiskHex(childInfo.risk_level) + '44'">
+          <i class="pi pi-shield"></i>
+          Risk: {{ getRiskLabel(childInfo.risk_level) }}
+        </span>
+        @if (childInfo.is_monitored) {
+          <span class="monitoring-badge">
+            <span class="monitoring-dot"></span>
+            Protected
+          </span>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- Stat Cards -->
+  <div class="stats-grid">
+    @if (stats) {
+      @for (stat of stats; track stat.label) {
+        <div class="stat-card">
+          <div class="stat-top">
+            <span class="stat-label">{{ stat.label }}</span>
+            <div class="stat-icon-wrap" [style.background]="'var(--' + stat.color + ')' + '22'">
+              <i class="pi {{ stat.icon }}" [style.color]="'var(--' + stat.color + ')'"></i>
+            </div>
+          </div>
+          <div class="stat-value mono">{{ stat.value }}</div>
+          <div class="stat-trend" [class.trend-up]="stat.trendUp" [class.trend-down]="!stat.trendUp">
+            <i class="pi" [class.pi-arrow-up]="stat.trendUp" [class.pi-arrow-down]="!stat.trendUp"></i>
             {{ stat.trend }}
           </div>
         </div>
-      </div>
+      }
+    } @else {
+      <div class="stat-card skeleton-card"><p-skeleton width="100%" height="60px"></p-skeleton></div>
+      <div class="stat-card skeleton-card"><p-skeleton width="100%" height="60px"></p-skeleton></div>
+      <div class="stat-card skeleton-card"><p-skeleton width="100%" height="60px"></p-skeleton></div>
+      <div class="stat-card skeleton-card"><p-skeleton width="100%" height="60px"></p-skeleton></div>
     }
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-    <!-- Left Column: Feed & Alerts -->
-    <div class="lg:col-span-8 flex flex-col gap-6">
-      
-      <!-- Recent Alerts -->
-      <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl flex flex-col">
-        <div class="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-surface-2)]/50 rounded-t-xl">
-          <span class="font-bold text-[var(--text-primary)]">Recent Alerts</span>
-          <a class="text-xs font-semibold text-[var(--accent)] hover:underline" routerLink="/parent/alerts">View all →</a>
+  <!-- Live Activity Feed -->
+  <div class="panel feed-panel">
+    <div class="panel-header">
+      <div class="feed-title-row">
+        <span class="live-dot-sm"></span>
+        <span class="panel-title">Live Activity Feed</span>
+      </div>
+      <span class="feed-count mono">{{ feedEvents().length }} events</span>
+    </div>
+    <div class="feed-list">
+      @for (event of feedEvents(); track event.id) {
+        <div class="feed-row cursor-pointer hover:bg-[var(--bg-surface-2)] transition-colors" [class.feed-new]="event.id === feedEvents()[0].id" (click)="showFeedDetails(event)">
+          <span class="feed-time mono">{{ event.time }}</span>
+          <div class="feed-dot" [style.background]="getFeedColor(event.type)"></div>
+          <i class="pi {{ event.icon }} feed-icon" [style.color]="getFeedColor(event.type)"></i>
+          <span class="feed-text">{{ event.text }}</span>
         </div>
-        <div class="flex flex-col">
-          @for (alert of recentAlerts; track alert.id) {
-            <div class="flex items-center p-4 border-b border-[var(--border)] last:border-0 hover:bg-[var(--bg-surface-2)] transition-colors gap-4">
-              <div class="w-1 h-10 rounded-full flex-shrink-0" [style.background]="getRiskHex(alert.severity)"></div>
-              <div class="flex-1 min-w-0">
-                <div class="text-sm text-[var(--text-primary)] truncate font-medium">{{ alert.preview }}</div>
-                <div class="flex items-center gap-2 mt-1 text-xs text-[var(--text-muted)]">
-                  <span class="font-semibold uppercase tracking-wider">{{ alert.category }}</span>
-                  <span>•</span>
-                  <span>{{ alert.time }}</span>
+      }
+      @if (feedEvents().length === 0) {
+        <div class="feed-empty">
+          <i class="pi pi-inbox" style="font-size: 1.5rem; color: var(--text-muted); margin-bottom: 0.5rem;"></i>
+          <span>No activity yet — monitoring is active</span>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Content Grid -->
+  <div class="content-grid">
+
+    <!-- Recent Alerts -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Recent Alerts</span>
+        <a class="panel-link" routerLink="/parent/alerts">View all →</a>
+      </div>
+      <div class="alert-list">
+        @if (recentAlerts) {
+          @if (recentAlerts.length > 0) {
+            @for (alert of recentAlerts; track alert.id) {
+              <div class="alert-row">
+                <div class="alert-severity-bar" [style.background]="getRiskHex(alert.severity)"></div>
+                <div class="alert-body">
+                  <div class="alert-preview">{{ alert.preview }}</div>
+                  <div class="alert-meta">
+                    <span class="alert-category">{{ alert.category }}</span>
+                    <span class="alert-time">{{ alert.time }}</span>
+                  </div>
+                </div>
+                <div class="alert-decision" [ngClass]="getDecisionClass(alert.decision)">
+                  {{ alert.decision }}
                 </div>
               </div>
-              <div class="text-xs font-bold font-mono px-2 py-1 rounded" [ngClass]="getDecisionClass(alert.decision)">
-                {{ alert.decision }}
+            }
+          } @else {
+            <div class="empty-state">
+              <i class="pi pi-check-circle" style="font-size: 2rem; color: var(--low);"></i>
+              <span>No alerts detected — your child is safe</span>
+            </div>
+          }
+        } @else {
+          <div style="padding: 1rem;"><p-skeleton width="100%" height="50px" styleClass="mb-2"></p-skeleton></div>
+          <div style="padding: 1rem;"><p-skeleton width="100%" height="50px" styleClass="mb-2"></p-skeleton></div>
+          <div style="padding: 1rem;"><p-skeleton width="100%" height="50px" styleClass="mb-2"></p-skeleton></div>
+        }
+      </div>
+    </div>
+
+    <!-- Risky Contacts Panel -->
+    <div class="panel" style="display: flex; flex-direction: column;">
+      <div class="panel-header">
+        <span class="panel-title">Flagged Contacts</span>
+        <span class="panel-subtitle">People who sent harmful messages</span>
+      </div>
+      <div class="contacts-list" style="flex: 1;">
+        @if (riskyContacts && riskyContacts.length > 0) {
+          @for (contact of riskyContacts; track contact.id) {
+            <div class="contact-row">
+              <div class="contact-avatar" [style.background]="getRiskHex(contact.risk_level)">
+                {{ contact.name.charAt(0) }}
+              </div>
+              <div class="contact-info">
+                <span class="contact-name">{{ contact.name }}</span>
+                <span class="contact-blocked mono">{{ contact.blocked_total }} blocked</span>
+              </div>
+              <div class="contact-risk">
+                <span class="risk-score-value mono" [style.color]="getRiskHex(contact.risk_level)">
+                  {{ contact.risk_score | percent:'1.0-0' }}
+                </span>
+                <div class="risk-bar">
+                  <div class="risk-bar-fill"
+                       [style.width]="getRiskBarWidth(contact.risk_score)"
+                       [style.background]="getRiskHex(contact.risk_level)">
+                  </div>
+                </div>
               </div>
             </div>
           }
-        </div>
-      </div>
-
-    </div>
-
-    <!-- Right Column: Feed -->
-    <div class="lg:col-span-4 flex flex-col gap-6">
-      
-      <!-- Live Activity Feed -->
-      <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl flex flex-col h-[320px]">
-        <div class="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--bg-surface-2)]/50 rounded-t-xl">
-          <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-[var(--low)] animate-pulse"></span>
-            <span class="font-bold text-[var(--text-primary)]">Activity Feed</span>
+        } @else {
+          <div class="empty-state">
+            <i class="pi pi-users" style="font-size: 2rem; color: var(--text-muted);"></i>
+            <span>No flagged contacts yet</span>
           </div>
-          <span class="text-xs font-mono text-[var(--text-muted)]">{{ feedEvents().length }} events</span>
-        </div>
-        <div class="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-          @for (event of feedEvents(); track event.id) {
-            <div class="flex items-start gap-3 text-sm">
-              <span class="text-xs font-mono text-[var(--text-muted)] mt-0.5 whitespace-nowrap">{{ event.time }}</span>
-              <div class="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" [style.background]="getFeedColor(event.type)"></div>
-              <div class="flex-1 text-[var(--text-primary)] leading-tight text-xs">{{ event.text }}</div>
-            </div>
-          }
-        </div>
+        }
       </div>
-
     </div>
 
   </div>
 
   <!-- Charts Row -->
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5">
-      <div class="mb-4">
-        <h3 class="font-bold text-[var(--text-primary)] flex items-center gap-2">
-          <i class="pi pi-chart-bar text-[var(--accent)]"></i>
-          Interventions
-        </h3>
-        <p class="text-xs text-[var(--text-muted)]">Past 7 days overview of blocked/warned messages</p>
+  <div class="charts-row">
+    <!-- Harassment Breakdown -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Harassment Categories</span>
+        <span class="panel-subtitle">Detected threat types for your child</span>
       </div>
-      <p-chart type="bar" [data]="weeklyChartData" [options]="weeklyChartOptions" height="220px"></p-chart>
+      <div class="chart-wrap">
+        @if (harassmentChartData) {
+          <p-chart
+            #harassmentChart
+            type="doughnut"
+            [data]="harassmentChartData"
+            [options]="harassmentChartOptions"
+            height="220px" />
+        } @else {
+          <p-skeleton width="220px" height="220px" shape="circle" styleClass="mt-3 flex mx-auto"></p-skeleton>
+        }
+      </div>
     </div>
-    
-    <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-5">
-      <div class="mb-4">
-        <h3 class="font-bold text-[var(--text-primary)] flex items-center gap-2">
-          <i class="pi pi-chart-pie text-[var(--accent)]"></i>
-          Harassment Breakdown
-        </h3>
-        <p class="text-xs text-[var(--text-muted)]">Categories of intercepted threats</p>
+
+    <!-- Weekly Activity -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Weekly Activity</span>
+        <span class="panel-subtitle">Blocked vs Warned — last 7 days</span>
       </div>
-      <p-chart type="doughnut" [data]="harassmentChartData" [options]="harassmentChartOptions" height="220px"></p-chart>
+      <div class="weekly-chart-wrap">
+        @if (weeklyChartData) {
+          <p-chart
+            #weeklyChart
+            type="bar"
+            [data]="weeklyChartData"
+            [options]="weeklyChartOptions"
+            height="220px" />
+        } @else {
+          <p-skeleton width="100%" height="220px" styleClass="mt-2"></p-skeleton>
+        }
+      </div>
+    </div>
+  </div>
+
+  <!-- Second Charts Row -->
+  <div class="charts-row" style="margin-top: 1.5rem;">
+    <!-- Hourly Threat Detection -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Threat Detection by Hour</span>
+        <span class="panel-subtitle">Today — Threats vs Safe messages</span>
+      </div>
+      <div class="weekly-chart-wrap">
+        @if (hourlyChartData) {
+          <p-chart
+            #hourlyChart
+            type="line"
+            [data]="hourlyChartData"
+            [options]="hourlyChartOptions"
+            height="180px" />
+        } @else {
+          <p-skeleton width="100%" height="180px" styleClass="mt-2"></p-skeleton>
+        }
+      </div>
+    </div>
+
+    <!-- Language Distribution -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Message Languages</span>
+        <span class="panel-subtitle">Languages detected in your child's messages</span>
+      </div>
+      <div style="height: 180px; margin-top: 1rem;">
+        @if (languageChartData) {
+          <p-chart
+            #languageChart
+            type="doughnut"
+            [data]="languageChartData"
+            [options]="languageChartOptions"
+            height="100%" />
+        } @else {
+          <p-skeleton width="180px" height="180px" shape="circle" styleClass="mt-3 flex mx-auto"></p-skeleton>
+        }
+      </div>
     </div>
   </div>
 
 </div>
+
+<!-- Feed Details Popup -->
+<p-dialog header="Activity Details" [(visible)]="feedDialogVisible" [modal]="true" [style]="{width: 'max(400px, 40vw)'}" [dismissableMask]="true">
+  @if (selectedFeedEvent) {
+    <div class="flex flex-col gap-4 text-[var(--text-primary)]">
+      <div class="font-bold flex items-center gap-2">
+        <i class="pi" [ngClass]="selectedFeedEvent.icon" [style.color]="getFeedColor(selectedFeedEvent.type)"></i>
+        {{ selectedFeedEvent.time }}
+      </div>
+      <div class="bg-[var(--bg-surface-2)] p-4 rounded-lg break-words whitespace-pre-wrap font-mono text-sm leading-relaxed" style="max-height: 300px; overflow-y: auto;">{{ selectedFeedEvent.fullText }}</div>
+    </div>
+  }
+</p-dialog>

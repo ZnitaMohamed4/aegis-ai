@@ -11,3 +11,22 @@
   background: var(--bg-surface-2);
   color: var(--text-primary);
 }
+
+/* Category pill filters */
+.active-cat-filter {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.inactive-cat-filter {
+  color: var(--text-muted);
+  border-color: var(--border);
+  background: transparent;
+}
+
+.inactive-cat-filter:hover {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}

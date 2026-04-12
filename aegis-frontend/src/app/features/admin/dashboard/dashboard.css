@@ -494,10 +494,11 @@
 }
 
 .feed-time {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   white-space: nowrap;
-  min-width: 52px;
+  flex-shrink: 0;
+  min-width: 75px;
 }
 
 .feed-dot {

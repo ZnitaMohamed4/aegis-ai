@@ -1,8 +1,9 @@
-import { Component, signal, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, signal, OnInit, OnDestroy, inject, ViewChildren, QueryList } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { ChartModule } from 'primeng/chart';
+import { ChartModule, UIChart } from 'primeng/chart';
 import { SkeletonModule } from 'primeng/skeleton';
+import { DialogModule } from 'primeng/dialog';
 import { getRiskHex, getDecisionClass } from '@shared/utils/severity.utils';
 import {
   HARASSMENT_CHART_OPTIONS,
@@ -15,16 +16,21 @@ import { ApiService } from '@core/services/api.service';
 import { AlertService, WebSocketAlertPayload } from '@core/services/alert.service';
 import { Subscription } from 'rxjs';
 import { ChangeDetectorRef } from '@angular/core';
+import { MessageService } from 'primeng/api';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, ChartModule, SkeletonModule],
+  imports: [CommonModule, RouterLink, ChartModule, SkeletonModule, DialogModule],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })
 export class DashboardComponent implements OnInit, OnDestroy {
+  @ViewChildren(UIChart) charts!: QueryList<UIChart>;
+
   stats: any[] | null = null;
+  latencies: any = null;
+  pushNotificationsCount: number = 0;
   recentAlerts: any[] | null = null;
   atRiskChildren: any[] | null = null;
   
@@ -42,12 +48,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Live activity feed
   feedEvents = signal<FeedEvent[]>([]);
-  private readonly MAX_FEED = 20;
+  private readonly MAX_FEED = 5;
+  feedDialogVisible: boolean = false;
+  selectedFeedEvent: FeedEvent | null = null;
 
   private alertService = inject(AlertService);
   private alertSub?: Subscription;
   private apiService = inject(ApiService);
   private cdr = inject(ChangeDetectorRef);
+  private messageService = inject(MessageService);
 
   ngOnInit() {
     // Subscribe to WebSockets for Live Alerts
@@ -58,7 +67,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       let shortSender = alert.sender.split('@')[0];
       
       if (alert.llm_triggered) {
-        feedText = `🧠 Agent 3 (LLM) forced [${alert.decision.toUpperCase()}] for ${shortSender}. Reason: "${alert.llm_explanation}"`;
+        const shortReason = (alert.llm_explanation || '').substring(0, 70) + ((alert.llm_explanation || '').length > 70 ? '…' : '');
+        feedText = `Agent 3 (LLM) forced [${alert.decision.toUpperCase()}] for ${shortSender} — ${shortReason}`;
         feedIcon = 'pi-bolt';
       } else {
         switch(alert.decision.toUpperCase()) {
@@ -72,7 +82,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             break;
           case 'BLOCK':
           case 'ESCALATE':
-            feedText = `ACTIVE SHIELD 🛡️ Blocked [${(alert.primary_class || '').toUpperCase()}] with ${Math.round(alert.m1_score * 100)}% severity!`;
+            feedText = `ACTIVE SHIELD Blocked [${(alert.primary_class || '').toUpperCase()}] with ${Math.round(alert.m1_score * 100)}% severity`;
             feedIcon = 'pi-ban';
             break;
           default:
@@ -85,7 +95,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         time: new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         type: alert.decision.toLowerCase() as any,
         icon: feedIcon,
-        text: feedText
+        text: feedText,
+        fullText: alert.llm_explanation ? `Text: ${alert.text}\n\nLLM Explanation:\n${alert.llm_explanation}` : alert.text
       };
 
       this.feedEvents.update(list => {
@@ -107,8 +118,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       // Update Live Stat Cards dynamically!
       if (this.stats) {
-        // 1. Always increment 'Total Alerts Today'
+        // 1. Always increment 'Total Alerts Today' and 'Push Notifications'
         this.stats[1].value = Number(this.stats[1].value) + 1;
+        this.pushNotificationsCount++;
         
         // 2. Increment 'Messages Blocked' if it's a block/escalate
         if (alert.decision.toUpperCase() === 'BLOCK' || alert.decision.toUpperCase() === 'ESCALATE') {
@@ -123,44 +135,93 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       // Update Donut Chart dynamically!
       if (this.harassmentChartData && alert.primary_class && alert.primary_class !== 'safe') {
-        const newData = [...this.harassmentChartData.datasets[0].data];
+        const datasets = [...this.harassmentChartData.datasets];
+        const dataArr = [...datasets[0].data];
         
         switch (alert.primary_class.toLowerCase()) {
-          case 'verbal_harassment': newData[0]++; break;
-          case 'threat': newData[1]++; break;
-          case 'sexual_harassment': newData[2]++; break;
-          case 'discrimination': newData[3]++; break;
+          case 'verbal_harassment': dataArr[0]++; break;
+          case 'threat': dataArr[1]++; break;
+          case 'sexual_harassment': dataArr[2]++; break;
+          case 'discrimination': dataArr[3]++; break;
         }
-
-        this.harassmentChartData = {
-          ...this.harassmentChartData,
-          datasets: [{
-            ...this.harassmentChartData.datasets[0],
-            data: newData
-          }]
-        };
+        
+        datasets[0] = { ...datasets[0], data: dataArr };
+        this.harassmentChartData = { ...this.harassmentChartData, datasets };
       }
 
       // Update Weekly Bar Chart dynamically! (Adding to today's bar)
       if (this.weeklyChartData) {
-        const blockedData = [...this.weeklyChartData.datasets[0].data];
-        const warnedData = [...this.weeklyChartData.datasets[1].data];
+        const datasets = [...this.weeklyChartData.datasets];
+        
+        const blockedData = [...datasets[0].data];
+        const warnedData = [...datasets[1].data];
+        const safeData = [...datasets[2].data];
         const lastIdx = blockedData.length - 1; // Today is the last entry
         
         if (alert.decision.toUpperCase() === 'BLOCK' || alert.decision.toUpperCase() === 'ESCALATE') {
           blockedData[lastIdx]++;
         } else if (alert.decision.toUpperCase() === 'WARN' || alert.decision.toUpperCase() === 'REVISE') {
           warnedData[lastIdx]++;
+        } else if (alert.decision.toUpperCase() === 'ALLOW') {
+          safeData[lastIdx]++;
         }
 
-        this.weeklyChartData = {
-          ...this.weeklyChartData,
-          datasets: [
-            { ...this.weeklyChartData.datasets[0], data: blockedData },
-            { ...this.weeklyChartData.datasets[1], data: warnedData },
-            this.weeklyChartData.datasets[2] // Safe array remains unchanged
-          ]
-        };
+        datasets[0] = { ...datasets[0], data: blockedData };
+        datasets[1] = { ...datasets[1], data: warnedData };
+        datasets[2] = { ...datasets[2], data: safeData };
+
+        this.weeklyChartData = { ...this.weeklyChartData, datasets };
+      }
+
+      // Update Hourly Chart dynamically!
+      if (this.hourlyChartData) {
+        const datasets = [...this.hourlyChartData.datasets];
+        const threatsData = [...datasets[0].data];
+        const safeData = [...datasets[1].data];
+        
+        // Find current hour bucket (0-23 => index 0-11)
+        const hour = new Date().getHours();
+        const bucketIdx = Math.floor(hour / 2);
+        
+        if (['BLOCK', 'ESCALATE', 'WARN', 'REVISE'].includes(alert.decision.toUpperCase())) {
+          threatsData[bucketIdx]++;
+        } else if (alert.decision.toUpperCase() === 'ALLOW') {
+          safeData[bucketIdx]++;
+        }
+
+        datasets[0] = { ...datasets[0], data: threatsData };
+        datasets[1] = { ...datasets[1], data: safeData };
+
+        this.hourlyChartData = { ...this.hourlyChartData, datasets };
+      }
+
+      // Update Language Chart dynamically!
+      if (this.languageChartData && alert.language) {
+        const datasets = [...this.languageChartData.datasets];
+        const dataArr = [...datasets[0].data];
+        const labels = [...this.languageChartData.labels];
+        
+        const langIdx = labels.findIndex(l => l.toLowerCase() === alert.language?.toLowerCase());
+        
+        if (langIdx !== -1) {
+          dataArr[langIdx]++;
+        } else {
+          labels.push(alert.language.toUpperCase());
+          dataArr.push(1);
+          // ensure multiple background colors are available or add a random one
+          const colors = datasets[0].backgroundColor;
+          if (colors.length < labels.length) {
+              colors.push('#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'));
+          }
+        }
+
+        datasets[0] = { ...datasets[0], data: dataArr };
+        this.languageChartData = { ...this.languageChartData, labels, datasets };
+      }
+
+      // Refresh all chart instances smoothly!
+      if (this.charts) {
+        this.charts.forEach(chart => chart.refresh());
       }
 
       // Update Top At-Risk Children dynamically!
@@ -209,26 +270,90 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.cdr.detectChanges();
     });
 
-    // Fetch initial historical Alerts
+    // Fetch initial Activity Feed — seeds from /activity/ (includes ALLOW events)
+    this.apiService.getActivityFeed().subscribe({
+      next: (events) => {
+        // Seed the Activity Feed from DB (persists across page refreshes, includes ALLOW)
+        const seedEvents: FeedEvent[] = events.slice(0, this.MAX_FEED).map((a: any) => {
+          const decision = (a.decision || '').toUpperCase();
+          const shortSender = (a.sender_jid || '').split('@')[0];
+          const cleanText = (a.raw_text || '(no text)').substring(0, 50) + '...';
+          let feedText = '';
+          let feedIcon = 'pi-info-circle';
+
+          if (a.llm_triggered && a.llm_explanation) {
+            const shortReason = a.llm_explanation.substring(0, 70) + (a.llm_explanation.length > 70 ? '…' : '');
+            feedText = `Agent 3 (LLM) forced [${decision}] for ${shortSender} — ${shortReason}`;
+            feedIcon = 'pi-bolt';
+          } else {
+            switch (decision) {
+              case 'ALLOW':
+                feedText = `Processed safely in background: "${cleanText}"`;
+                feedIcon = 'pi-verified';
+                break;
+              case 'WARN':
+                feedText = `Issued automated warning for [${(a.primary_class || '').toUpperCase()}] on ${shortSender}`;
+                feedIcon = 'pi-exclamation-triangle';
+                break;
+              case 'BLOCK':
+              case 'ESCALATE':
+                feedText = `ACTIVE SHIELD Blocked [${(a.primary_class || '').toUpperCase()}] with ${Math.round((a.toxicity_score || 0) * 100)}% severity`;
+                feedIcon = 'pi-ban';
+                break;
+              case 'REVISE':
+                feedText = `Grey-zone message flagged for review: "${cleanText}"`;
+                feedIcon = 'pi-eye';
+                break;
+              case 'HUMAN_REVIEW':
+                feedText = `Flagged for human review: "${cleanText}"`;
+                feedIcon = 'pi-user';
+                break;
+              default:
+                feedText = `Analyzed incoming message from ${shortSender}`;
+            }
+          }
+
+          return {
+            id: a.id,
+            time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            type: decision.toLowerCase() as any,
+            icon: feedIcon,
+            text: feedText,
+            fullText: a.llm_explanation ? `Text: ${a.raw_text}\n\nLLM Explanation:\n${a.llm_explanation}` : a.raw_text
+          };
+        });
+
+        // Only set if feed is currently empty (don't overwrite live events)
+        this.feedEvents.update(existing => existing.length === 0 ? seedEvents : existing);
+        this.cdr.detectChanges();
+      },
+      error: (err) => console.error('[AEGIS] Failed to load activity feed:', err)
+    });
+
+    // Fetch initial historical Alerts — seeds the recent alerts panel
     this.apiService.getAlerts().subscribe({
       next: (alerts) => {
-        this.recentAlerts = alerts.slice(0, 5).map(a => ({
+        // Seed the "Recent Alerts" panel (top 5)
+        this.recentAlerts = alerts.slice(0, 5).map((a: any) => ({
           id: a.id,
           preview: a.raw_text.substring(0, 40) + '...',
-          severity: a.decision === 'ESCALATE' || a.decision === 'BLOCK' ? 'critical' : 'medium',
+          severity: a.severity || (a.decision === 'ESCALATE' ? 'critical' : a.decision === 'BLOCK' ? 'high' : a.decision === 'WARN' ? 'medium' : 'low'),
           category: a.primary_class || 'Unknown',
           time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          decision: a.decision
+          decision: (a.decision || '').toUpperCase()
         }));
         this.cdr.detectChanges();
       },
-      error: (err) => console.error('[AEGIS] ❌ Failed to load ALERTS:', err)
+      error: (err) => console.error('[AEGIS] Failed to load ALERTS:', err)
     });
 
     // Fetch REAL Live Stats from PostgreSQL
     this.apiService.getDashboardStats().subscribe({
       next: (data) => {
         console.log('[AEGIS] ✅ Dashboard Stats Loaded:', data);
+        
+        this.latencies = data.stats.latencies;
+        this.pushNotificationsCount = data.stats.total_alerts_today;
         
         this.stats = [
           {
@@ -363,7 +488,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             datasets: [
               {
                 data: data.language_distribution.data,
-                backgroundColor: ['#06B6D4', '#EAB308', '#22C55E'],
+                backgroundColor: ['#06B6D4', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#64748B'],
                 borderWidth: 0,
                 hoverOffset: 4
               }
@@ -371,6 +496,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
           };
         }
         
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Global Data Synced',
+          detail: 'Dashboard metrics are up to date.',
+          life: 3000
+        });
+
         this.cdr.detectChanges();
       },
       error: (err) => {
@@ -383,6 +515,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     if (this.alertSub) this.alertSub.unsubscribe();
+  }
+
+  showFeedDetails(event: FeedEvent) {
+    this.selectedFeedEvent = event;
+    this.feedDialogVisible = true;
+  }
+
+  flagForReview(event: FeedEvent) {
+    if (!event.id || event.flagged) return;
+    
+    event.flagged = true; // optimistically mark it locally
+    
+    this.apiService.flagForReview(event.id.toString()).subscribe({
+      next: () => {
+      },
+      error: (err) => {
+        console.error('Failed to flag message:', err);
+        event.flagged = false;
+      }
+    });
   }
 
   getFeedColor(type: string): string {

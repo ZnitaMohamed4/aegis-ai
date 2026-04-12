@@ -3,12 +3,12 @@
   <!-- Header -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div>
-      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">Risk Profile: Emma L.</h1>
+      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">Risk Profile: {{ childName() }}</h1>
       <p class="text-sm text-[var(--text-muted)]">Detailed behavioral and threat analysis</p>
     </div>
     <div class="flex items-center gap-2">
       <span class="text-xs font-mono px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-2)]">
-        {{ childNumber }}
+        {{ childNumber() }}
       </span>
     </div>
   </div>
@@ -18,15 +18,15 @@
     <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6 flex flex-col items-center justify-center text-center">
       <div class="text-sm font-semibold text-[var(--text-muted)] mb-4 uppercase tracking-wider">Overall Risk Score</div>
       <div class="relative w-32 h-32 flex items-center justify-center rounded-full border-[10px]"
-           [style.border-color]="getRiskHex(currentRiskLevel)">
-        <span class="text-4xl font-bold font-mono text-[var(--text-primary)]">{{ currentRiskScore.toFixed(2) }}</span>
+           [style.border-color]="getRiskHex(currentRiskLevel())">
+        <span class="text-4xl font-bold font-mono text-[var(--text-primary)]">{{ currentRiskScore() | percent:'1.0-0' }}</span>
       </div>
       <div class="mt-6 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest"
-           [style.color]="getRiskHex(currentRiskLevel)"
-           [style.background]="getRiskHex(currentRiskLevel) + '22'">
-        {{ currentRiskLevel }} Risk
+           [style.color]="getRiskHex(currentRiskLevel())"
+           [style.background]="getRiskHex(currentRiskLevel()) + '22'">
+        {{ currentRiskLevel() }} Risk
       </div>
-      <p class="text-xs text-[var(--text-muted)] mt-4">Based on analysis of 1.2k recent interactions</p>
+      <p class="text-xs text-[var(--text-muted)] mt-4">Based on analysis of recent interactions</p>
     </div>
 
     <!-- Trend Chart -->
@@ -38,11 +38,20 @@
         </span>
       </div>
       
-      <div class="flex-1 w-full bg-[var(--bg-surface-2)]/50 border border-[var(--border)]/50 rounded-lg flex items-center justify-center min-h-[220px]">
-        <div class="flex flex-col items-center gap-2">
-          <i class="pi pi-chart-line text-2xl text-[var(--text-muted)] opacity-50"></i>
-          <span class="text-xs text-[var(--text-muted)] font-medium">Risk trend chart embedded here</span>
-        </div>
+      <div class="flex-1 w-full bg-[var(--bg-surface-2)]/50 border border-[var(--border)]/50 rounded-lg p-4">
+        @if (riskChartData) {
+          <p-chart 
+            type="line" 
+            [data]="riskChartData" 
+            [options]="riskChartOptions" 
+            height="220px">
+          </p-chart>
+        } @else {
+          <div class="flex flex-col items-center justify-center gap-2 h-[220px]">
+            <i class="pi pi-chart-line text-2xl text-[var(--text-muted)] opacity-50"></i>
+            <span class="text-xs text-[var(--text-muted)] font-medium">Loading trend data...</span>
+          </div>
+        }
       </div>
     </div>
   </div>
@@ -52,7 +61,7 @@
     <div class="p-5 border-b border-[var(--border)] flex justify-between items-end">
       <div>
         <h3 class="font-bold text-[var(--text-primary)] mb-1">Identified Threat Actors</h3>
-        <p class="text-xs text-[var(--text-muted)]">Contacts communicating with Emma exhibiting high-risk behavior</p>
+        <p class="text-xs text-[var(--text-muted)]">Contacts communicating with {{ childName() }} exhibiting high-risk behavior</p>
       </div>
     </div>
     <div class="overflow-x-auto">
@@ -66,7 +75,7 @@
           </tr>
         </thead>
         <tbody>
-          @for (actor of threatActors; track actor.id) {
+          @for (actor of threatActors(); track actor.id) {
             <tr class="border-b border-[var(--border)] hover:bg-[var(--bg-surface-2)] transition-colors">
               <td class="px-5 py-4">
                 <div class="font-medium text-sm text-[var(--text-primary)] mb-0.5">{{ actor.name }}</div>
@@ -74,7 +83,7 @@
               </td>
               <td class="px-5 py-4">
                 <div class="flex items-center gap-2">
-                  <span class="text-sm font-bold font-mono" [style.color]="getRiskHex(actor.level)">{{ actor.score.toFixed(2) }}</span>
+                  <span class="text-sm font-bold font-mono" [style.color]="getRiskHex(actor.level)">{{ actor.score | percent:'1.0-0' }}</span>
                   <div class="w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" [style.background]="getRiskHex(actor.level)" [style.shadow-color]="getRiskHex(actor.level)"></div>
                 </div>
               </td>

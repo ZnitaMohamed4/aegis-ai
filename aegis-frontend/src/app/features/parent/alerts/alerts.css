@@ -1,1 +1,4 @@
-/* Styling is handled by the shared alerts-table component */
+:host {
+  display: block;
+  width: 100%;
+}

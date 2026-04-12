@@ -7,6 +7,8 @@ import { MockAlert } from '@core/models';
 import { SkeletonModule } from 'primeng/skeleton';
 import { OnInit } from '@angular/core';
 
+const PAGE_SIZE = 20;
+
 @Component({
   selector: 'app-alerts-table',
   standalone: true,
@@ -22,22 +24,45 @@ export class AlertsTableComponent implements OnInit {
   searchQuery = signal('');
   selectedSeverity = signal<string>('all');
   selectedDecision = signal<string>('all');
+  selectedCategory = signal<string>('all');
   selectedAlert = signal<MockAlert | null>(null);
   drawerVisible = signal(false);
+  visibleCount = signal(PAGE_SIZE);
 
   skeletonItems = [1, 2, 3, 4, 5];
 
-  severityFilters = ['all', 'critical', 'high', 'medium', 'low'];
-  decisionFilters = ['all', 'BLOCK', 'ESCALATE', 'WARN', 'ALLOW'];
+  // No 'low' (ALLOW is not in the alerts list) and no 'ALLOW' in decisions
+  severityFilters = ['all', 'critical', 'high', 'medium'];
+  decisionFilters = ['all', 'BLOCK', 'ESCALATE', 'WARN', 'REVISE'];
+  categoryFilters = [
+    { label: 'All', value: 'all' },
+    { label: 'Threat', value: 'threat' },
+    { label: 'Sexual', value: 'sexual_harassment' },
+    { label: 'Discrimination', value: 'discrimination' },
+    { label: 'Verbal', value: 'verbal_harassment' },
+  ];
 
   filteredAlerts = computed(() => {
+    const q = this.searchQuery().toLowerCase();
+    const sev = this.selectedSeverity();
+    const dec = this.selectedDecision();
+    const cat = this.selectedCategory();
+
     return this.alerts().filter(alert => {
-      const matchesSeverity = this.selectedSeverity() === 'all' || alert.severity === this.selectedSeverity();
-      const matchesDecision = this.selectedDecision() === 'all' || alert.decision === this.selectedDecision();
-      const matchesSearch = alert.preview.toLowerCase().includes(this.searchQuery().toLowerCase());
-      return matchesSeverity && matchesDecision && matchesSearch;
+      const matchesSeverity = sev === 'all' || alert.severity === sev;
+      const matchesDecision = dec === 'all' || alert.decision === dec;
+      const matchesCategory = cat === 'all' || (alert.category || '').replace(/ /g, '_') === cat;
+      const matchesSearch = !q
+        || alert.preview.toLowerCase().includes(q)
+        || (alert.category || '').toLowerCase().includes(q);
+      return matchesSeverity && matchesDecision && matchesCategory && matchesSearch;
     });
   });
+
+  /** Paginated slice shown in the table */
+  visibleAlerts = computed(() => this.filteredAlerts().slice(0, this.visibleCount()));
+
+  hasMore = computed(() => this.filteredAlerts().length > this.visibleCount());
 
   getRiskHex = getRiskHex;
   getDecisionClass = getDecisionClass;
@@ -52,6 +77,14 @@ export class AlertsTableComponent implements OnInit {
     this.drawerVisible.set(false);
   }
 
+  loadMore() {
+    this.visibleCount.update(n => n + PAGE_SIZE);
+  }
+
+  resetPagination() {
+    this.visibleCount.set(PAGE_SIZE);
+  }
+
   ngOnInit() {
     setTimeout(() => {
       this.isLoading.set(false);
@@ -62,5 +95,11 @@ export class AlertsTableComponent implements OnInit {
     const date = new Date(dateStr);
     return date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' }) +
       ' · ' + date.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  }
+
+  /** Truncate LLM explanation for the table cell (full text shown in drawer) */
+  truncateExplanation(text: string | null, maxLen = 80): string {
+    if (!text) return '';
+    return text.length > maxLen ? text.substring(0, maxLen) + '…' : text;
   }
 }

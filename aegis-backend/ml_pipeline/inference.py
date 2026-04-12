@@ -32,6 +32,8 @@ class PipelineResult:
     secondary_class: Optional[str]
     m2_confidence: Optional[float]
     decision: str
+    m1_latency_ms: int = 0
+    m2_latency_ms: int = 0
 
 
 class AEGISPipeline:
@@ -90,30 +92,37 @@ def run_pipeline(raw_text: str) -> PipelineResult:
     text = normalize_text(raw_text)
 
     # 1. M1 Binary Gate Prediction
+    import time as _time
+    t_m1_start = _time.time()
     inputs = pipeline.m1_tokenizer(text, return_tensors='pt', truncation=True, max_length=128, padding=True).to(pipeline.device)
     with torch.no_grad():
         probs = torch.softmax(pipeline.m1_model(**inputs).logits, dim=-1)
     
     m1_score = probs[0][1].item()  # Label 1 is HARMFUL
+    t_m1_end = _time.time()
+    m1_latency = int((t_m1_end - t_m1_start) * 1000)
     
     # [AEGIS-SECURITY] M1 Bypass Logic
     # Toxic models often misclassify "compliment grooming" as SAFE.
     # We force sexual context keywords into M2 regardless of M1 score.
     SEXUAL_KEYWORDS = [
         'hot', 'sexy', 'beautiful body', 'dress', 'undress', 'pics', 'photo', 
-        'send me', 'cute', 'gorgeous', 'meet up', 'come over', 'alone', 'secret'
+        'send me', 'meet up', 'come over', 'alone', 'secret'
     ]
     has_sexual_context = any(kw in text.lower() for kw in SEXUAL_KEYWORDS)
     
     is_harmful = m1_score >= pipeline.threshold or has_sexual_context
 
     if not is_harmful:
-        return PipelineResult(text, m1_score, False, 'safe', None, None, 'ALLOW')
+        return PipelineResult(text, m1_score, False, 'safe', None, None, 'ALLOW', m1_latency_ms=m1_latency, m2_latency_ms=0)
 
     # 2. M2 Fine-Grained Prediction
+    t_m2_start = _time.time()
     inputs = pipeline.m2_tokenizer(text, return_tensors='pt', truncation=True, max_length=128, padding=True).to(pipeline.device)
     with torch.no_grad():
         probs = torch.softmax(pipeline.m2_model(**inputs).logits, dim=-1)[0]
+    t_m2_end = _time.time()
+    m2_latency = int((t_m2_end - t_m2_start) * 1000)
 
     top2_idx = torch.topk(probs, k=2).indices.tolist()
     top2_val = torch.topk(probs, k=2).values.tolist()
@@ -138,7 +147,7 @@ def run_pipeline(raw_text: str) -> PipelineResult:
 
     decision = get_decision_uml(m1_score, primary_label, confidence)
 
-    return PipelineResult(text, m1_score, True, primary_label, final_secondary, confidence, decision)
+    return PipelineResult(text, m1_score, True, primary_label, final_secondary, confidence, decision, m1_latency_ms=m1_latency, m2_latency_ms=m2_latency)
 
 
 def run_pipeline_stub(raw_text: str) -> PipelineResult:

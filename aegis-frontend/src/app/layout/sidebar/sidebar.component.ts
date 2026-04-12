@@ -54,7 +54,6 @@ export class SidebarComponent {
       title: 'Surveillance',
       items: [
         { label: 'Live Alerts', icon: 'pi-bell', route: '/parent/alerts', dot: 'pulse' },
-        { label: 'Blocked Messages', icon: 'pi-ban', route: '/parent/blocked-messages' },
         { label: 'Conversations', icon: 'pi-comments', route: '/parent/conversations' },
         { label: 'Risk Profile', icon: 'pi-chart-line', route: '/parent/risk-profile' },
       ]

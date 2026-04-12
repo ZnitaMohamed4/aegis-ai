@@ -1,35 +1,120 @@
-import { Injectable, signal } from '@angular/core';
-import { Router } from '@angular/router';
+// import { Injectable, signal } from '@angular/core';
+// import { Router } from '@angular/router';
+
+// @Injectable({
+//   providedIn: 'root'
+// })
+// export class AuthService {
+//   role = signal<'admin' | 'parent' | null>(null);
+
+//   constructor(private router: Router) {
+//     const savedRole = localStorage.getItem('aegis_role');
+//     if (savedRole === 'admin' || savedRole === 'parent') {
+//       this.role.set(savedRole);
+//     }
+//   }
+
+//   login(selectedRole: 'admin' | 'parent') {
+//     this.role.set(selectedRole);
+//     localStorage.setItem('aegis_role', selectedRole);
+//   }
+
+//   logout() {
+//     this.role.set(null);
+//     localStorage.removeItem('aegis_role');
+//     this.router.navigate(['/login']);
+//   }
+
+//   getRole() {
+//     return this.role();
+//   }
+
+//   isLoggedIn() {
+//     return this.role() !== null;
+//   }
+// }
+
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { BehaviorSubject, tap } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  role = signal<'admin' | 'parent' | null>(null);
+  private apiUrl = 'http://localhost:8000/api/v1/auth';
+  private currentUserSubject = new BehaviorSubject<any>(null);
+  public currentUser$ = this.currentUserSubject.asObservable();
 
-  constructor(private router: Router) {
-    const savedRole = localStorage.getItem('aegis_role');
-    if (savedRole === 'admin' || savedRole === 'parent') {
-      this.role.set(savedRole);
+  constructor(private http: HttpClient) {
+    this.loadUserFromStorage();
+  }
+
+  // 1. Login - gets tokens
+  login(credentials: any) {
+    return this.http.post(`${this.apiUrl}/login/`, credentials).pipe(
+      tap((response: any) => {
+        localStorage.setItem('access_token', response.access);
+        localStorage.setItem('refresh_token', response.refresh);
+        this.fetchCurrentUser(); // Get the user details
+      })
+    );
+  }
+
+  // 2. Register
+  register(userData: any) {
+    return this.http.post(`${this.apiUrl}/register/`, userData);
+  }
+
+  // 3. Fetch "Me"
+  fetchCurrentUser() {
+    this.http.get(`${this.apiUrl}/me/`).subscribe({
+      next: (user: any) => {
+        this.currentUserSubject.next(user);
+        localStorage.setItem('aegis_role', user.role); // Save role for synchronous guards
+      },
+      error: (err) => {
+        console.error("Auth check failed", err);
+        // Only logout if it's a 401/403 (unauthorized)
+        if (err.status === 401 || err.status === 403) {
+          this.logout();
+        }
+      }
+    });
+  }
+
+  // Load user on page refresh
+  private loadUserFromStorage() {
+    const token = this.getToken();
+    if (token) {
+      this.fetchCurrentUser();
     }
   }
 
-  login(selectedRole: 'admin' | 'parent') {
-    this.role.set(selectedRole);
-    localStorage.setItem('aegis_role', selectedRole);
-  }
-
-  logout() {
-    this.role.set(null);
-    localStorage.removeItem('aegis_role');
-    this.router.navigate(['/login']);
-  }
-
-  getRole() {
-    return this.role();
+  getToken() {
+    return localStorage.getItem('access_token');
   }
 
   isLoggedIn() {
-    return this.role() !== null;
+    return !!this.getToken();
+  }
+
+  getRole() {
+    // Return the role from the subject if loaded, otherwise fallback to storage
+    const user = this.currentUserSubject.value;
+    if (user && user.role) return user.role;
+    return localStorage.getItem('aegis_role');
+  }
+
+  logout() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('aegis_role');
+    this.currentUserSubject.next(null);
+    // Use relative path for internal routing
+    window.location.href = '/login';
   }
 }
+
+
+

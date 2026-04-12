@@ -89,7 +89,7 @@
                   [style.color]="getSenderRiskColor(contact.sender_risk_score)"
                   [style.background]="getSenderRiskColor(contact.sender_risk_score) + '20'"
                 >
-                  {{ contact.sender_risk_score.toFixed(2) }}
+                  {{ contact.sender_risk_score | percent:'1.0-0' }}
                 </span>
               </div>
             </td>
@@ -225,7 +225,7 @@
             {{ contact.sender_name }}
           </button>
           <span class="text-xs font-mono" [style.color]="getSenderRiskColor(contact.sender_risk_score)">
-            {{ contact.sender_risk_score.toFixed(2) }}
+            {{ contact.sender_risk_score | percent:'1.0-0' }}
           </span>
         </div>
 
@@ -330,12 +330,12 @@
 
       @if (msg.direction === 'outgoing') {
         <div class="flex justify-end">
-          <div class="bg-[var(--accent)] rounded-xl rounded-tr-sm px-4 py-3 max-w-sm">
+          <div class="bg-[#005c4b] text-white rounded-xl rounded-tr-sm px-4 py-3 max-w-sm shadow-sm border border-[#005c4b]/50">
             <div class="flex items-center justify-between gap-2 mb-1">
-              <span class="lang-chip">{{ msg.language }}</span>
-              <span class="text-xs text-white/60">{{ msg.sent_at }}</span>
+              <span class="lang-chip bg-white/10 text-white/90 border-white/10">{{ msg.language }}</span>
+              <span class="text-xs text-white/70">{{ msg.sent_at }}</span>
             </div>
-            <p class="text-sm text-white">{{ msg.content_preview }}</p>
+            <p class="text-sm text-white/95 leading-relaxed">{{ msg.content_preview }}</p>
           </div>
         </div>
       }
@@ -369,8 +369,8 @@
                 <div class="mt-2 flex items-center justify-between">
                   <span class="text-xs text-[var(--text-muted)]">{{ msg.sent_at }}</span>
                   <div class="flex items-center gap-2">
-                    @if (msg.toxicity_score !== null) {
-                      <span class="score-badge">tox {{ msg.toxicity_score.toFixed(2) }}</span>
+                    @if (msg.toxicity_score !== null && msg.toxicity_score !== undefined) {
+                      <span class="score-badge">tox {{ msg.toxicity_score | percent:'1.0-0' }}</span>
                     }
                     <span class="text-xs font-bold font-mono px-2 py-0.5 rounded" [ngClass]="getDecisionClass(msg.decision ?? '')">
                       {{ msg.decision }}
@@ -409,7 +409,7 @@
       <div class="grid grid-cols-2 gap-2 text-xs mb-4">
         <div class="drawer-meta"><span>Decision</span><strong>{{ alertMsg.decision }}</strong></div>
         <div class="drawer-meta"><span>Language</span><strong>{{ alertMsg.language }}</strong></div>
-        <div class="drawer-meta"><span>Toxicity</span><strong>{{ alertMsg.toxicity_score?.toFixed(2) ?? '-' }}</strong></div>
+        <div class="drawer-meta"><span>Toxicity</span><strong>{{ alertMsg.toxicity_score !== null && alertMsg.toxicity_score !== undefined ? (alertMsg.toxicity_score | percent:'1.0-0') : '-' }}</strong></div>
         <div class="drawer-meta"><span>Time</span><strong>{{ alertMsg.sent_at }}</strong></div>
       </div>
 

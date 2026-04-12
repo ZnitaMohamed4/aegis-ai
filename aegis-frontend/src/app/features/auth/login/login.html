@@ -1,37 +1,40 @@
 <div class="login-wrapper">
   <div class="login-card">
     <div class="login-header">
-      <div class="logo-circle">
-        <i class="pi pi-shield"></i>
+      <div class="logo-mark">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
       </div>
       <h1 class="login-title">AegisAI</h1>
-      <p class="login-subtitle">Select your role to continue into the dashboard.</p>
+      <p class="login-subtitle">Sign in to your account</p>
     </div>
 
-    <div class="role-buttons">
-      <button class="role-btn admin-btn" (click)="loginAs('admin')">
-        <div class="btn-icon">
-          <i class="pi pi-lock"></i>
+    <form (ngSubmit)="onSubmit()" class="login-form">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <div class="input-wrapper">
+          <i class="pi pi-user input-icon"></i>
+          <input type="text" id="username" [(ngModel)]="username" name="username" class="form-control" placeholder="Enter your username" required>
         </div>
-        <div class="btn-text">
-          <span class="btn-primary">Continue as Admin</span>
-          <span class="btn-secondary">Platform monitoring & configuration</span>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <div class="input-wrapper">
+          <i class="pi pi-lock input-icon"></i>
+          <input type="password" id="password" [(ngModel)]="password" name="password" class="form-control" placeholder="Enter your password" required>
         </div>
+      </div>
+
+      <div class="error-message" *ngIf="errorMessage">
+        <i class="pi pi-exclamation-circle"></i> {{ errorMessage }}
+      </div>
+
+      <button type="submit" class="primary-btn" [disabled]="isLoading || !username || !password">
+        <i class="pi pi-spin pi-spinner" *ngIf="isLoading" style="margin-right: 0.5rem"></i>
+        {{ isLoading ? 'Authenticating...' : 'Sign In' }}
       </button>
-
-      <button class="role-btn parent-btn" (click)="loginAs('parent')">
-        <div class="btn-icon">
-          <i class="pi pi-users"></i>
-        </div>
-        <div class="btn-text">
-          <span class="btn-primary">Continue as Parent</span>
-          <span class="btn-secondary">Safety alerts & risk insights</span>
-        </div>
-      </button>
-    </div>
-
-    <div class="login-footer">
-      <p>This is a simulated authentication experience for demonstration purposes.</p>
-    </div>
+    </form>
   </div>
 </div>

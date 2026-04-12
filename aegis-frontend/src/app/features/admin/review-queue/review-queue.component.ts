@@ -1,242 +1,115 @@
-import { Component, signal, computed, HostListener, OnInit } from '@angular/core';
+import { Component, signal, computed, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../../core/services/api.service';
-import { SimilarDecision, QueueReason, RiskLevel } from './review-queue.data';
+import { AlertService, WebSocketAlertPayload } from '../../../core/services/alert.service';
+import { MessageService, ConfirmationService } from 'primeng/api';
+import { QueueReason, RiskLevel } from './review-queue.data';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-review-queue',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   templateUrl: './review-queue.html',
   styleUrl: './review-queue.css'
 })
-export class ReviewQueueComponent implements OnInit {
-
+export class ReviewQueueComponent implements OnInit, OnDestroy {
   items = signal<any[]>([]);
+  loading = signal(true);
+  submittingIds = signal<Set<string>>(new Set());
+  
   resolvedCount = signal(0);
   blockedCount = signal(0);
+  warnedCount = signal(0);
   allowedCount = signal(0);
   totalCount = 0;
 
-  // Flashcard mode
-  flashcardMode = signal(true);
-  currentIndex = signal(0);
-  animating = signal<'out-left' | 'out-right' | 'out-up' | null>(null);
+  // For the UI to store the local override state before submitting
+  localOverrides = signal<Record<string, { label: string, note: string }>>({});
 
-  // Track model agreement
-  modelAgreements = signal(0);
+  private apiService = inject(ApiService);
+  private alertService = inject(AlertService);
+  private messageService = inject(MessageService);
+  private confirmationService = inject(ConfirmationService);
+  private alertSub?: Subscription;
 
   pendingItems = computed(() => this.items());
-  currentItem = computed(() => this.items()[this.currentIndex()]);
-
-  avgConfidence = computed(() => {
-    const list = this.items();
-    if (list.length === 0) return 0;
-    return list.reduce((sum, i) => sum + i.confidence_score, 0) / list.length;
-  });
-
-  progressPercent = computed(() => {
-    if (this.totalCount === 0) return 100;
-    return (this.resolvedCount() / this.totalCount) * 100;
-  });
-
-  agreementPercent = computed(() => {
-    const reviewed = this.resolvedCount();
-    if (reviewed === 0) return 0;
-    return Math.round((this.modelAgreements() / reviewed) * 100);
-  });
-
-  constructor(private apiService: ApiService) {}
 
   ngOnInit() {
-    this.apiService.getLLMAudits().subscribe({
+    this.loadQueue();
+
+    // Live WebSocket updates: Auto-add new HUMAN_REVIEW items
+    this.alertSub = this.alertService.alerts$.subscribe((alert: WebSocketAlertPayload) => {
+      const decision = (alert.decision || '').toUpperCase();
+      if (decision === 'HUMAN_REVIEW' || decision === 'REVISE') {
+        // Refetch the queue to get the full item data
+        this.apiService.getReviewQueue().subscribe({
+          next: (data) => {
+            this.items.set(data);
+            this.totalCount = data.length + this.resolvedCount();
+            this.syncOverrides(data);
+            
+            // Notify admin of new item
+            this.messageService.add({
+              severity: 'info',
+              summary: 'New Item in Queue',
+              detail: `A ${decision} message needs your attention.`,
+              life: 5000,
+              icon: 'pi pi-inbox'
+            });
+          }
+        });
+      }
+    });
+  }
+
+  ngOnDestroy() {
+    if (this.alertSub) this.alertSub.unsubscribe();
+  }
+
+  private loadQueue() {
+    this.loading.set(true);
+    this.apiService.getReviewQueue().subscribe({
       next: (data) => {
         this.items.set(data);
         this.totalCount = data.length;
+        this.syncOverrides(data);
+        this.loading.set(false);
       },
-      error: (err) => console.error('Failed to load LLM Audits:', err)
-    });
-  }
-
-  // Keyboard shortcuts: B = Block, A = Allow, S = Skip
-  @HostListener('document:keydown', ['$event'])
-  handleKeyboardShortcut(event: KeyboardEvent) {
-    if (!this.flashcardMode() || this.animating() || !this.currentItem()) return;
-    
-    const key = event.key.toLowerCase();
-    if (key === 'b') {
-      event.preventDefault();
-      this.confirmBlock(this.currentItem()!);
-    } else if (key === 'a') {
-      event.preventDefault();
-      this.allowMessage(this.currentItem()!);
-    } else if (key === 's') {
-      event.preventDefault();
-      this.skipItem();
-    }
-  }
-
-  getBlockPercent(label: string): number {
-    return 0; // Mock disabled
-  }
-
-  getQueueReasonLabel(reason: QueueReason): string {
-    return reason === 'SCORE_AMBIGU' ? 'SCORE AMBIGU' : 'LANGUE NON IDENTIFIABLE';
-  }
-
-  getQueueReasonColor(reason: QueueReason): string {
-    return reason === 'SCORE_AMBIGU' ? '#FFB020' : '#A78BFA';
-  }
-
-  getRiskLevelColor(level: RiskLevel): string {
-    const map: Record<RiskLevel, string> = {
-      'low': '#10D9A0',
-      'medium': '#FFB020',
-      'high': '#FF7A30',
-      'critical': '#FF4D4D'
-    };
-    return map[level];
-  }
-
-  getRiskLevelLabel(level: RiskLevel): string {
-    const map: Record<RiskLevel, string> = {
-      'low': 'Low Risk',
-      'medium': 'Medium Risk',
-      'high': 'High Risk',
-      'critical': 'Critical'
-    };
-    return map[level];
-  }
-
-  getWaitingTime(submittedAt: string): { text: string; isUrgent: boolean } {
-    const submitted = new Date(submittedAt);
-    const now = new Date();
-    const diffMs = now.getTime() - submitted.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const hours = Math.floor(diffMins / 60);
-    const mins = diffMins % 60;
-
-    let text: string;
-    if (hours > 0) {
-      text = `waiting ${hours}h ${mins}min`;
-    } else {
-      text = `waiting ${mins}min`;
-    }
-
-    return { text, isUrgent: diffMins > 30 };
-  }
-
-  getScoreColor(score: number): string {
-    if (score >= 0.7) return '#FF4D4D';
-    if (score >= 0.5) return '#FFB020';
-    return '#10D9A0';
-  }
-
-  confirmBlock(item: any) {
-    if (item.decision === 'BLOCK') {
-      // Already blocked, just dismiss
-      this.blockedCount.update(c => c + 1);
-      if (this.flashcardMode()) {
-        this.animateAndRemove(item, 'out-left');
-      } else {
-        this.removeItem(item);
-      }
-      return;
-    }
-
-    this.apiService.overrideLLMDecision(item.id, 'BLOCK').subscribe({
-      next: () => {
-        this.blockedCount.update(c => c + 1);
-        if (this.flashcardMode()) {
-          this.animateAndRemove(item, 'out-left');
-        } else {
-          this.removeItem(item);
-        }
+      error: (err) => {
+        console.error('Failed to load Review Queue:', err);
+        this.loading.set(false);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Connection Error',
+          detail: 'Failed to load the review queue. Is the backend running?',
+          life: 6000
+        });
       }
     });
   }
 
-  allowMessage(item: any) {
-    if (item.decision === 'ALLOW') {
-      // Already allowed, just dismiss
-      this.allowedCount.update(c => c + 1);
-      if (this.flashcardMode()) {
-        this.animateAndRemove(item, 'out-right');
-      } else {
-        this.removeItem(item);
-      }
-      return;
+  private syncOverrides(data: any[]) {
+    const overrides: any = {};
+    for (const item of data) {
+      overrides[item.id] = {
+        label: item.primary_class || 'safe',
+        note: ''
+      };
     }
-
-    this.apiService.overrideLLMDecision(item.id, 'ALLOW').subscribe({
-      next: () => {
-        this.allowedCount.update(c => c + 1);
-        if (this.flashcardMode()) {
-          this.animateAndRemove(item, 'out-right');
-        } else {
-          this.removeItem(item);
-        }
-      }
-    });
-  }
-
-  skipItem() {
-    this.animating.set('out-up');
-    setTimeout(() => {
-      this.animating.set(null);
-      const list = this.items();
-      if (list.length <= 1) return;
-      // Move current item to end
-      const current = list[this.currentIndex()];
-      this.items.update(l => {
-        const copy = [...l];
-        copy.splice(this.currentIndex(), 1);
-        copy.push(current);
-        return copy;
-      });
-      if (this.currentIndex() >= this.items().length) {
-        this.currentIndex.set(0);
-      }
-    }, 250);
-  }
-
-  private animateAndRemove(item: any, direction: 'out-left' | 'out-right') {
-    this.animating.set(direction);
-    setTimeout(() => {
-      this.animating.set(null);
-      this.removeItem(item);
-    }, 250);
-  }
-
-  private removeItem(item: any) {
-    this.items.update(list => list.filter(i => i.id !== item.id));
-    this.resolvedCount.update(c => c + 1);
-    if (this.currentIndex() >= this.items().length && this.items().length > 0) {
-      this.currentIndex.set(0);
-    }
-  }
-
-  toggleMode() {
-    this.flashcardMode.update(v => !v);
-    this.currentIndex.set(0);
-  }
-
-  getConfidenceColor(score: number): string {
-    if (score >= 0.72) return '#FF7A30';
-    if (score >= 0.68) return '#FFB020';
-    return '#7A9CC9';
+    this.localOverrides.set(overrides);
   }
 
   getLabelColor(label: string): string {
     const map: Record<string, string> = {
-      'Threat': '#FF4D4D',
-      'Verbal Harassment': '#FF7A30',
-      'Sexual Harassment': '#A78BFA',
-      'Discrimination': '#4F7FFF',
-      'Safe': '#10D9A0'
+      'threat': '#FF4D4D',
+      'verbal_harassment': '#FF7A30',
+      'sexual_harassment': '#A78BFA',
+      'discrimination': '#4F7FFF',
+      'safe': '#10D9A0'
     };
-    return map[label] ?? '#7A9CC9';
+    return map[label.toLowerCase()] ?? '#7A9CC9';
   }
 
   formatTime(dateStr: string): string {
@@ -245,12 +118,122 @@ export class ReviewQueueComponent implements OnInit {
       ' · ' + date.toLocaleDateString('en', { month: 'short', day: 'numeric' });
   }
 
-  formatPrevMessageTime(dateStr: string): string {
-    const date = new Date(dateStr);
-    return date.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' });
+  isSubmitting(itemId: string): boolean {
+    return this.submittingIds().has(itemId);
   }
 
-  getConfidenceWidth(score: number): string {
-    return `${score * 100}%`;
+  confirmAndSubmit(item: any, finalDecision: string) {
+    const decisionLabel = finalDecision === 'BLOCK' ? 'Block' : finalDecision === 'WARN' ? 'Warn' : 'Allow (Safe)';
+    const decisionColor = finalDecision === 'BLOCK' ? 'danger' : finalDecision === 'WARN' ? 'warning' : 'success';
+    const override = this.localOverrides()[item.id] || { label: item.primary_class, note: '' };
+    
+    this.confirmationService.confirm({
+      message: `Are you sure you want to <strong>${decisionLabel}</strong> this message?<br/><br/>
+        <em>"${(item.raw_text || '').substring(0, 80)}${item.raw_text?.length > 80 ? '...' : ''}"</em><br/><br/>
+        Label: <strong>${(override.label || 'unchanged').replace(/_/g, ' ')}</strong>`,
+      header: 'Confirm Override',
+      icon: finalDecision === 'BLOCK' ? 'pi pi-ban' : finalDecision === 'WARN' ? 'pi pi-exclamation-triangle' : 'pi pi-check',
+      acceptLabel: decisionLabel,
+      rejectLabel: 'Cancel',
+      accept: () => this.submitOverride(item, finalDecision),
+    });
+  }
+
+  submitOverride(item: any, finalDecision: string) {
+    const override = this.localOverrides()[item.id] || { label: item.primary_class, note: '' };
+    
+    // Mark as submitting
+    this.submittingIds.update(ids => {
+      const next = new Set(ids);
+      next.add(item.id);
+      return next;
+    });
+
+    this.apiService.humanOverride(item.id, finalDecision, override.label, override.note).subscribe({
+      next: (res) => {
+        if (finalDecision === 'BLOCK') this.blockedCount.update(c => c + 1);
+        else if (finalDecision === 'WARN') this.warnedCount.update(c => c + 1);
+        else if (finalDecision === 'ALLOW') this.allowedCount.update(c => c + 1);
+        
+        this.resolvedCount.update(c => c + 1);
+        this.items.update(list => list.filter(i => i.id !== item.id));
+
+        // Remove from submittingIds
+        this.submittingIds.update(ids => {
+          const next = new Set(ids);
+          next.delete(item.id);
+          return next;
+        });
+
+        const decisionLabel = finalDecision === 'BLOCK' ? 'Blocked' : finalDecision === 'WARN' ? 'Warned' : 'Allowed';
+        this.messageService.add({
+          severity: finalDecision === 'BLOCK' ? 'error' : finalDecision === 'WARN' ? 'warn' : 'success',
+          summary: `Override Applied: ${decisionLabel}`,
+          detail: res.original_ai_decision 
+            ? `AI originally decided ${res.original_ai_decision} → You overrode to ${finalDecision}. Saved for retraining.` 
+            : `Decision changed to ${finalDecision}. Label: ${override.label.replace(/_/g, ' ')}.`,
+          life: 4000
+        });
+      },
+      error: (err) => {
+        // Remove from submittingIds
+        this.submittingIds.update(ids => {
+          const next = new Set(ids);
+          next.delete(item.id);
+          return next;
+        });
+
+        const errorMsg = err.error?.reason || err.message || 'Unknown error';
+        
+        // Handle 409 Conflict (already reviewed)
+        if (err.status === 409) {
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Already Reviewed',
+            detail: `Another admin already reviewed this message. Refreshing queue...`,
+            life: 5000
+          });
+          // Refresh the queue
+          this.loadQueue();
+        } else {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Override Failed',
+            detail: `Could not apply override: ${errorMsg}`,
+            life: 5000
+          });
+        }
+      }
+    });
+  }
+
+  updateLocalLabel(itemId: string, newLabel: string) {
+    this.localOverrides.update(current => {
+      return { 
+        ...current, 
+        [itemId]: { ...current[itemId], label: newLabel } 
+      };
+    });
+  }
+
+  updateLocalNote(itemId: string, newNote: string) {
+    this.localOverrides.update(current => {
+      return { 
+        ...current, 
+        [itemId]: { ...current[itemId], note: newNote } 
+      };
+    });
+  }
+
+  getDecisionIcon(decision: string): string {
+    const map: Record<string, string> = {
+      'BLOCK': 'pi-ban',
+      'ESCALATE': 'pi-arrow-up-right',
+      'WARN': 'pi-exclamation-triangle',
+      'REVISE': 'pi-eye',
+      'HUMAN_REVIEW': 'pi-user',
+      'ALLOW': 'pi-check'
+    };
+    return map[decision] ?? 'pi-question-circle';
   }
 }

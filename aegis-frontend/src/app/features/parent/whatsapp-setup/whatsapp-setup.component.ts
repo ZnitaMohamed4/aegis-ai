@@ -1,5 +1,6 @@
-import { Component, signal, OnDestroy } from '@angular/core';
+import { Component, signal, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { WhatsappService } from '../../../core/services/whatsapp.service';
 
 @Component({
   selector: 'app-whatsapp-setup',
@@ -8,15 +9,16 @@ import { CommonModule } from '@angular/common';
   templateUrl: './whatsapp-setup.html',
   styleUrls: ['./whatsapp-setup.css']
 })
-export class WhatsappSetupComponent implements OnDestroy {
-  connectionStatus = signal<'idle' | 'qr_displayed' | 'connected'>('idle');
+export class WhatsappSetupComponent implements OnInit, OnDestroy {
+  connectionStatus = signal<'loading_initial' | 'idle' | 'loading' | 'qr_displayed' | 'connected'>('loading_initial');
+  qrCodeBase64 = signal<string>(''); // We will store the real QR image here!
   
   // Timer for QR expiry
   qrTimeRemaining = signal<number>(45);
   qrInterval: any;
 
-  // Mock data for success state
-  connectedNumber = '+212 612 345 678';
+  // Data for success state
+  connectedNumber = 'Loading...';
   connectionDate = new Date().toLocaleDateString(undefined, { 
     year: 'numeric', month: 'short', day: 'numeric', 
     hour: '2-digit', minute: '2-digit' 
@@ -24,9 +26,55 @@ export class WhatsappSetupComponent implements OnDestroy {
 
   showDisconnectDialog = signal<boolean>(false);
 
+  constructor(private whatsappService: WhatsappService) {}
+
+  ngOnInit() {
+    this.checkCurrentStatus();
+  }
+
+  checkCurrentStatus() {
+    this.whatsappService.checkConnectionStatus().subscribe({
+      next: (res) => {
+        if (res.connected) {
+          if (res.number) {
+            this.connectedNumber = res.number;
+          }
+          this.connectionStatus.set('connected');
+        } else {
+          this.connectionStatus.set('idle');
+        }
+      },
+      error: () => {
+        this.connectionStatus.set('idle');
+      }
+    });
+  }
+
   generateQr() {
-    this.connectionStatus.set('qr_displayed');
-    this.startQrTimer();
+    this.connectionStatus.set('loading');
+    
+    // Call the backend endpoint
+    this.whatsappService.getQRCode().subscribe({
+      next: (response) => {
+        // Evolution API has slightly different names depending on version:
+        const qrImage = response.base64 || response.qrcode || response.code || (response.data && response.data.qrcode);
+        
+        if (qrImage) {
+          this.qrCodeBase64.set(qrImage);
+          this.connectionStatus.set('qr_displayed');
+          this.startQrTimer();
+        } else {
+          console.error("Failed to extract QR from response", response);
+          this.connectionStatus.set('idle');
+          alert("Could not load QR code. Try again.");
+        }
+      },
+      error: (err) => {
+        console.error("API error", err);
+        this.connectionStatus.set('idle');
+        alert("Server error linking WhatsApp.");
+      }
+    });
   }
 
   startQrTimer() {
@@ -42,10 +90,39 @@ export class WhatsappSetupComponent implements OnDestroy {
         return t - 1;
       });
     }, 1000);
+
+    this.startPolling();
+  }
+
+  statusInterval: any;
+
+  startPolling() {
+    if (this.statusInterval) clearInterval(this.statusInterval);
+    
+    this.statusInterval = setInterval(() => {
+      this.whatsappService.checkConnectionStatus().subscribe({
+        next: (res) => {
+          if (res.connected) {
+            this.clearTimer();
+            this.clearStatusPolling();
+            if (res.number) {
+              this.connectedNumber = res.number;
+            }
+            this.connectionStatus.set('connected');
+          }
+        }
+      });
+    }, 3000);
+  }
+
+  clearStatusPolling() {
+    if (this.statusInterval) {
+      clearInterval(this.statusInterval);
+    }
   }
 
   refreshQr() {
-    this.startQrTimer();
+    this.generateQr();
   }
 
   simulateScan() {
@@ -75,5 +152,6 @@ export class WhatsappSetupComponent implements OnDestroy {
 
   ngOnDestroy() {
     this.clearTimer();
+    this.clearStatusPolling();
   }
 }

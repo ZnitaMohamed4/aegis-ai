@@ -46,7 +46,6 @@ export const routes: Routes = [
       { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
       { path: 'dashboard', loadComponent: () => import('@features/parent/dashboard/dashboard.component').then(c => c.DashboardComponent) },
       { path: 'alerts', loadComponent: () => import('@features/parent/alerts/alerts.component').then(c => c.AlertsComponent) },
-      { path: 'blocked-messages', loadComponent: () => import('@features/parent/blocked-messages/blocked-messages.component').then(c => c.BlockedMessagesComponent) },
       { path: 'conversations', loadComponent: () => import('@features/parent/conversations/conversations.component').then(c => c.ConversationsComponent) },
       { path: 'reports', loadComponent: () => import('@features/parent/reports/reports.component').then(c => c.ReportsComponent) },
       { path: 'risk-profile', loadComponent: () => import('@features/parent/risk-profile/risk-profile.component').then(c => c.RiskProfileComponent) },

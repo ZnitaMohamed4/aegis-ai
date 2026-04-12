@@ -329,6 +329,8 @@ export interface FeedEvent {
   type: FeedEventType;
   icon: string;
   text: string;
+  fullText?: string;
+  flagged?: boolean;
 }
 
 const FEED_POOL: Omit<FeedEvent, 'id' | 'time'>[] = [

@@ -111,3 +111,115 @@ def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision
         logger.error(f"[AEGIS] ❌ Error sending warning: {e}")
         
     return False
+
+
+def send_parent_alert(instance_name, parent_phone_number, child_name, category, text):
+    """
+    Sends an immediate critical alert to the parent's actual WhatsApp via Evolution API.
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    
+    if not api_key:
+        return False
+        
+    url = f"{api_url}/message/sendText/{instance_name}"
+    
+    headers = {
+        "apikey": api_key,
+        "Content-Type": "application/json"
+    }
+
+    warning_text = (
+        f"🚨 *AEGIS CRITICAL ALERT* 🚨\n\n"
+        f"A severely harmful message categorized as *{category.replace('_', ' ').title()}* "
+        f"was just intercepted on {child_name}'s device.\n\n"
+        f"📝 _Preview_: \"{text[:100]}...\"\n\n"
+        f"Please check your AEGIS Dashboard immediately."
+    )
+    
+    clean_number = str(parent_phone_number).replace("+", "").replace("-", "").replace(" ", "")
+    
+    payload = {
+        "number": clean_number,
+        "text": warning_text
+    }
+
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code in [200, 201]:
+            logger.info(f"[AEGIS] 🚨 Successfully sent parent alert to {clean_number}")
+            return True
+    except Exception as e:
+        logger.error(f"[AEGIS] ❌ Error sending parent alert: {e}")
+        
+    return False
+
+
+def create_whatsapp_instance(instance_name):
+    """
+    Step 1: Create the instance in Evolution API.
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    url = f"{api_url}/instance/create"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    payload = {
+        "instanceName": instance_name,
+        "integration": "WHATSAPP-BAILEYS",
+        "qrcode": True
+    }
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to create instance: {e}")
+        return None
+
+def get_qr_code(instance_name):
+    """
+    Step 2: Get the QR code base64 string for the scan.
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    url = f"{api_url}/instance/connect/{instance_name}"
+    headers = {"apikey": api_key}
+    try:
+        response = requests.get(url, headers=headers)
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to get QR: {e}")
+        return None
+
+def check_connection_status(instance_name):
+    """
+    Checks if the instance is currently 'open' (connected) or still 'close'.
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    url = f"{api_url}/instance/connectionState/{instance_name}"
+    headers = {"apikey": api_key}
+    try:
+        response = requests.get(url, headers=headers)
+        return response.json()
+    except Exception as e:
+        logger.error(f"Failed to check connection: {e}")
+        return None
+
+def get_instance_details(instance_name):
+    """
+    Fetches the instance details to get the connected phone number.
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    url = f"{api_url}/instance/fetchInstances?instanceName={instance_name}"
+    headers = {"apikey": api_key}
+    try:
+        response = requests.get(url, headers=headers)
+        data = response.json()
+        if data and isinstance(data, list) and len(data) > 0:
+            return data[0]
+        return None
+    except Exception as e:
+        logger.error(f"Failed to get instance details: {e}")
+        return None

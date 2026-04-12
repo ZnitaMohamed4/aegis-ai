@@ -5,38 +5,45 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def analyze_grey_zone(raw_text, primary_class, confidence, m1_score):
     """
-    Agent 3: Called when M2 confidence is below 0.75!
-    Asks Groq's Mixtral model for a final decision.
+    Agent 3: Called when M2 confidence is below 0.75.
+    Returns one of: BLOCK, WARN, ALLOW, HUMAN_REVIEW
+    HUMAN_REVIEW means the LLM itself is too uncertain — send to human admin.
     """
     api_key = os.getenv('GROQ_API_KEY')
     model = os.getenv('GROQ_MODEL', 'mixtral-8x7b-32768')
-    
+
     if not api_key:
-        logger.error("[AEGIS] ❌ GROQ API KEY MISSING")
-        return {"decision": "REVISE", "category": primary_class, "explanation": "API Key missing."}
+        logger.error("[AEGIS] GROQ API KEY MISSING")
+        return {"decision": "HUMAN_REVIEW", "category": primary_class, "explanation": "API Key missing, sent to human review."}
 
-    # The Prompt - High Precision, Minimal Length
-    # High-Precision Kernel Directive
-    prompt = f"""[SYSTEM: AEGIS CORE]
-Resolve ML Classifier ambiguity. Default to independent verification.
-DATA: {{msg: "{raw_text}", suggestion: {primary_class}, confidence: {confidence:.2f}}}
+    prompt = f"""[AEGIS CHILD-SAFETY CLASSIFIER — STRICT MODE]
+You protect children on WhatsApp. A message was flagged as potentially harmful.
 
-SEMANTIC BOUNDARIES:
-1. THREAT: Implied/direct physical violence or real-world consequence.
-2. DISCRIMINATION: Must target a SPECIFIC protected characteristic (race, religion, gender, family). If no specific identity is clear, default to verbal_harassment.
-3. SEXUAL_HARASSMENT: Predatory avancées, advances, or objectification. Categorize as this even if disguised as a compliment (e.g. "you look hot").
-4. VERBAL_HARASSMENT: General insults or rudeness WITHOUT targeting a protected identity or physical harm.
-5. SAFE: Sarcasm, friendly banter, or benign criticism.
+Message: "{raw_text}"
+ML suggestion: {primary_class} | M2 confidence: {confidence:.2f} | M1 toxicity: {m1_score:.2f}
 
-DECISION TREE:
-- Hard identifiers (Identity/Violence) -> BLOCK.
-- General Personal Insults -> WARN.
-- No clear harm -> ALLOW.
+Classify into exactly ONE category using STRICT definitions:
 
-OUTPUT ONLY JSON:
-{{"decision": "BLOCK|WARN|ALLOW", "category": "threat|sexual_harassment|discrimination|verbal_harassment", "explanation": "Logic summary."}}"""
+THREAT: Direct or implied physical violence or real-world harm (e.g. "I will hurt you", "I'll kill you").
+SEXUAL_HARASSMENT: Any sexual advance, objectification, explicit content, predatory compliments, requests for intimacy, bed/sex references, or age-restricted content directed at someone (e.g. "I want you in my bed", "send me pics", "can we have +18 chat", "you look so hot").
+DISCRIMINATION: Hatred targeting a protected group (race, religion, gender, nationality).
+VERBAL_HARASSMENT: General insults, rudeness, threats without physical component or sexual element.
+SAFE: Clearly benign — sarcasm, friendly chat, complaints without targeting anyone.
+
+Decision rules — apply in order:
+1. If the message is CLEARLY sexual in nature → BLOCK + sexual_harassment
+2. If it contains physical threat → BLOCK + threat
+3. If it is clearly a general insult/rude → WARN + verbal_harassment
+4. If it is clearly safe/benign → ALLOW + safe
+5. If you are GENUINELY UNSURE even after analysis (context is ambiguous, could be either harmful or safe) → respond with HUMAN_REVIEW
+
+IMPORTANT: If you choose HUMAN_REVIEW, set explanation to a single phrase explaining WHY it is ambiguous.
+
+Respond ONLY in valid JSON. Explanation max 12 words:
+{{"decision": "BLOCK|WARN|ALLOW|HUMAN_REVIEW", "category": "threat|sexual_harassment|discrimination|verbal_harassment|safe", "explanation": "<12 words max>"}}"""
 
     try:
         response = requests.post(
@@ -48,27 +55,35 @@ OUTPUT ONLY JSON:
             json={
                 "model": model,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.1, # Keep it extremely logical, no creativity
-                "max_tokens": 150
+                "temperature": 0.0,   # Fully deterministic
+                "max_tokens": 80
             },
-            timeout=5 # Don't hang the system if Groq is down
+            timeout=5
         )
-        
-        # Parse the JSON response
+
         if response.status_code != 200:
-            logger.error(f"[AEGIS] ❌ Groq API Rejected: {response.text}")
-            return {"decision": "REVISE", "category": primary_class, "explanation": "Groq API Error"}
-            
+            logger.error(f"[AEGIS] Groq API Rejected: {response.text}")
+            return {"decision": "HUMAN_REVIEW", "category": primary_class, "explanation": "Groq API error, sent to human review."}
+
         data = response.json()
         content = data["choices"][0]["message"]["content"].strip()
 
-        
-        # Sometime LLMs wrap json in markdown blocks ```json 
-        if content.startswith("```json"):
-            content = content.replace("```json", "").replace("```", "").strip()
-            
-        return json.loads(content)
-        
+        # Strip markdown code fences if present
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip()
+
+        parsed = json.loads(content)
+
+        # Ensure decision is one of the valid values
+        valid_decisions = {"BLOCK", "WARN", "ALLOW", "HUMAN_REVIEW"}
+        if parsed.get("decision", "").upper() not in valid_decisions:
+            parsed["decision"] = "HUMAN_REVIEW"
+
+        return parsed
+
     except Exception as e:
-        logger.error(f"[AEGIS] ❌ Groq LLM Error: {e}")
-        return {"decision": "REVISE", "category": primary_class, "explanation": "LLM failed or timed out."}
+        logger.error(f"[AEGIS] Groq LLM Error: {e}")
+        return {"decision": "HUMAN_REVIEW", "category": primary_class, "explanation": "LLM failed, sent to human review."}

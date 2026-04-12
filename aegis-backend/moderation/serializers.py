@@ -1,17 +1,169 @@
 from rest_framework import serializers
-from .models import ModerationResult, UserBehaviorProfile, SecurityAlert
+from .models import (
+    AegisUser, ParentProfile, MonitoredChild,
+    Conversation, Message,
+    ModerationResult, HarassmentCategory,
+    UserBehaviorProfile, BehavioralSnapshot,
+    SecurityAlert,
+    ChatSession, ChatMessage,
+)
+from django.contrib.auth.password_validation import validate_password
+from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
+from .models import AegisUser, ParentProfile
+
+
+
+# ── Package 1: Users ──
+
+class AegisUserSerializer(serializers.ModelSerializer):
+    """Serializer for user details."""
+    class Meta:
+        model = AegisUser
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 'language_preference', 'phone_number')
+        read_only_fields = ('id', 'role')
+
+
+class ParentProfileSerializer(serializers.ModelSerializer):
+    user = AegisUserSerializer(read_only=True)
+
+    class Meta:
+        model = ParentProfile
+        fields = '__all__'
+
+
+class MonitoredChildSerializer(serializers.ModelSerializer):
+    risk_level = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MonitoredChild
+        fields = '__all__'
+
+    def get_risk_level(self, obj):
+        return obj.get_risk_level()
+
+
+# ── Package 2: Messaging ──
+
+class MessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Message
+        fields = '__all__'
+
+
+class ConversationSerializer(serializers.ModelSerializer):
+    last_message = serializers.SerializerMethodField()
+    blocked_count = serializers.SerializerMethodField()
+    total_messages = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Conversation
+        fields = '__all__'
+
+    def get_last_message(self, obj):
+        msg = obj.get_last_message()
+        return MessageSerializer(msg).data if msg else None
+
+    def get_blocked_count(self, obj):
+        return obj.get_blocked_count()
+
+    def get_total_messages(self, obj):
+        return obj.messages.count()
+
+
+# ── Package 3: Moderation ──
+
+class HarassmentCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HarassmentCategory
+        fields = '__all__'
+
 
 class ModerationResultSerializer(serializers.ModelSerializer):
     class Meta:
         model = ModerationResult
         fields = '__all__'
 
+
+# ── Package 4: Behavioral ──
+
 class UserBehaviorProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserBehaviorProfile
         fields = '__all__'
 
+
+class BehavioralSnapshotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BehavioralSnapshot
+        fields = '__all__'
+
+
+# ── Package 5: Alerts ──
+
 class SecurityAlertSerializer(serializers.ModelSerializer):
     class Meta:
         model = SecurityAlert
         fields = '__all__'
+
+
+# ── Package 6: Chatbot ──
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatMessage
+        fields = '__all__'
+
+
+class ChatSessionSerializer(serializers.ModelSerializer):
+    messages = ChatMessageSerializer(many=True, read_only=True)
+    message_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChatSession
+        fields = '__all__'
+
+    def get_message_count(self, obj):
+        return obj.get_message_count()
+
+
+
+class ParentRegisterSerializer(serializers.ModelSerializer):
+    """Serializer to securely register a new Parent."""
+    email = serializers.EmailField(
+        required=True,
+        validators=[UniqueValidator(queryset=AegisUser.objects.all())]
+    )
+    password = serializers.CharField(
+        write_only=True, required=True, validators=[validate_password]
+    )
+    password_confirm = serializers.CharField(write_only=True, required=True)
+
+    class Meta:
+        model = AegisUser
+        fields = ('username', 'email', 'password', 'password_confirm', 'first_name', 'last_name', 'phone_number')
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password_confirm']:
+            raise serializers.ValidationError({"password": "Password fields didn't match."})
+        return attrs
+
+    def create(self, validated_data):
+        # Remove password_confirm from data
+        validated_data.pop('password_confirm')
+        
+        # Create user (role defaults to PARENT)
+        user = AegisUser.objects.create(
+            username=validated_data['username'],
+            email=validated_data['email'],
+            first_name=validated_data.get('first_name', ''),
+            last_name=validated_data.get('last_name', ''),
+            phone_number=validated_data.get('phone_number', ''),
+            role=AegisUser.Role.PARENT
+        )
+        user.set_password(validated_data['password'])  # Hash the password
+        user.save()
+        # Profile is created automatically via signal here -> ParentProfile
+        return user
+
+

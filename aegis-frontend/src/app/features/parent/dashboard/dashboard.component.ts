@@ -1,62 +1,452 @@
-import { Component, signal, OnInit, OnDestroy } from '@angular/core';
+import { Component, signal, OnInit, OnDestroy, inject, ViewChildren, QueryList, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
-import { ChartModule } from 'primeng/chart';
+import { ChartModule, UIChart } from 'primeng/chart';
+import { SkeletonModule } from 'primeng/skeleton';
+import { DialogModule } from 'primeng/dialog';
+import { ToastModule } from 'primeng/toast';
 import { getRiskHex, getDecisionClass } from '@shared/utils/severity.utils';
 import {
-  MOCK_RECENT_ALERTS, 
-  HARASSMENT_CHART_DATA, HARASSMENT_CHART_OPTIONS,
-  WEEKLY_CHART_DATA, WEEKLY_CHART_OPTIONS,
-  FeedEvent, getNextFeedEvent
+  HARASSMENT_CHART_OPTIONS,
+  WEEKLY_CHART_OPTIONS,
+  HOURLY_CHART_OPTIONS,
+  LANGUAGE_CHART_OPTIONS,
+  FeedEvent
 } from '@features/admin/dashboard/dashboard.data';
+import { ApiService, ParentChildInfo } from '@core/services/api.service';
+import { AlertService, WebSocketAlertPayload } from '@core/services/alert.service';
+import { AuthService } from '@core/services/auth.service';
+import { Subscription } from 'rxjs';
+import { MessageService } from 'primeng/api';
 
 @Component({
-  selector: 'app-dashboard',
+  selector: 'app-parent-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, ChartModule],
+  imports: [CommonModule, RouterLink, ChartModule, SkeletonModule, DialogModule, ToastModule],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  // Parent-specific stats
-  stats = [
-    { label: 'Messages Monitored', value: '1,204', trend: '+12%', trendUp: true, icon: 'pi-comments', color: 'accent' },
-    { label: 'Threats Blocked', value: '14', trend: '-2', trendUp: true, icon: 'pi-shield', color: 'low' },
-    { label: 'Active Alerts', value: '3', trend: '+1', trendUp: false, icon: 'pi-bell', color: 'critical' },
-    { label: 'Current Risk Level', value: 'Low', trend: 'Stable', trendUp: true, icon: 'pi-chart-line', color: 'low' }
-  ];
+  @ViewChildren(UIChart) charts!: QueryList<UIChart>;
 
-  recentAlerts = MOCK_RECENT_ALERTS.slice(0, 4);
-  harassmentChartData = HARASSMENT_CHART_DATA;
+  // Child info from backend
+  childInfo: ParentChildInfo | null = null;
+  childName: string = 'Your Child';
+
+  // Stats
+  stats: any[] | null = null;
+  recentAlerts: any[] | null = null;
+
+  // Charts
+  harassmentChartData: any = null;
   harassmentChartOptions = HARASSMENT_CHART_OPTIONS;
-  weeklyChartData = WEEKLY_CHART_DATA;
+  weeklyChartData: any = null;
   weeklyChartOptions = WEEKLY_CHART_OPTIONS;
+  hourlyChartData: any = null;
+  hourlyChartOptions = HOURLY_CHART_OPTIONS;
+  languageChartData: any = null;
+  languageChartOptions = LANGUAGE_CHART_OPTIONS;
 
+  // Risky contacts
+  riskyContacts: any[] | null = null;
+
+  // Severity utils
   getRiskHex = getRiskHex;
   getDecisionClass = getDecisionClass;
 
-  // Live activity feed simulation
+  // Live activity feed
   feedEvents = signal<FeedEvent[]>([]);
-  private feedCounter = 0;
-  private feedInterval: any;
-  private readonly MAX_FEED = 15;
+  private readonly MAX_FEED = 5;
+  feedDialogVisible: boolean = false;
+  selectedFeedEvent: FeedEvent | null = null;
+
+  // Services
+  private apiService = inject(ApiService);
+  private alertService = inject(AlertService);
+  private authService = inject(AuthService);
+  private cdr = inject(ChangeDetectorRef);
+  private messageService = inject(MessageService);
+  private alertSub?: Subscription;
 
   ngOnInit() {
-    for (let i = 0; i < 3; i++) {
-      this.feedCounter++;
-      this.feedEvents.update(list => [getNextFeedEvent(this.feedCounter), ...list]);
-    }
-    this.feedInterval = setInterval(() => {
-      this.feedCounter++;
+    // Show loading toast
+
+    // ── WebSocket: Live alerts (filter client-side to this parent's instance) ──
+    this.alertSub = this.alertService.alerts$.subscribe((alert: WebSocketAlertPayload) => {
+      // Build feed event text
+      let feedText = '';
+      let feedIcon = 'pi-info-circle';
+      const cleanText = (alert.text || "(Media/Sticker)").substring(0, 50) + "...";
+      const shortSender = alert.sender.split('@')[0];
+
+      if (alert.llm_triggered) {
+        const shortReason = (alert.llm_explanation || '').substring(0, 70) + ((alert.llm_explanation || '').length > 70 ? '…' : '');
+        feedText = `AI reviewed message from ${shortSender} — ${shortReason}`;
+        feedIcon = 'pi-bolt';
+      } else {
+        switch(alert.decision.toUpperCase()) {
+          case 'ALLOW':
+            feedText = `Message from ${shortSender} passed safely`;
+            feedIcon = 'pi-verified';
+            break;
+          case 'WARN':
+            feedText = `Warning issued for ${(alert.primary_class || '').replace(/_/g, ' ')} from ${shortSender}`;
+            feedIcon = 'pi-exclamation-triangle';
+            break;
+          case 'BLOCK':
+          case 'ESCALATE':
+            feedText = `🛡️ Blocked ${(alert.primary_class || '').replace(/_/g, ' ')} from ${shortSender}`;
+            feedIcon = 'pi-ban';
+            break;
+          default:
+            feedText = `Message analyzed from ${shortSender}`;
+        }
+      }
+
+      const newEvent: FeedEvent = {
+        id: alert.id,
+        time: new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        type: alert.decision.toLowerCase() as any,
+        icon: feedIcon,
+        text: feedText,
+        fullText: alert.llm_explanation ? `Message: ${alert.text}\n\nAI Analysis:\n${alert.llm_explanation}` : alert.text
+      };
+
       this.feedEvents.update(list => {
-        const next = [getNextFeedEvent(this.feedCounter), ...list];
+        const next = [newEvent, ...list];
         return next.slice(0, this.MAX_FEED);
       });
-    }, 8000);
+
+      // Live update recent alerts
+      if (this.recentAlerts && alert.type === 'alert') {
+        this.recentAlerts = [{
+          id: alert.id,
+          preview: alert.text.length > 50 ? alert.text.substring(0, 50) + "..." : alert.text,
+          severity: alert.severity,
+          category: alert.primary_class,
+          time: 'Just now',
+          decision: alert.decision.toUpperCase()
+        }, ...this.recentAlerts].slice(0, 5);
+      }
+
+      // Live update stat cards
+      if (this.stats) {
+        this.stats[1].value = Number(this.stats[1].value) + 1;
+        if (alert.decision.toUpperCase() === 'BLOCK' || alert.decision.toUpperCase() === 'ESCALATE') {
+          this.stats[2].value = Number(this.stats[2].value) + 1;
+        }
+      }
+
+      // Live update donut chart
+      if (this.harassmentChartData && alert.primary_class && alert.primary_class !== 'safe') {
+        const datasets = [...this.harassmentChartData.datasets];
+        const dataArr = [...datasets[0].data];
+        switch (alert.primary_class.toLowerCase()) {
+          case 'verbal_harassment': dataArr[0]++; break;
+          case 'threat': dataArr[1]++; break;
+          case 'sexual_harassment': dataArr[2]++; break;
+          case 'discrimination': dataArr[3]++; break;
+        }
+        datasets[0] = { ...datasets[0], data: dataArr };
+        this.harassmentChartData = { ...this.harassmentChartData, datasets };
+      }
+
+      // Live update weekly chart
+      if (this.weeklyChartData) {
+        const datasets = [...this.weeklyChartData.datasets];
+        const blockedData = [...datasets[0].data];
+        const warnedData = [...datasets[1].data];
+        const safeData = [...datasets[2].data];
+        const lastIdx = blockedData.length - 1;
+        if (alert.decision.toUpperCase() === 'BLOCK' || alert.decision.toUpperCase() === 'ESCALATE') {
+          blockedData[lastIdx]++;
+        } else if (alert.decision.toUpperCase() === 'WARN' || alert.decision.toUpperCase() === 'REVISE') {
+          warnedData[lastIdx]++;
+        } else if (alert.decision.toUpperCase() === 'ALLOW') {
+          safeData[lastIdx]++;
+        }
+        datasets[0] = { ...datasets[0], data: blockedData };
+        datasets[1] = { ...datasets[1], data: warnedData };
+        datasets[2] = { ...datasets[2], data: safeData };
+        this.weeklyChartData = { ...this.weeklyChartData, datasets };
+      }
+
+      // Live update hourly chart
+      if (this.hourlyChartData) {
+        const datasets = [...this.hourlyChartData.datasets];
+        const threatsData = [...datasets[0].data];
+        const safeData = [...datasets[1].data];
+        const bucketIdx = Math.floor(new Date().getHours() / 2);
+        if (['BLOCK', 'ESCALATE', 'WARN', 'REVISE'].includes(alert.decision.toUpperCase())) {
+          threatsData[bucketIdx]++;
+        } else if (alert.decision.toUpperCase() === 'ALLOW') {
+          safeData[bucketIdx]++;
+        }
+        datasets[0] = { ...datasets[0], data: threatsData };
+        datasets[1] = { ...datasets[1], data: safeData };
+        this.hourlyChartData = { ...this.hourlyChartData, datasets };
+      }
+
+      // Refresh charts
+      if (this.charts) {
+        this.charts.forEach(chart => chart.refresh());
+      }
+
+      // Show toast for harmful alerts
+      if (alert.type === 'alert' && alert.decision.toUpperCase() !== 'ALLOW') {
+      }
+
+      this.cdr.detectChanges();
+    });
+
+    // ── Fetch parent-scoped activity feed ──
+    this.apiService.getParentActivityFeed().subscribe({
+      next: (events) => {
+        const seedEvents: FeedEvent[] = events.slice(0, this.MAX_FEED).map((a: any) => {
+          const decision = (a.decision || '').toUpperCase();
+          const shortSender = (a.sender_jid || '').split('@')[0];
+          const cleanText = (a.raw_text || '(no text)').substring(0, 50) + '...';
+          let feedText = '';
+          let feedIcon = 'pi-info-circle';
+
+          if (a.llm_triggered && a.llm_explanation) {
+            const shortReason = a.llm_explanation.substring(0, 70) + (a.llm_explanation.length > 70 ? '…' : '');
+            feedText = `AI reviewed message from ${shortSender} — ${shortReason}`;
+            feedIcon = 'pi-bolt';
+          } else {
+            switch (decision) {
+              case 'ALLOW':
+                feedText = `Message from ${shortSender} passed safely`;
+                feedIcon = 'pi-verified';
+                break;
+              case 'WARN':
+                feedText = `Warning issued for ${(a.primary_class || '').replace(/_/g, ' ')} from ${shortSender}`;
+                feedIcon = 'pi-exclamation-triangle';
+                break;
+              case 'BLOCK':
+              case 'ESCALATE':
+                feedText = `🛡️ Blocked ${(a.primary_class || '').replace(/_/g, ' ')} from ${shortSender}`;
+                feedIcon = 'pi-ban';
+                break;
+              case 'REVISE':
+                feedText = `Grey-zone message from ${shortSender} under review`;
+                feedIcon = 'pi-eye';
+                break;
+              case 'HUMAN_REVIEW':
+                feedText = `Message from ${shortSender} sent to review`;
+                feedIcon = 'pi-user';
+                break;
+              default:
+                feedText = `Message analyzed from ${shortSender}`;
+            }
+          }
+
+          return {
+            id: a.id,
+            time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            type: decision.toLowerCase() as any,
+            icon: feedIcon,
+            text: feedText,
+            fullText: a.llm_explanation ? `Message: ${a.raw_text}\n\nAI Analysis:\n${a.llm_explanation}` : a.raw_text
+          };
+        });
+
+        this.feedEvents.update(existing => existing.length === 0 ? seedEvents : existing);
+        this.cdr.detectChanges();
+      },
+      error: (err) => console.error('[AEGIS] Failed to load parent activity feed:', err)
+    });
+
+    // ── Fetch parent-scoped alerts ──
+    this.apiService.getParentAlerts().subscribe({
+      next: (alerts) => {
+        this.recentAlerts = alerts.slice(0, 5).map((a: any) => ({
+          id: a.id,
+          preview: a.raw_text.substring(0, 40) + '...',
+          severity: a.severity || (a.decision === 'ESCALATE' ? 'critical' : a.decision === 'BLOCK' ? 'high' : a.decision === 'WARN' ? 'medium' : 'low'),
+          category: a.primary_class || 'Unknown',
+          time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          decision: (a.decision || '').toUpperCase()
+        }));
+        this.cdr.detectChanges();
+      },
+      error: (err) => console.error('[AEGIS] Failed to load parent alerts:', err)
+    });
+
+    // ── Fetch REAL parent-scoped stats ──
+    this.apiService.getParentDashboardStats().subscribe({
+      next: (data) => {
+        console.log('[AEGIS] ✅ Parent Dashboard Stats Loaded:', data);
+
+        // Set child info
+        this.childInfo = data.child;
+        this.childName = data.child?.name || 'Your Child';
+
+        this.stats = [
+          {
+            label: 'Messages Monitored',
+            value: data.stats.total_messages_all_time,
+            icon: 'pi-comments',
+            trend: `${data.stats.total_messages_today} new today`,
+            trendUp: data.stats.total_messages_today >= 0,
+            color: 'accent'
+          },
+          {
+            label: 'Active Alerts',
+            value: data.stats.total_alerts_all_time,
+            icon: 'pi-bell',
+            trend: `${data.stats.total_alerts_today} new today`,
+            trendUp: data.stats.total_alerts_today === 0,
+            color: data.stats.total_alerts_today > 0 ? 'critical' : 'low'
+          },
+          {
+            label: 'Threats Blocked',
+            value: data.stats.total_blocked_all_time,
+            icon: 'pi-shield',
+            trend: `${data.stats.total_blocked_today} new today`,
+            trendUp: true,
+            color: data.stats.total_blocked_today > 0 ? 'high' : 'low'
+          },
+          {
+            label: 'Risk Level',
+            value: data.child?.risk_level?.toUpperCase() || 'LOW',
+            icon: 'pi-chart-line',
+            trend: data.child?.is_monitored ? 'Monitoring Active' : (data.child ? 'Not Monitoring' : 'No child linked'),
+            trendUp: (data.child?.risk_level || 'low').toLowerCase() === 'low',
+            color: this.getRiskColor(data.child?.risk_level || 'low')
+          }
+        ];
+
+        // Risky contacts
+        this.riskyContacts = (data.at_risk_contacts || []).map((c: any) => ({
+          id: c.id,
+          name: c.whatsapp.split('@')[0],
+          whatsapp: c.whatsapp,
+          risk_score: c.risk_score,
+          risk_level: c.risk_level.toLowerCase(),
+          blocked_total: c.blocked_total,
+          last_incident: 'Recently'
+        }));
+
+        // Category breakdown → Donut chart
+        const cats = data.category_breakdown;
+        this.harassmentChartData = {
+          labels: ['Verbal', 'Threat', 'Sexual', 'Discrimination'],
+          datasets: [{
+            data: [
+              cats['verbal_harassment'] || 0,
+              cats['threat'] || 0,
+              cats['sexual_harassment'] || 0,
+              cats['discrimination'] || 0
+            ],
+            backgroundColor: ['#FF7A30', '#FF4D4D', '#A78BFA', '#4F7FFF'],
+            borderWidth: 0,
+            hoverOffset: 6
+          }]
+        };
+
+        // Weekly Activity → Bar chart
+        if (data.weekly_activity) {
+          this.weeklyChartData = {
+            labels: data.weekly_activity.map(w => w.day),
+            datasets: [
+              {
+                label: 'Blocked',
+                data: data.weekly_activity.map(w => w.blocked),
+                backgroundColor: 'rgba(239, 68, 68, 0.75)',
+                borderColor: '#EF4444',
+                borderWidth: 1,
+                borderRadius: 4,
+              },
+              {
+                label: 'Warned',
+                data: data.weekly_activity.map(w => w.warned),
+                backgroundColor: 'rgba(234, 179, 8, 0.65)',
+                borderColor: '#EAB308',
+                borderWidth: 1,
+                borderRadius: 4,
+              },
+              {
+                label: 'Safe',
+                data: data.weekly_activity.map(w => w.safe),
+                backgroundColor: 'rgba(16, 217, 160, 0.65)',
+                borderColor: '#10D9A0',
+                borderWidth: 1,
+                borderRadius: 4,
+              }
+            ]
+          };
+        }
+
+        // Hourly Activity → Line chart
+        if (data.hourly_activity) {
+          this.hourlyChartData = {
+            labels: data.hourly_activity.labels,
+            datasets: [
+              {
+                label: 'Threats',
+                data: data.hourly_activity.threats,
+                fill: true,
+                backgroundColor: 'rgba(255,77,77,0.12)',
+                borderColor: '#FF4D4D',
+                borderWidth: 2,
+                tension: 0.35,
+                pointRadius: 3,
+                pointBackgroundColor: '#FF4D4D',
+              },
+              {
+                label: 'Safe',
+                data: data.hourly_activity.safe,
+                fill: true,
+                backgroundColor: 'rgba(16,217,160,0.08)',
+                borderColor: '#10D9A0',
+                borderWidth: 2,
+                tension: 0.35,
+                pointRadius: 3,
+                pointBackgroundColor: '#10D9A0',
+              }
+            ]
+          };
+        }
+
+        // Language distribution → Doughnut
+        if (data.language_distribution) {
+          this.languageChartData = {
+            labels: data.language_distribution.labels,
+            datasets: [{
+              data: data.language_distribution.data,
+              backgroundColor: ['#06B6D4', '#EAB308', '#22C55E', '#A855F7', '#EC4899', '#64748B'],
+              borderWidth: 0,
+              hoverOffset: 4
+            }]
+          };
+        }
+
+        // Success toast
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Child Data Synced',
+          detail: 'Dashboard metrics are up to date.',
+          life: 3000
+        });
+
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('[AEGIS] ❌ Failed to load parent stats:', err);
+        this.stats = [];
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   ngOnDestroy() {
-    if (this.feedInterval) clearInterval(this.feedInterval);
+    if (this.alertSub) this.alertSub.unsubscribe();
+  }
+
+  showFeedDetails(event: FeedEvent) {
+    this.selectedFeedEvent = event;
+    this.feedDialogVisible = true;
   }
 
   getFeedColor(type: string): string {
@@ -69,5 +459,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
       risk: 'var(--high)'
     };
     return map[type] ?? 'var(--text-muted)';
+  }
+
+  getRiskBarWidth(score: number): string {
+    return `${score * 100}%`;
+  }
+
+  getRiskColor(level: string): string {
+    const l = (level || 'low').toLowerCase();
+    if (l === 'critical') return 'critical';
+    if (l === 'high') return 'high';
+    if (l === 'medium') return 'medium';
+    return 'low';
+  }
+
+  getRiskLabel(level: string): string {
+    return (level || 'LOW').toUpperCase();
   }
 }
