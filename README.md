@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://ui-avatars.com/api/?name=AEGIS&background=1e293b&color=ef4444&size=128" alt="AEGIS Logo" width="128" height="128" style="border-radius: 20%;">
+  <img src="./aegis-frontend/public/Aegis.png" alt="AEGIS Logo" width="128" height="128">
   <h1>AEGIS AI — Automated Enforcement & Guardian Intelligence System</h1>
   <p><strong>A Real-Time WhatsApp Moderation Platform to Protect Children from Online Harassment</strong></p>
   
@@ -31,16 +31,16 @@ graph TD
     
     %% Nodes
     WA((WhatsApp Node)):::wp
-    Evo[Evolution API <br/> Webhook Event]:::wp
+    Evo["Evolution API <br> Webhook Event"]:::wp
     
     subgraph AEGIS Backend [AEGIS Django Backend & ML Pipeline]
         Router[Webhook Router]:::django
         
-        A1[Agent 1: Gatekeeper <br/> Binary Toxicity]:::agent
-        A2[Agent 2: Specialist <br/> 6-Class Categorization]:::agent
-        A3[Agent 3: Auditor <br/> Groq LLM Grey Zone]:::agent
-        A4[Agent 4: Profiler <br/> User Risk Scoring]:::agent
-        A5[Agent 5: Orchestrator <br/> Policy Enforcer]:::agent
+        A1["Agent 1: Gatekeeper <br> Binary Toxicity"]:::agent
+        A2["Agent 2: Specialist <br> 6-Class Categorization"]:::agent
+        A3["Agent 3: Auditor <br> Groq LLM Grey Zone"]:::agent
+        A4["Agent 4: Profiler <br> User Risk Scoring"]:::agent
+        A5["Agent 5: Orchestrator <br> Policy Enforcer"]:::agent
         
         Router --> A1
         A1 -- "Suspicious" --> A2
@@ -51,9 +51,9 @@ graph TD
     end
     
     subgraph Outcomes [Real-Time Enforcement]
-        UI[Angular Dashboard <br/> Parent/Admin UI]:::django
-        ActDel[Active Shield <br/> (Delete Message)]:::action
-        ActWarn[Auto-Reply <br/> (Warn Sender)]:::action
+        UI["Angular Dashboard <br> Parent/Admin UI"]:::django
+        ActDel["Active Shield <br> (Delete Message)"]:::action
+        ActWarn["Auto-Reply <br> (Warn Sender)"]:::action
     end
     
     %% Flow
