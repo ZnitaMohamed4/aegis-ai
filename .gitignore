@@ -31,6 +31,7 @@ db.sqlite3
 # ------------------------------------------------------------------------------
 # CRITICAL: GitHub rejects files > 100MB. Block all model files!
 aegis-backend/ml_pipeline/models/
+aegis-backend/chroma_storage/
 *.safetensors
 *.pt
 *.bin

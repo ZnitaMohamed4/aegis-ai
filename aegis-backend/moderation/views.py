@@ -64,8 +64,8 @@ if getattr(settings, 'AEGIS_STUB_MODE', False):
 else:
     from ml_pipeline.inference import run_pipeline, PipelineResult
 
-# Cache utilities for Prediction Caching (Level 1: Normalized Identity Match)
-from .cache_utils import get_cached_prediction, set_cached_prediction
+# Semantic Caching for Groq Responses
+from .semantic_cache import search_semantic_cache, add_to_semantic_cache
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +73,10 @@ logger = logging.getLogger(__name__)
 SHADOW_LOW = float(os.getenv('AEGIS_SHADOW_LOW', '0.05'))
 SHADOW_HIGH = float(os.getenv('AEGIS_SHADOW_HIGH', '0.30'))
 SHADOW_MIN_WORDS = int(os.getenv('AEGIS_SHADOW_MIN_WORDS', '4'))
+
+# Agent 3 Trigger: If M2 confidence is BELOW this, call Groq (and use the cache)
+# Higher = more messages go through Agent 3 and semantic cache. Default: 0.80
+AGENT3_CONFIDENCE_THRESHOLD = float(os.getenv('AEGIS_LLM_THRESHOLD', '0.80'))
 
 
 def _update_behavioral_profile(sender_jid: str, result):
@@ -229,19 +233,11 @@ def webhook_messages(request):
     # 3. 🧠 SEND TO AI PIPELINE
     t_ml_start = time.time()
     
-    # --- REDIS CACHE LOOKUP (Prediction Caching) ---
-    cached_prediction = get_cached_prediction(raw_text)
-    
     llm_explanation = None
     llm_triggered = False
     llm_latency_total = 0
 
-    # CACHE DISABLED PER USER REQUEST
-    # if cached_prediction:
-    #     ...
-    # else:
-    
-    # Run Full Pipeline Every Time
+    # 1. Run Core ML Pipeline
     result = run_pipeline(raw_text)
     
     # Real M1/M2 latencies from the pipeline
@@ -249,12 +245,25 @@ def webhook_messages(request):
     log_latency('agent_2', result.m2_latency_ms)
 
     # --- AGENT 3 (LLM) INTERVENTION ---
-    # If it is NOT completely safe, AND confidence is low (< 0.75), call Groq!
-    if result.decision != 'ALLOW' and result.m2_confidence is not None and result.m2_confidence < 0.75:
-        print(f"│ 🤖 [AGENT 3] Low confidence ({result.m2_confidence:.2f} -> {result.primary_class}). Asking Groq...")
+    # If it is NOT completely safe, AND confidence is low (< AGENT3_CONFIDENCE_THRESHOLD), call Groq!
+    if result.decision != 'ALLOW' and result.m2_confidence is not None and result.m2_confidence < AGENT3_CONFIDENCE_THRESHOLD:
+        print(f"│ 🤖 [AGENT 3] Low confidence ({result.m2_confidence:.2f} -> {result.primary_class}). Checking Semantic Cache...")
         
         t_llm_start = time.time()
-        llm_response = analyze_grey_zone(raw_text, result.primary_class, result.m2_confidence, result.m1_score)
+        
+        # 1. SEMANTIC CACHE LOOKUP
+        cached_llm_response = search_semantic_cache(raw_text)
+        
+        if cached_llm_response:
+            llm_response = cached_llm_response
+            print(f"│ ⚡ [SEMANTIC CACHE HIT] Bypassed Groq! Exact meaning recognized.")
+        else:
+            print(f"│ 🤖 [AGENT 3] No semantic match. Asking Groq...")
+            llm_response = analyze_grey_zone(raw_text, result.primary_class, result.m2_confidence, result.m1_score)
+            
+            # 2. SAVE NEW KNOWLEDGE TO CACHE
+            add_to_semantic_cache(raw_text, llm_response)
+            
         t_llm_end = time.time()
         llm_latency_total = t_llm_end - t_llm_start
         log_latency('agent_3', int(llm_latency_total * 1000))
@@ -277,9 +286,22 @@ def webhook_messages(request):
 
     # --- SHADOW REVIEW: Catch "False Safes" ---
     elif result.decision == 'ALLOW' and SHADOW_LOW <= result.m1_score <= SHADOW_HIGH:
-        print(f"│ 🕵️ [SHADOW] High score ({result.m1_score:.2f}) but SAFE decision. Asking Groq to audit...")
+        print(f"│ 🕵️ [SHADOW] High score ({result.m1_score:.2f}) but SAFE decision. Checking Semantic Cache...")
         t_llm_start = time.time()
-        llm_response = analyze_grey_zone(raw_text, "safe", 0.99, result.m1_score)
+        
+        # 1. SEMANTIC CACHE LOOKUP FOR SHADOW
+        cached_llm_response = search_semantic_cache(raw_text)
+        
+        if cached_llm_response:
+            llm_response = cached_llm_response
+            print(f"│ ⚡ [SEMANTIC CACHE HIT] Bypassed Groq for Shadow Review! Meaning recognized.")
+        else:
+            print(f"│ 🤖 [SHADOW] No semantic match. Asking Groq to audit...")
+            llm_response = analyze_grey_zone(raw_text, "safe", 0.99, result.m1_score)
+            
+            # 2. SAVE NEW KNOWLEDGE TO CACHE
+            add_to_semantic_cache(raw_text, llm_response)
+
         t_llm_end = time.time()
         llm_latency_total = t_llm_end - t_llm_start
         
@@ -288,11 +310,7 @@ def webhook_messages(request):
             result.primary_class = llm_response.get("category", result.primary_class)
             llm_explanation = llm_response.get("explanation", "")
             llm_triggered = True
-            print(f"│ ⚠️ [SHADOW] Audit failed! Corrected to: {result.decision} ({result.primary_class})")
-
-    # [CACHING DISABLED]
-    # prediction_payload = { ... }
-    # set_cached_prediction(raw_text, prediction_payload)
+            print(f"│ ⚠️ [SHADOW] Message failed safety audit! Corrected to: {result.decision} ({result.primary_class})")
 
     t_ml_end = time.time()
 
