@@ -61,6 +61,7 @@ export interface ChildProfile {
 
 export interface ContactProfile {
   id: string;
+  raw_jid: string;
   whatsapp_number: string;
   threat_level: RiskLevel;
   threat_score: number;

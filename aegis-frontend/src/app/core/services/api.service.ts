@@ -110,6 +110,31 @@ export class ApiService {
     return this.http.get<any[]>(`${this.BASE_URL}/activity/`);
   }
 
+  /** Fetches all parent users and their monitored children for the admin system. */
+  getAdminUsers(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.BASE_URL}/admin/users/`);
+  }
+
+  /** Creates a new parent user from the admin dashboard (child optional). */
+  createAdminUser(payload: any): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/admin/users/`, payload);
+  }
+
+  /** Deletes a parent user. */
+  deleteAdminUser(userId: string): Observable<any> {
+    return this.http.delete<any>(`${this.BASE_URL}/admin/users/${userId}/`);
+  }
+
+  /** Fetches all conversations across the entire platform. */
+  getAdminConversations(): Observable<{contacts: any[], messages: Record<string, any[]>}> {
+    return this.http.get<{contacts: any[], messages: Record<string, any[]>}>(`${this.BASE_URL}/admin/conversations/`);
+  }
+
+  /** Fetches all risk profiles (children and contacts) across the platform. */
+  getAdminRiskProfiles(): Observable<{children: any[], contacts: any[]}> {
+    return this.http.get<{children: any[], contacts: any[]}>(`${this.BASE_URL}/admin/risk-profiles/`);
+  }
+
   // ════════════════════════════════════════════════════════════════
   // PARENT ENDPOINTS (filtered to logged-in parent's child only)
   // ════════════════════════════════════════════════════════════════

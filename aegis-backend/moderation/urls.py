@@ -24,6 +24,16 @@ urlpatterns = [
     # 6. Activity Feed (ALL decisions including ALLOW — for dashboard persistence)
     path('activity/', views.activity_feed, name='activity-feed'),
 
+    # Admin Users endpoint
+    path('admin/users/', views.admin_user_list, name='admin-user-list'),
+    path('admin/users/<str:user_id>/', views.admin_user_detail, name='admin-user-detail'),
+    
+    # Admin Conversations 
+    path('admin/conversations/', views.admin_conversations, name='admin-conversations'),
+    
+    # Admin Risk Profiles
+    path('admin/risk-profiles/', views.admin_risk_profiles, name='admin-risk-profiles'),
+
     # 7. Auth Endpoints
     path('auth/register/', views.register_parent, name='auth-register'),
     path('auth/login/', TokenObtainPairView.as_view(), name='auth-login'),

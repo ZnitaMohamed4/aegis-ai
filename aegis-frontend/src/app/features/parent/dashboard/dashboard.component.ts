@@ -77,7 +77,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       let feedText = '';
       let feedIcon = 'pi-info-circle';
       const cleanText = (alert.text || "(Media/Sticker)").substring(0, 50) + "...";
-      const shortSender = alert.sender.split('@')[0];
+      let shortSender = alert.sender.split('@')[0];
+      if (alert.sender.includes('@g.us') || shortSender.length > 15) {
+        shortSender = 'Group Chat';
+      } else if (/^\d+$/.test(shortSender)) {
+        shortSender = '+' + shortSender;
+      }
 
       if (alert.llm_triggered) {
         const shortReason = (alert.llm_explanation || '').substring(0, 70) + ((alert.llm_explanation || '').length > 70 ? '…' : '');
@@ -204,7 +209,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       next: (events) => {
         const seedEvents: FeedEvent[] = events.slice(0, this.MAX_FEED).map((a: any) => {
           const decision = (a.decision || '').toUpperCase();
-          const shortSender = (a.sender_jid || '').split('@')[0];
+          let shortSender = (a.sender_jid || '').split('@')[0];
+          if ((a.sender_jid || '').includes('@g.us') || shortSender.length > 15) {
+            shortSender = 'Group Chat';
+          } else if (/^\d+$/.test(shortSender)) {
+            shortSender = '+' + shortSender;
+          }
           const cleanText = (a.raw_text || '(no text)').substring(0, 50) + '...';
           let feedText = '';
           let feedIcon = 'pi-info-circle';
@@ -318,15 +328,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
         ];
 
         // Risky contacts
-        this.riskyContacts = (data.at_risk_contacts || []).map((c: any) => ({
-          id: c.id,
-          name: c.whatsapp.split('@')[0],
-          whatsapp: c.whatsapp,
-          risk_score: c.risk_score,
-          risk_level: c.risk_level.toLowerCase(),
-          blocked_total: c.blocked_total,
-          last_incident: 'Recently'
-        }));
+        this.riskyContacts = (data.at_risk_contacts || []).map((c: any) => {
+          let displayName = c.whatsapp.split('@')[0];
+          if (c.whatsapp.includes('@g.us') || displayName.length > 15) {
+            displayName = 'Group Chat';
+          } else if (/^\d+$/.test(displayName)) {
+            displayName = '+' + displayName;
+          }
+          return {
+            id: c.id,
+            name: displayName,
+            whatsapp: c.whatsapp,
+            risk_score: c.risk_score,
+            risk_level: c.risk_level.toLowerCase(),
+            blocked_total: c.blocked_total,
+            last_incident: 'Recently'
+          };
+        });
 
         // Category breakdown → Donut chart
         const cats = data.category_breakdown;

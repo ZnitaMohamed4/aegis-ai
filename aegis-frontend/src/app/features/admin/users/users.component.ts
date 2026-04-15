@@ -1,4 +1,4 @@
-import { Component, signal, computed } from '@angular/core';
+import { Component, signal, computed, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DrawerModule } from 'primeng/drawer';
@@ -7,6 +7,7 @@ import { MessageService } from 'primeng/api';
 import { RouterLink } from '@angular/router';
 import { getRiskHex } from '@shared/utils/severity.utils';
 import { AccountStatus, ParentUser, MOCK_USERS } from './users.data';
+import { ApiService } from '@core/services/api.service';
 
 @Component({
   selector: 'app-users',
@@ -16,9 +17,10 @@ import { AccountStatus, ParentUser, MOCK_USERS } from './users.data';
   templateUrl: './users.html',
   styleUrl: './users.css'
 })
-export class UsersComponent {
+export class UsersComponent implements OnInit {
 
   constructor(private readonly messageService: MessageService) {}
+  private apiService = inject(ApiService);
 
   searchQuery = signal('');
   drawerVisible = signal(false);
@@ -48,7 +50,24 @@ export class UsersComponent {
     email_notifications: true
   };
 
-  users = signal<ParentUser[]>(MOCK_USERS);
+  users = signal<ParentUser[]>([]);
+
+  ngOnInit() {
+    this.apiService.getAdminUsers().subscribe({
+      next: (data) => {
+        this.users.set(data);
+      },
+      error: (err) => {
+        console.error('Failed to load admin users from backend, falling back to mock data.', err);
+        this.users.set(MOCK_USERS);
+        this.messageService.add({
+          severity: 'warn',
+          summary: 'Offline Mode',
+          detail: 'Showing mock users because backend connection failed.'
+        });
+      }
+    });
+  }
 
   filteredUsers = computed(() =>
     this.users().filter(u =>
@@ -88,16 +107,29 @@ export class UsersComponent {
 
   createAccount() {
     const form = this.newUser();
-    const missingStep2 = !form.child_identifier.trim() || !form.child_whatsapp.trim();
-    if (missingStep2) {
+    
+    // Front-end validation
+    const requiredMissing = !form.full_name.trim() || !form.email.trim() || !form.phone.trim();
+    if (requiredMissing) {
       this.messageService.add({
         severity: 'warn',
-        summary: 'Missing Child Info',
-        detail: 'Please fill child identifier and WhatsApp number before creating the account.'
+        summary: 'Missing Parent Info',
+        detail: 'Please complete name, email, and phone before continuing.'
       });
       return;
     }
 
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+    if (!emailOk) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'Invalid Email',
+        detail: 'Please enter a valid email address.'
+      });
+      return;
+    }
+    
+    // Check local duplicate emails just as a quick front-end safety net
     const duplicateEmail = this.users().some(
       u => u.email.toLowerCase() === form.email.trim().toLowerCase()
     );
@@ -111,40 +143,31 @@ export class UsersComponent {
       return;
     }
 
-    const now = new Date();
-    const joinedAt = now.toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' });
-
-    const createdParent: ParentUser = {
-      id: crypto.randomUUID(),
-      full_name: form.full_name.trim(),
-      email: form.email.trim(),
-      phone: form.phone.trim(),
-      status: 'active',
-      monitoring_active: true,
-      alert_threshold: form.alert_threshold,
-      sms_notifications: form.sms_notifications,
-      email_notifications: form.email_notifications,
-      linked_child: {
-        identifier: form.child_identifier.trim(),
-        whatsapp_number: form.child_whatsapp.trim(),
-        risk_level: 'low',
-        whatsapp_connected: false
+    // Call the backend API instead of mocking it!
+    this.apiService.createAdminUser(form).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Parent Created',
+          detail: `${form.full_name} has been added successfully.`
+        });
+        
+        // Refresh the user list from the database
+        this.ngOnInit();
+        
+        // Reset the drawer
+        this.newUser.set({ ...this.emptyNewUser });
+        this.createStep.set(1);
+        this.drawerVisible.set(false);
+        this.drawerMode.set(null);
       },
-      joined_at: joinedAt,
-      last_login: 'Never'
-    };
-
-    this.users.update(list => [createdParent, ...list]);
-
-    this.newUser.set({ ...this.emptyNewUser });
-    this.createStep.set(1);
-    this.drawerVisible.set(false);
-    this.drawerMode.set(null);
-
-    this.messageService.add({
-      severity: 'success',
-      summary: 'Parent Created',
-      detail: `${createdParent.full_name} has been added successfully.`
+      error: (err) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Creation Failed',
+          detail: err.error?.error || 'Could not create the parent account.'
+        });
+      }
     });
   }
 
@@ -205,5 +228,28 @@ export class UsersComponent {
 
   getInitials(name: string): string {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  }
+
+  deleteParent(user: ParentUser) {
+    if (confirm(`Are you sure you want to permanently delete ${user.full_name}'s account and ALL associated children/data? This action cannot be undone.`)) {
+      this.apiService.deleteAdminUser(user.id).subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Account Deleted',
+            detail: `${user.full_name}'s account has been permanently removed.`
+          });
+          this.closeDrawer();
+          this.ngOnInit(); // Refresh list
+        },
+        error: (err) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'Deletion Failed',
+            detail: err.error?.error || 'Could not delete the parent account.'
+          });
+        }
+      });
+    }
   }
 }
