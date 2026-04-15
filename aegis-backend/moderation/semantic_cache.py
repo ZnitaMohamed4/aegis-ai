@@ -12,33 +12,43 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 # We use Sentences-Transformers to convert text to vectors.
-# "all-MiniLM-L6-v2" is wildly fast and great for short messages like WhatsApp
-try:
-    logger.info("[SEMANTIC CACHE] Loading Embedding Model...")
-    hf_token = os.getenv("HF_TOKEN")
-    embedder = SentenceTransformer('all-MiniLM-L6-v2', token=hf_token)
-except Exception as e:
-    logger.error(f"[SEMANTIC CACHE] Error loading embedding model: {e}")
-    embedder = None
+embedder = None
+collection = None
+_is_initialized = False
 
-# Initialize ChromaDB locally. It will create a folder called 'chroma_storage' in your backend dir
-CHROMA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'chroma_storage')
-try:
-    chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
-    # We create a specific collection and explicitly set the distance metric to 'cosine'
-    # 'aegis_moderation_cache_v2' is used to ensure old L2 vectors are cleanly discarded
-    collection = chroma_client.get_or_create_collection(
-        name="aegis_moderation_cache_v2",
-        metadata={"hnsw:space": "cosine"}
-    )
-    logger.info("[SEMANTIC CACHE] ChromaDB initialized successfully!")
-except Exception as e:
-    logger.error(f"[SEMANTIC CACHE] Error initializing ChromaDB: {e}")
-    collection = None
+def initialize_semantic_cache():
+    global embedder, collection, _is_initialized
+    if _is_initialized:
+        return
+        
+    from django.conf import settings
+    if getattr(settings, 'AEGIS_STUB_MODE', False):
+        logger.warning("[SEMANTIC CACHE] ⚠️ STUB MODE: Skipping embeddings model load to save memory.")
+        _is_initialized = True
+        return
 
-# Threshold for "how close is close enough?"
-# 1.0 = exact same phrase. 0.82 = strong paraphrase. 0.70 = loose meaning match.
-# Tune via .env: AEGIS_SEMANTIC_THRESHOLD (default: 0.82)
+    try:
+        logger.info("[SEMANTIC CACHE] Loading Embedding Model...")
+        hf_token = os.getenv("HF_TOKEN")
+        embedder = SentenceTransformer('all-MiniLM-L6-v2', token=hf_token)
+    except Exception as e:
+        logger.error(f"[SEMANTIC CACHE] Error loading embedding model: {e}")
+        embedder = None
+
+    CHROMA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'chroma_storage')
+    try:
+        chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
+        collection = chroma_client.get_or_create_collection(
+            name="aegis_moderation_cache_v2",
+            metadata={"hnsw:space": "cosine"}
+        )
+        logger.info("[SEMANTIC CACHE] ChromaDB initialized successfully!")
+    except Exception as e:
+        logger.error(f"[SEMANTIC CACHE] Error initializing ChromaDB: {e}")
+        collection = None
+        
+    _is_initialized = True
+
 SIMILARITY_THRESHOLD = float(os.getenv('AEGIS_SEMANTIC_THRESHOLD', '0.82'))
 
 def search_semantic_cache(text):
@@ -46,6 +56,9 @@ def search_semantic_cache(text):
     Given a message, convert it to a vector, and ask ChromaDB if we've seen something
     almost exactly like it before.
     """
+    if not _is_initialized:
+        initialize_semantic_cache()
+        
     if not collection or not embedder:
         return None
         
@@ -91,6 +104,9 @@ def add_to_semantic_cache(text, prediction_dict):
     """
     Saves a NEW Groq prediction to ChromaDB so we automatically bypass Groq next time.
     """
+    if not _is_initialized:
+        initialize_semantic_cache()
+        
     if not collection or not embedder:
         return
         

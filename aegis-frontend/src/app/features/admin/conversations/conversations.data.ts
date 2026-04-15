@@ -3,6 +3,7 @@ import { Contact, ConversationMessage } from '@core/models';
 export const MOCK_CONTACTS: Contact[] = [
   {
     id: '1',
+    raw_jid: '',
     name: 'Unknown',
     number: '+212 6XX XXX X01',
     child_name: 'Youssef Amrani',
@@ -21,6 +22,7 @@ export const MOCK_CONTACTS: Contact[] = [
   },
   {
     id: '2',
+    raw_jid: '',
     name: 'Unknown',
     number: '+212 6XX XXX X02',
     child_name: 'Sara Bennani',
@@ -39,6 +41,7 @@ export const MOCK_CONTACTS: Contact[] = [
   },
   {
     id: '3',
+    raw_jid: '',
     name: 'Unknown',
     number: '+212 6XX XXX X03',
     child_name: 'Adam El Fassi',
@@ -57,6 +60,7 @@ export const MOCK_CONTACTS: Contact[] = [
   },
   {
     id: '4',
+    raw_jid: '',
     name: 'Unknown',
     number: '+212 6XX XXX X04',
     child_name: 'Amine Tazi',

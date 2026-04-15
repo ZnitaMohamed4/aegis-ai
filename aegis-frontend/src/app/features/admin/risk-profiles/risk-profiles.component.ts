@@ -4,8 +4,8 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DialogModule } from 'primeng/dialog';
 import { ChartModule } from 'primeng/chart';
 import { getRiskHex } from '@shared/utils/severity.utils';
-import { MOCK_CHILDREN, MOCK_CONTACTS } from './risk-profiles.data';
 import { RiskLevel, ChildProfile, ContactProfile, RiskSnapshot } from '@core/models';
+import { ApiService } from '@core/services/api.service';
 
 @Component({
   selector: 'app-risk-profiles',
@@ -23,38 +23,51 @@ export class RiskProfilesComponent implements OnInit {
   selectedChild = signal<ChildProfile | null>(null);
   selectedContact = signal<ContactProfile | null>(null);
 
-  children = signal<ChildProfile[]>(MOCK_CHILDREN);
-  contacts = signal<ContactProfile[]>(MOCK_CONTACTS);
+  children = signal<ChildProfile[]>([]);
+  contacts = signal<ContactProfile[]>([]);
 
   getRiskHex = getRiskHex;
 
-  constructor(private route: ActivatedRoute, private router: Router) {}
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private api: ApiService
+  ) {}
 
   ngOnInit() {
-    this.route.queryParamMap.subscribe(params => {
-      const tab = params.get('tab');
-      const childId = params.get('child');
-      const contactId = params.get('contact');
+    this.api.getAdminRiskProfiles().subscribe({
+      next: (data) => {
+        this.children.set(data.children);
+        this.contacts.set(data.contacts);
 
-      if (tab === 'children' || tab === 'contacts') {
-        this.activeTab.set(tab);
-      }
+        // Re-process route params after data is loaded
+        this.route.queryParamMap.subscribe(params => {
+          const tab = params.get('tab');
+          const childId = params.get('child');
+          const contactId = params.get('contact');
 
-      if (childId) {
-        const child = this.children().find(c => c.id === childId);
-        if (child) {
-          this.openChild(child);
-          this.activeTab.set('children');
-        }
-      }
+          if (tab === 'children' || tab === 'contacts') {
+            this.activeTab.set(tab);
+          }
 
-      if (contactId) {
-        const contact = this.contacts().find(c => c.id === contactId);
-        if (contact) {
-          this.openContact(contact);
-          this.activeTab.set('contacts');
-        }
-      }
+          if (childId) {
+            const child = this.children().find(c => c.id === childId);
+            if (child) {
+              this.openChild(child);
+              this.activeTab.set('children');
+            }
+          }
+
+          if (contactId) {
+            const contact = this.contacts().find(c => c.id === contactId);
+            if (contact) {
+              this.openContact(contact);
+              this.activeTab.set('contacts');
+            }
+          }
+        });
+      },
+      error: (err) => console.error('Failed to load risk profiles:', err)
     });
   }
 
@@ -132,7 +145,7 @@ export class RiskProfilesComponent implements OnInit {
 
   goToAlertsByContact(contact: ContactProfile) {
     this.router.navigate(['/admin/alerts'], {
-      queryParams: { contact: contact.id }
+      queryParams: { jid: contact.raw_jid }
     });
   }
 
@@ -144,7 +157,7 @@ export class RiskProfilesComponent implements OnInit {
 
   goToConversationsForContact(contact: ContactProfile) {
     this.router.navigate(['/admin/conversations'], {
-      queryParams: { contact: contact.id }
+      queryParams: { chat: contact.raw_jid }
     });
   }
 

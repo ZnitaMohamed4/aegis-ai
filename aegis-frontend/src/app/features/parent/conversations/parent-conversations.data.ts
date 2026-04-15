@@ -3,6 +3,7 @@ import { Contact, ConversationMessage } from '@core/models';
 export const EMMA_CONTACTS: Contact[] = [
   {
     id: 'emma-1',
+    raw_jid: '',
     name: 'Emma L.',
     number: '+212 612 345 678',
     child_name: 'Emma L.',
@@ -21,6 +22,7 @@ export const EMMA_CONTACTS: Contact[] = [
   },
   {
     id: 'emma-2',
+    raw_jid: '',
     name: 'Emma L.',
     number: '+212 612 345 678',
     child_name: 'Emma L.',
@@ -39,6 +41,7 @@ export const EMMA_CONTACTS: Contact[] = [
   },
   {
     id: 'emma-3',
+    raw_jid: '',
     name: 'Emma L.',
     number: '+212 612 345 678',
     child_name: 'Emma L.',

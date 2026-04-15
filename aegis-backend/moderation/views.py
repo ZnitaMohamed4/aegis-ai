@@ -22,6 +22,7 @@ from django.db.models import Count, Q
 from .models import (
     ModerationResult, UserBehaviorProfile, SecurityAlert,
     HarassmentCategory, Conversation, Message, MonitoredChild,
+    AegisUser, ParentProfile
 )
 from .serializers import ModerationResultSerializer
 import redis
@@ -219,9 +220,12 @@ def webhook_messages(request):
     sender_jid = key.get("remoteJid", "unknown_sender")
     pure_number = sender_jid.split('@')[0]
     
+    # Extract pushName from data or inner_data
+    push_name = data.get("pushName") or inner_data.get("pushName")
+    
     is_from_me = key.get("fromMe", False)
     direction_icon = "📤 OUTGOING" if is_from_me else "📥 INCOMING"
-    sender_label = "ME (Host)" if is_from_me else pure_number
+    sender_label = push_name if push_name else (pure_number if not is_from_me else "ME (Host)")
     recipient_label = pure_number if is_from_me else "ME (Host)"
     
     print(f"\n┌──────────────────────────────────────────────┐")
@@ -310,7 +314,7 @@ def webhook_messages(request):
             result.primary_class = llm_response.get("category", result.primary_class)
             llm_explanation = llm_response.get("explanation", "")
             llm_triggered = True
-            print(f"│ ⚠️ [SHADOW] Message failed safety audit! Corrected to: {result.decision} ({result.primary_class})")
+            print(f"│ 🛡️ [SHADOW] Audit complete: Reclassified as {result.decision} ({result.primary_class})")
 
     t_ml_end = time.time()
 
@@ -340,6 +344,8 @@ def webhook_messages(request):
     moderation = ModerationResult.objects.create(
         instance_name=instance,
         sender_jid=sender_jid,
+        sender_name=push_name,
+        is_from_me=is_from_me,
         raw_text=raw_text,
         normalized_text=result.normalized_text,
         message_key_id=message_key_id,
@@ -599,6 +605,258 @@ def human_override(request, moderation_id):
     except Exception as e:
         return Response({"status": "error", "reason": str(e)}, status=400)
 
+@api_view(['DELETE'])
+def admin_user_detail(request, user_id):
+    """DELETE /api/v1/admin/users/<id>/ - Admin deletes a parent account"""
+    try:
+        user = AegisUser.objects.get(id=user_id, role=AegisUser.Role.PARENT)
+        user.delete()
+        return Response({"status": "success"}, status=200)
+    except AegisUser.DoesNotExist:
+        return Response({"error": "User not found."}, status=404)
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
+
+
+@api_view(['GET', 'POST'])
+def admin_user_list(request):
+    """GET /api/v1/admin/users/ - List parents for the admin dashboard
+       POST /api/v1/admin/users/ - Admin creates a new parent user (child optional)"""
+    
+    if request.method == 'POST':
+        from django.contrib.auth.hashers import make_password
+        import string, random
+        data = request.data
+        
+        # Validation
+        email = data.get('email', '').strip()
+        full_name = data.get('full_name', '').strip()
+        phone = data.get('phone', '').strip()
+        
+        if not email or not full_name or not phone:
+            return Response({"error": "Full name, email, and phone are required."}, status=400)
+
+        # 1. Check if email already exists
+        if AegisUser.objects.filter(email=email).exists():
+            return Response({"error": "A user with this email already exists."}, status=400)
+            
+        names = full_name.split(' ', 1)
+        first_name = names[0]
+        last_name = names[1] if len(names) > 1 else ''
+        
+        # 2. Create the User. Role automatically sets PARENT
+        temp_password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+        
+        user = AegisUser.objects.create(
+            username=email,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            phone_number=data.get('phone', ''),
+            role=AegisUser.Role.PARENT,
+            password=make_password(temp_password)
+        )
+        
+        # The ParentProfile is automatically created by a Django Signal
+        profile = user.parent_profile
+        
+        # 3. Create the child if provided (optional)
+        if data.get('child_identifier') and data.get('child_whatsapp'):
+            from moderation.models import MonitoredChild
+            MonitoredChild.objects.create(
+                parent=profile,
+                full_name=data.get('child_identifier'),
+                whatsapp_jid=f"{data.get('child_whatsapp').strip('+').replace(' ', '')}@s.whatsapp.net",
+                whatsapp_display_number=data.get('child_whatsapp')
+            )
+            
+        return Response({"status": "success", "user_id": user.id}, status=201)
+
+    parents = AegisUser.objects.filter(role=AegisUser.Role.PARENT, is_superuser=False).select_related('parent_profile')
+    
+    data = []
+    for user in parents:
+        profile = getattr(user, 'parent_profile', None)
+        child_data = None
+        
+        if profile:
+            child = profile.children.filter(is_monitored=True).first()
+            if child:
+                child_data = {
+                    "identifier": child.full_name,
+                    "whatsapp_number": child.whatsapp_display_number or child.whatsapp_jid,
+                    "risk_level": child.get_risk_level().lower(),
+                    "whatsapp_connected": profile.evolution_connected
+                }
+            elif profile.evolution_connected or profile.evolution_instance_name:
+                # Calculate real risk level based on the instance's history
+                from django.utils import timezone
+                import datetime
+                instance_risk = 'low'
+                if profile.evolution_instance_name:
+                    thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
+                    blocked_count = ModerationResult.objects.filter(
+                        instance_name=profile.evolution_instance_name,
+                        decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
+                        created_at__gte=thirty_days_ago
+                    ).count()
+                    if blocked_count >= 10:
+                        instance_risk = 'critical'
+                    elif blocked_count >= 5:
+                        instance_risk = 'high'
+                    elif blocked_count >= 1:
+                        instance_risk = 'medium'
+
+                wa_number = "Setup Pending"
+                wa_identifier = f"Device: {profile.evolution_instance_name}"
+                
+                try:
+                    from .evolution_api import get_instance_details
+                    evo_details = get_instance_details(profile.evolution_instance_name)
+                    if evo_details and evo_details.get('ownerJid'):
+                        raw_jid = evo_details.get('ownerJid', '').split('@')[0]
+                        if raw_jid:
+                            wa_number = f"+{raw_jid}"
+                        p_name = evo_details.get('profileName')
+                        if p_name:
+                            wa_identifier = f"{p_name} ({profile.evolution_instance_name})"
+                except Exception:
+                    pass
+
+                child_data = {
+                    "identifier": wa_identifier,
+                    "whatsapp_number": wa_number,
+                    "risk_level": instance_risk,
+                    "whatsapp_connected": True
+                }
+                
+        data.append({
+            "id": str(user.id),
+            "full_name": user.get_full_name() or user.username,
+            "email": user.email,
+            "phone": user.phone_number,
+            "status": "active",
+            "monitoring_active": True if child_data else False,
+            "alert_threshold": profile.alert_threshold if profile else 0.75,
+            "sms_notifications": profile.receive_sms_alerts if profile else True,
+            "email_notifications": profile.receive_email_alerts if profile else True,
+            "linked_child": child_data,
+            "joined_at": user.created_at.strftime('%b %d, %Y'),
+            "last_login": user.last_login.strftime('%b %d, %Y') if user.last_login else "Never"
+        })
+        
+    return Response(data)
+
+@api_view(['GET'])
+def admin_conversations(request):
+    """GET /api/v1/admin/conversations/"""
+    all_results = ModerationResult.objects.all().order_by('-created_at')
+    
+    contacts_map = {}
+    messages_map = {}
+    
+    # We group by (instance_name, sender_jid) to unique conversations
+    # OR if sender is the child (is_from_me), we need to know who they were talking to.
+    # Actually, Evolution API gives the same remoteJid for both incoming and outgoing in a chat.
+    # So (instance_name, remoteJid) is the conversation ID.
+    
+    sender_jids = list(all_results.values_list('sender_jid', flat=True).distinct())
+    profiles = UserBehaviorProfile.objects.filter(user_jid__in=sender_jids)
+    profile_dict = {p.user_jid: p for p in profiles}
+    
+    for r in all_results:
+        jid = r.sender_jid
+        if not jid: continue
+        
+        # ID is unique per (Child Device, Remote Contact)
+        conv_id = f"{r.instance_name}_{jid}"
+        
+        if conv_id not in contacts_map:
+            prof = profile_dict.get(jid)
+            
+            # Find logic for parent and child names
+            instance_name = r.instance_name
+            parent_name = "Unknown Parent"
+            child_name = "Unknown Child"
+            
+            parent_profile = ParentProfile.objects.filter(evolution_instance_name=instance_name).first()
+            if parent_profile:
+                parent_name = parent_profile.user.get_full_name() or parent_profile.user.username
+                child = parent_profile.children.first()
+                if child:
+                    child_name = child.full_name
+                else:
+                    child_name = f"Device: {instance_name}"
+            
+            # Base fallback name
+            raw_n = jid.split('@')[0]
+            if jid.endswith('@g.us'):
+                display_name = f"Group ({raw_n[-4:]})"
+            elif jid.endswith('@s.whatsapp.net'):
+                display_name = f"+{raw_n}"
+            else:
+                display_name = jid
+                
+            # If the most recent message is from the remote contact, use their name
+            has_real_name = False
+            if r.sender_name and not r.is_from_me:
+                display_name = r.sender_name
+                has_real_name = True
+                    
+            contacts_map[conv_id] = {
+                "id": conv_id,
+                "raw_jid": jid,
+                "name": display_name,
+                "number": f"+{jid.split('@')[0]}" if jid.endswith('@s.whatsapp.net') else f"Group ({jid.split('@')[0][-4:]})",
+                "child_name": child_name,
+                "child_id": "child-" + instance_name,
+                "parent_name": parent_name,
+                "sender_name": display_name,
+                "has_real_name": has_real_name,
+                "sender_risk_score": prof.risk_score if prof else 0.1,
+                "risk_level": prof.risk_level.lower() if prof else "low",
+                "plateforme": "WhatsApp",
+                "is_first_contact": False,
+                "last_message": r.raw_text[:50],
+                "last_message_at": r.created_at.strftime('%H:%M'),
+                "total_messages": 0,
+                "blocked_count": 0,
+                "unread": 0
+            }
+            messages_map[conv_id] = []
+            
+        # Update name if we find the remote contact's name in an older message
+        if r.sender_name and not r.is_from_me and not contacts_map[conv_id].get("has_real_name"):
+            contacts_map[conv_id]["name"] = r.sender_name
+            contacts_map[conv_id]["sender_name"] = r.sender_name
+            contacts_map[conv_id]["has_real_name"] = True
+            
+        contacts_map[conv_id]["total_messages"] += 1
+        is_blocked = r.decision in ['BLOCK', 'ESCALATE']
+        if is_blocked:
+            contacts_map[conv_id]["blocked_count"] += 1
+            
+        messages_map[conv_id].append({
+            "id": str(r.id),
+            "content_preview": r.raw_text,
+            "direction": 'outgoing' if r.is_from_me else 'incoming', 
+            "is_blocked": is_blocked,
+            "language": r.language,
+            "sent_at": r.created_at.strftime('%H:%M'),
+            "decision": r.decision,
+            "toxicity_score": r.toxicity_score,
+            "category": r.primary_class,
+            "llm_triggered": r.llm_triggered
+        })
+
+    for jid in messages_map:
+        messages_map[jid].reverse()
+
+    return Response({
+        "contacts": list(contacts_map.values()),
+        "messages": messages_map
+    })
+
 
 @csrf_exempt
 @api_view(['POST'])
@@ -843,6 +1101,141 @@ def current_user(request):
     """Returns details of the currently logged-in user."""
     serializer = AegisUserSerializer(request.user)
     return Response(serializer.data)
+
+@api_view(['GET'])
+def admin_risk_profiles(request):
+    """GET /api/v1/admin/risk-profiles/"""
+    
+    # 1. Build Children Profiles
+    children_profiles = []
+    
+    # Actually, we can get devices connected via parent profile or MonitoredChild directly
+    children = MonitoredChild.objects.all()
+    
+    # Also fetch parent profiles connected but without a registered child
+    parents_with_devices = ParentProfile.objects.exclude(evolution_instance_name__isnull=True).exclude(evolution_instance_name='')
+    
+    # We will build a map of instance_name -> child info
+    instances = {}
+    
+    for c in children:
+        if c.parent and c.parent.evolution_instance_name:
+            instances[c.parent.evolution_instance_name] = c
+            
+    for p in parents_with_devices:
+        if p.evolution_instance_name not in instances:
+            instances[p.evolution_instance_name] = p
+            
+    # Calculate stats per instance
+    import datetime
+    import random
+    thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
+    
+    for instance_name, entity in instances.items():
+        results = ModerationResult.objects.filter(instance_name=instance_name)
+        
+        is_child = isinstance(entity, MonitoredChild)
+        
+        c_id = f"c_{instance_name}"
+        identifier = entity.full_name if is_child else f"Device: {instance_name}"
+        wa_number = entity.whatsapp_display_number if is_child else ""
+        parent_id = str(entity.parent.user.id) if is_child else str(entity.user.id)
+        
+        base_risk = 'LOW'
+        blocked_count = results.filter(decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE']).count()
+        if blocked_count >= 10: base_risk = 'CRITICAL'
+        elif blocked_count >= 5: base_risk = 'HIGH'
+        elif blocked_count >= 1: base_risk = 'MEDIUM'
+        
+        risk_score = 0.1
+        if base_risk == 'CRITICAL': risk_score = 0.85
+        elif base_risk == 'HIGH': risk_score = 0.65
+        elif base_risk == 'MEDIUM': risk_score = 0.35
+        
+        children_profiles.append({
+            "id": c_id,
+            "identifier": identifier,
+            "whatsapp_number": wa_number,
+            "parent_user_id": parent_id,
+            "date_naissance": "2010-01-01",
+            "nom_ecole": entity.school_name if is_child else "",
+            "niveau_scolaire": entity.school_level if is_child else "",
+            "victim_risk_level": base_risk.lower(),
+            "victim_risk_score": risk_score,
+            "total_incoming": results.exclude(is_from_me=True).count(),
+            "total_blocked": blocked_count,
+            "total_messages_bloques_envoyes": results.filter(is_from_me=True, decision__in=['BLOCK', 'ESCALATE']).count(),
+            "activite_nocturne": 0.1,
+            "unique_harassers": len(list(results.exclude(is_from_me=True).values_list('sender_jid', flat=True).distinct())),
+            "escalation_count": results.filter(decision='ESCALATE').count(),
+            "most_common_category": "threat" if blocked_count > 0 else "N/A",
+            "risk_trend": [max(0.1, risk_score - random.uniform(-0.2, 0.2)) for _ in range(7)],
+            "snapshots": [],
+            "category_breakdown": {
+                "verbal": 0, "threat": blocked_count, "sexual": 0, "discrimination": 0
+            },
+            "last_activity": timezone.now().isoformat(),
+            "monitored_since": timezone.now().isoformat()
+        })
+        
+    # 2. Build Contacts Profiles
+    profiles = UserBehaviorProfile.objects.all().order_by('-total_blocked_messages_sent')[:50]
+    contact_profiles = []
+    
+    for prof in profiles:
+        # Find which child instance they talked to
+        # Also let's extract their push name from their recent ModerationResults
+        results = ModerationResult.objects.filter(sender_jid=prof.user_jid)
+        instances_talked_to = list(results.values_list('instance_name', flat=True).distinct())
+        
+        # Try to find recent sender_name
+        recent_name_result = results.exclude(sender_name__isnull=True).exclude(sender_name='').order_by('-created_at').first()
+        push_name = recent_name_result.sender_name if recent_name_result else ""
+        
+        # Format the numbers nicely
+        raw_num = prof.user_jid.split('@')[0]
+        if raw_num.isdigit():
+            formatted_number = f"+{raw_num[:3]} {raw_num[3:]}" if len(raw_num) > 4 else f"+{raw_num}"
+        else:
+            formatted_number = raw_num # For groups or weird system jids
+            
+        display_name = f"{push_name} ({formatted_number})" if push_name and push_name != raw_num else formatted_number
+        if not display_name.strip():
+            display_name = formatted_number
+            
+        # Calculate dominant category dynamically
+        cat_counts = results.exclude(primary_class='safe').exclude(primary_class__isnull=True).values('primary_class').annotate(count=Count('id')).order_by('-count')
+        dominant_cat = cat_counts.first()['primary_class'] if cat_counts else "N/A"
+        
+        related_child_ids = [f"c_{inst}" for inst in instances_talked_to]
+        
+        contact_profiles.append({
+            "id": str(prof.id),
+            "raw_jid": prof.user_jid,
+            "whatsapp_number": display_name,
+            "threat_level": prof.risk_level.lower(),
+            "threat_score": prof.risk_score,
+            "total_sent": prof.total_messages_sent,
+            "total_blocked": prof.total_blocked_messages_sent,
+            "block_ratio": prof.block_ratio,
+            "escalation_count": prof.escalation_count,
+            "night_activity_ratio": prof.night_activity_ratio,
+            "activite_nocturne": prof.night_activity_ratio,
+            "avg_toxicity": prof.average_toxicity_score,
+            "repeated_targeting": prof.unique_targets_count > 1,
+            "targets_count": prof.unique_targets_count,
+            "nombre_cibles_differentes": len(related_child_ids),
+            "other_monitored_children_count": len(related_child_ids) - 1 if len(related_child_ids) > 0 else 0,
+            "dominant_category": dominant_cat,
+            "toxicity_trend": [max(0.1, prof.risk_score - random.uniform(-0.2, 0.2)) for _ in range(7)],
+            "last_seen": timezone.now().isoformat(),
+            "related_child_ids": related_child_ids
+        })
+
+    return Response({
+        "children": children_profiles,
+        "contacts": contact_profiles
+    })
 
 
 

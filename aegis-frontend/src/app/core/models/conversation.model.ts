@@ -23,6 +23,7 @@ export interface Conversation {
 
 export interface Contact {
   id: string;
+  raw_jid: string;
   name: string | null;
   number: string;
   child_name: string;

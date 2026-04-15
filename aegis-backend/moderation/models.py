@@ -324,6 +324,10 @@ class ModerationResult(models.Model):
     language = models.CharField(max_length=20, default='en', help_text="Detected language (e.g. en, fr, ar, darija)")
     message_key_id = models.CharField(max_length=255, null=True, blank=True, help_text="Evolution API message key for deletion")
     primary_class = models.CharField(max_length=50, null=True, blank=True, help_text="M2 detected category (e.g. threat, sexual_harassment)")
+    
+    # Sender details
+    sender_name = models.CharField(max_length=255, null=True, blank=True, help_text="Push name or display name of the sender")
+    is_from_me = models.BooleanField(default=False, help_text="True if the monitored child sent this message")
 
     # Link to harassment category reference table
     category = models.ForeignKey(HarassmentCategory, on_delete=models.SET_NULL,

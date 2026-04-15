@@ -150,6 +150,7 @@ export const MOCK_CHILDREN: ChildProfile[] = [
 export const MOCK_CONTACTS: ContactProfile[] = [
   {
     id: 'c1',
+    raw_jid: '',
     whatsapp_number: '+212 6XX XXX X91',
     threat_level: 'critical',
     threat_score: 0.94,
@@ -171,6 +172,7 @@ export const MOCK_CONTACTS: ContactProfile[] = [
   },
   {
     id: 'c2',
+    raw_jid: '',
     whatsapp_number: '+212 6XX XXX X92',
     threat_level: 'high',
     threat_score: 0.77,
@@ -192,6 +194,7 @@ export const MOCK_CONTACTS: ContactProfile[] = [
   },
   {
     id: 'c3',
+    raw_jid: '',
     whatsapp_number: '+212 6XX XXX X93',
     threat_level: 'medium',
     threat_score: 0.55,
@@ -213,6 +216,7 @@ export const MOCK_CONTACTS: ContactProfile[] = [
   },
   {
     id: 'c4',
+    raw_jid: '',
     whatsapp_number: '+212 6XX XXX X94',
     threat_level: 'low',
     threat_score: 0.21,

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { ConversationViewerComponent } from '@shared/index';
 import { MOCK_CONTACTS, MOCK_MESSAGES } from './conversations.data';
 import { Contact, ConversationMessage } from '@core/models';
+import { ApiService } from '@core/services/api.service';
 
 @Component({
   selector: 'app-conversations',
@@ -13,10 +14,24 @@ import { Contact, ConversationMessage } from '@core/models';
   styleUrl: './conversations.css'
 })
 export class ConversationsComponent {
-  contacts = signal<Contact[]>(MOCK_CONTACTS);
-  messages = signal<Record<string, ConversationMessage[]>>(MOCK_MESSAGES);
+  contacts = signal<Contact[]>([]);
+  messages = signal<Record<string, ConversationMessage[]>>({});
 
-  constructor(private router: Router) {}
+  constructor(private router: Router, private apiService: ApiService) {}
+
+  ngOnInit() {
+    this.apiService.getAdminConversations().subscribe({
+      next: (data) => {
+        this.contacts.set(data.contacts);
+        this.messages.set(data.messages);
+      },
+      error: (err) => {
+        console.error('Failed to load conversations from backend. Falling back to mock data.', err);
+        this.contacts.set(MOCK_CONTACTS);
+        this.messages.set(MOCK_MESSAGES);
+      }
+    });
+  }
 
   onOpenRiskProfile(event: {tab: 'children' | 'contacts', contact: Contact}) {
     this.router.navigate(['/admin/risk-profiles'], {

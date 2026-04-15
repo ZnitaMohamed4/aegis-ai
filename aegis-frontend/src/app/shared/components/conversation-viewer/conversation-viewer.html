@@ -1,6 +1,59 @@
+<!-- ══════════════ CHILDREN CARDS VIEW ══════════════ -->
+@if (view() === 'children') {
+<div class="p-6">
+  <app-page-header [title]="title()" [subtitle]="'Select a monitored child device to view their conversations'" />
+  
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+    @for (group of childGroups; track group.child_id) {
+      <button 
+        class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6 text-left hover:border-[var(--accent)] hover:shadow-md transition-all group flex flex-col"
+        (click)="openTableForChild(group.child_id)"
+      >
+        <div class="flex items-center justify-between mb-4">
+          <div class="w-12 h-12 rounded-full bg-[var(--accent)]/10 flex items-center justify-center text-[var(--accent)] group-hover:scale-110 transition-transform">
+            <i class="pi pi-user text-xl"></i>
+          </div>
+          <span class="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full"
+                [style.color]="getRiskHex(group.risk_level)"
+                [style.background]="getRiskHex(group.risk_level) + '22'"
+                [style.border]="'1px solid ' + getRiskHex(group.risk_level) + '33'">
+            {{ group.risk_level }} Risk
+          </span>
+        </div>
+        
+        <h3 class="text-lg font-bold text-[var(--text-primary)] mb-1">{{ group.child_name }}</h3>
+        <p class="text-[11px] font-mono text-[var(--text-muted)] mb-6 truncate">{{ group.child_id }}</p>
+        
+        <div class="grid grid-cols-2 gap-4 mt-auto w-full border-t border-[var(--border)] pt-4">
+          <div>
+            <div class="text-2xl font-bold text-[var(--text-primary)]">{{ group.contacts.length }}</div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Active Contacts</div>
+          </div>
+          <div>
+            <div class="text-2xl font-bold" [ngClass]="group.blocked_count > 0 ? 'text-[var(--critical)]' : 'text-[var(--text-primary)]'">
+              {{ group.blocked_count }}
+            </div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Blocked Msgs</div>
+          </div>
+        </div>
+      </button>
+    } @empty {
+      <div class="col-span-full py-16 text-center">
+        <h3 class="text-lg text-[var(--text-muted)]">No monitored children found</h3>
+      </div>
+    }
+  </div>
+</div>
+}
+
 <!-- ══════════════ TABLE VIEW ══════════════ -->
 @if (view() === 'table') {
 <div class="p-6">
+  @if (isAdmin() && selectedChildGroupId()) {
+    <button (click)="backToChildren()" class="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors bg-[var(--bg-surface)] border border-[var(--border)] px-4 py-2 rounded-lg">
+      <i class="pi pi-arrow-left text-xs"></i> Back to Children
+    </button>
+  }
   <app-page-header [title]="title()" [subtitle]="subtitle()" />
 
   <div class="flex flex-wrap items-center gap-3 mb-6">
@@ -32,7 +85,7 @@
     <table class="w-full min-w-[1200px]">
       <thead>
         <tr class="border-b border-[var(--border)]">
-          @if (isAdmin()) {
+          @if (isAdmin() && !selectedChildGroupId()) {
             <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Child</th>
           }
           <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Sender</th>
@@ -49,7 +102,7 @@
         @if (isLoading()) {
           @for (i of skeletonItems; track i) {
             <tr class="border-b border-[var(--border)]">
-              @if (isAdmin()) {
+              @if (isAdmin() && !selectedChildGroupId()) {
                 <td class="px-5 py-4"><p-skeleton width="6rem" height="1.25rem"></p-skeleton></td>
               }
               <td class="px-5 py-4"><div class="flex items-center gap-2"><p-skeleton width="7rem" height="1.25rem"></p-skeleton><p-skeleton width="3rem" height="1rem" borderRadius="16px"></p-skeleton></div></td>
@@ -65,7 +118,7 @@
         } @else {
           @for (contact of filteredContacts; track contact.id) {
             <tr class="border-b border-[var(--border)] hover:bg-[var(--bg-surface-2)] transition-colors">
-            @if (isAdmin()) {
+            @if (isAdmin() && !selectedChildGroupId()) {
               <td class="px-5 py-4">
                 <button
                   class="text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors"
@@ -271,52 +324,85 @@
 
 <!-- ══════════════ CHAT VIEW ══════════════ -->
 @if (view() === 'chat') {
-<div class="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-[var(--bg-base)]">
+<div class="fixed top-[64px] right-0 bottom-0 left-0 md:left-64 z-50 flex flex-col bg-[var(--bg-base)] overflow-hidden">
 
-  <div class="flex items-center gap-4 px-6 py-4 bg-[var(--bg-surface)] border-b border-[var(--border)]">
+  <!-- FIXED HEADER -->
+  <div class="flex items-center gap-4 px-6 py-4 bg-[var(--bg-surface)] border-b border-[var(--border)] shadow-sm z-10 shrink-0">
     <button
       (click)="backToTable()"
-      class="p-1.5 rounded-lg hover:bg-[var(--bg-surface-2)] text-[var(--text-muted)] transition-colors flex-shrink-0"
+      class="w-10 h-10 rounded-xl flex items-center justify-center border border-[var(--border)] hover:bg-[var(--bg-surface-2)] text-[var(--text-muted)] transition-all flex-shrink-0"
     >
-      <i class="pi pi-arrow-left text-sm"></i>
+      <i class="pi pi-arrow-left"></i>
     </button>
 
     <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 flex-wrap">
-        <span class="text-sm font-bold font-mono text-[var(--text-primary)]">{{ selectedContact()!.number }}</span>
+      <div class="flex items-center gap-2 flex-wrap mb-1">
+        <span class="text-lg font-bold text-[var(--text-primary)] leading-tight">{{ selectedContact()!.sender_name }}</span>
         <span class="platform-pill" [ngClass]="getPlatformTagClass(selectedContact()!.plateforme)">
           {{ selectedContact()!.plateforme }}
         </span>
-        <span class="text-xs font-bold capitalize px-2.5 py-1 rounded-full"
+        <span class="text-[10px] uppercase font-black tracking-widest px-2 py-0.5 rounded-md"
               [style.color]="getRiskHex(selectedContact()!.risk_level)"
-              [style.background]="getRiskHex(selectedContact()!.risk_level) + '22'">
+              [style.background]="getRiskHex(selectedContact()!.risk_level) + '15'"
+              [style.border]="'1px solid ' + getRiskHex(selectedContact()!.risk_level) + '33'">
           {{ selectedContact()!.risk_level }} risk
         </span>
       </div>
 
-      <div class="text-xs text-[var(--text-muted)] mt-1">
-        Child:
-        @if (isAdmin()) {
-          <button class="header-link" (click)="openRiskProfile('children', selectedContact()!)">
-            {{ selectedContact()!.child_name }}
-          </button>
-        } @else {
-          <span class="font-semibold text-[var(--text-primary)]">{{ selectedContact()!.child_name }}</span>
-        }
-        · Sender:
-        <button class="header-link" (click)="openRiskProfile('contacts', selectedContact()!)">
-          {{ selectedContact()!.sender_name }}
-        </button>
-        · {{ selectedContact()!.total_messages }} messages
-        · <span class="text-[var(--critical)] font-semibold">{{ selectedContact()!.blocked_count }} blocked</span>
+      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <div class="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+          <i class="pi pi-phone text-[9px]"></i> {{ selectedContact()!.number }}
+        </div>
+        <span class="opacity-30 text-xs text-nowrap">|</span>
+        <div class="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+          <i class="pi pi-user text-[9px]"></i> Child: 
+          @if (isAdmin()) {
+            <button class="header-link px-1" (click)="openRiskProfile('children', selectedContact()!)">
+              {{ selectedContact()!.child_name }}
+            </button>
+          } @else {
+            <span class="font-bold text-[var(--text-primary)] px-1">{{ selectedContact()!.child_name }}</span>
+          }
+        </div>
+        <span class="opacity-30 text-xs text-nowrap">|</span>
+        <div class="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
+           <span class="font-bold text-[var(--accent)]">{{ selectedContact()!.total_messages }}</span> total
+           · <span class="text-[var(--critical)] font-bold">{{ selectedContact()!.blocked_count }} blocked</span> 
+        </div>
       </div>
     </div>
 
     <div class="flex items-center gap-2">
-      <button class="header-action" (click)="goToReports()">Generate Report</button>
-      <button class="header-action" (click)="exportConversation()">Export</button>
+      <button 
+        class="header-action hidden md:flex items-center gap-1.5" 
+        [ngClass]="messageFilter() !== 'all' ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/30' : ''"
+        (click)="toggleMessageFilter()"
+      >
+        <i class="pi" [ngClass]="messageFilter() !== 'all' ? 'pi-filter-slash' : 'pi-filter'"></i>
+        {{ messageFilter() === 'all' ? 'Filter Threats' : 'Show All' }}
+      </button>
+
+      <button class="header-action hidden md:flex items-center gap-1.5" (click)="goToReports()">
+        <i class="pi pi-file-pdf"></i> Generate Report
+      </button>
+      <button class="header-action flex items-center gap-1.5" (click)="exportConversation()">
+        <i class="pi pi-download"></i> Export
+      </button>
     </div>
   </div>
+
+  @if (messageFilter() !== 'all') {
+    <div class="bg-[var(--accent)]/5 border-b border-[var(--accent)]/20 px-6 py-2 text-xs text-[var(--text-muted)] flex justify-between items-center z-10 shrink-0">
+      <span><i class="pi pi-info-circle mr-1 text-[var(--accent)]"></i> 
+        @if (messageFilter() === 'blocked') {
+          Showing only severe threats (Block | Escalate)
+        } @else {
+          Showing all flagged messages (Warn | Block | Escalate)
+        }
+      </span>
+      <button (click)="clearFilter()" class="hover:text-[var(--text-primary)] transition-colors underline">Clear Filter</button>
+    </div>
+  }
 
   @if (selectedContact()!.is_first_contact) {
     <div class="first-contact-warning">
@@ -325,66 +411,110 @@
     </div>
   }
 
-  <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-3">
+  <!-- MESSAGES LIST - THE ONLY SCROLLABLE PART -->
+  <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-4 bg-[var(--bg-base)]">
     @for (msg of getMessagesForContact(selectedContact()!.id); track msg.id) {
 
       @if (msg.direction === 'outgoing') {
-        <div class="flex justify-end">
-          <div class="bg-[#005c4b] text-white rounded-xl rounded-tr-sm px-4 py-3 max-w-sm shadow-sm border border-[#005c4b]/50">
-            <div class="flex items-center justify-between gap-2 mb-1">
-              <span class="lang-chip bg-white/10 text-white/90 border-white/10">{{ msg.language }}</span>
-              <span class="text-xs text-white/70">{{ msg.sent_at }}</span>
-            </div>
-            <p class="text-sm text-white/95 leading-relaxed">{{ msg.content_preview }}</p>
-          </div>
-        </div>
-      }
-
-      @if (msg.direction === 'incoming') {
-        <div class="flex justify-start">
-          <div class="flex flex-col max-w-sm">
-
+        <div class="flex justify-end pl-12">
+          <div class="flex flex-col max-w-lg min-w-[200px] items-end">
             @if (isFlaggedMessage(msg)) {
               <button
-                class="flagged-message text-left"
+                class="bubble bubble-flagged animate-fade-in group hover:scale-[1.01] transition-transform text-right"
                 [ngClass]="{
                   'flagged-block': msg.decision === 'BLOCK' || msg.decision === 'ESCALATE',
                   'flagged-warn': msg.decision === 'WARN'
                 }"
                 (click)="openAlertDrawer(msg)"
+                style="border-radius: 1rem 1rem 0 1rem;"
               >
-                <div class="flex items-center gap-2 mb-2">
-                  <i class="pi" [ngClass]="msg.decision === 'WARN' ? 'pi-exclamation-circle' : 'pi-ban'"></i>
-                  <span class="text-xs font-bold uppercase tracking-wider">
+                <div class="flex items-center justify-end gap-2 mb-2 pb-1.5 border-b border-black/10">
+                  <span class="mr-auto text-[9px] opacity-60 font-mono">{{ msg.sent_at }}</span>
+                  @if (msg.llm_triggered) {
+                    <span class="llm-tag">LLM</span>
+                  }
+                  <span class="text-[10px] font-black uppercase tracking-widest">
                     {{ msg.decision }} @if (msg.category) { - {{ msg.category }} }
                   </span>
-                  <span class="lang-chip">{{ msg.language }}</span>
-                  @if (msg.llm_triggered) {
-                    <span class="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-mono">LLM</span>
-                  }
+                  <i class="pi" [ngClass]="msg.decision === 'WARN' ? 'pi-exclamation-circle' : 'pi-ban'"></i>
                 </div>
 
-                <p class="text-sm text-[var(--text-primary)]">{{ msg.content_preview }}</p>
+                <p class="text-sm font-semibold text-[var(--text-primary)] mb-3 leading-relaxed">{{ msg.content_preview }}</p>
 
-                <div class="mt-2 flex items-center justify-between">
-                  <span class="text-xs text-[var(--text-muted)]">{{ msg.sent_at }}</span>
-                  <div class="flex items-center gap-2">
+                <div class="flex items-center justify-between mt-1">
+                  <div class="text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[var(--accent)]">
+                    <i class="pi pi-chevron-left text-[8px]"></i> Audit Data
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="lang-chip dark-chip">{{ msg.language }}</span>
                     @if (msg.toxicity_score !== null && msg.toxicity_score !== undefined) {
-                      <span class="score-badge">tox {{ msg.toxicity_score | percent:'1.0-0' }}</span>
+                      <span class="score-badge">TOX {{ msg.toxicity_score | percent:'1.0-0' }}</span>
                     }
-                    <span class="text-xs font-bold font-mono px-2 py-0.5 rounded" [ngClass]="getDecisionClass(msg.decision ?? '')">
-                      {{ msg.decision }}
-                    </span>
                   </div>
                 </div>
               </button>
             } @else {
-              <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl rounded-tl-sm px-4 py-3">
-                <div class="flex items-center justify-between gap-2 mb-1">
-                  <span class="lang-chip">{{ msg.language }}</span>
-                  <span class="text-xs text-[var(--text-muted)]">{{ msg.sent_at }}</span>
+              <div class="bubble bubble-outgoing animate-fade-in text-right">
+                <div class="flex items-center justify-between gap-4 mb-1 border-b border-white/10 pb-1">
+                  <span class="text-[9px] text-white/60 font-mono">{{ msg.sent_at }}</span>
+                  <span class="text-[9px] font-bold tracking-widest text-white/50 uppercase">{{ selectedContact()!.child_name }}</span>
                 </div>
-                <p class="text-sm text-[var(--text-primary)]">{{ msg.content_preview }}</p>
+                <p class="text-sm text-white leading-relaxed inline-block">{{ msg.content_preview }}</p>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      @if (msg.direction === 'incoming') {
+        <div class="flex justify-start pr-12">
+          <div class="flex flex-col max-w-lg min-w-[200px]">
+
+            @if (isFlaggedMessage(msg)) {
+              <button
+                class="bubble bubble-flagged animate-fade-in group hover:scale-[1.01] transition-transform text-left"
+                [ngClass]="{
+                  'flagged-block': msg.decision === 'BLOCK' || msg.decision === 'ESCALATE',
+                  'flagged-warn': msg.decision === 'WARN'
+                }"
+                (click)="openAlertDrawer(msg)"
+                style="border-radius: 1rem 1rem 1rem 0;"
+              >
+                <div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-black/10">
+                  <i class="pi" [ngClass]="msg.decision === 'WARN' ? 'pi-exclamation-circle' : 'pi-ban'"></i>
+                  <span class="text-[10px] font-black uppercase tracking-widest">
+                    {{ msg.decision }} @if (msg.category) { - {{ msg.category }} }
+                  </span>
+                  @if (msg.llm_triggered) {
+                    <span class="llm-tag">LLM</span>
+                  }
+                  <span class="ml-auto text-[9px] opacity-60 font-mono">{{ msg.sent_at }}</span>
+                </div>
+
+                <p class="text-sm font-semibold text-[var(--text-primary)] mb-3 leading-relaxed">{{ msg.content_preview }}</p>
+
+                <div class="flex items-center justify-between mt-1">
+                   <div class="flex items-center gap-1.5">
+                    @if (msg.toxicity_score !== null && msg.toxicity_score !== undefined) {
+                      <span class="score-badge">TOX {{ msg.toxicity_score | percent:'1.0-0' }}</span>
+                    }
+                    <span class="lang-chip dark-chip">{{ msg.language }}</span>
+                  </div>
+                  <div class="text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[var(--accent)]">
+                    Audit Data <i class="pi pi-chevron-right text-[8px]"></i>
+                  </div>
+                </div>
+              </button>
+            } @else {
+              <div class="bubble bubble-incoming animate-fade-in shadow-sm">
+                <div class="flex items-center justify-between gap-4 mb-1.5 border-b border-[var(--border)] pb-1">
+                  <span class="text-[9px] font-bold tracking-widest text-[var(--text-muted)] uppercase">{{ selectedContact()!.sender_name }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="lang-chip text-[8px] py-0 px-1">{{ msg.language }}</span>
+                    <span class="text-[9px] text-[var(--text-muted)] font-mono">{{ msg.sent_at }}</span>
+                  </div>
+                </div>
+                <p class="text-sm text-[var(--text-primary)] leading-relaxed inline-block">{{ msg.content_preview }}</p>
               </div>
             }
           </div>
