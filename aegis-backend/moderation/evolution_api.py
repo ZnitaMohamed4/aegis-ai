@@ -51,7 +51,7 @@ def delete_message_from_whatsapp(instance_name, message_key_id, remote_jid, is_f
         return False
 
 
-def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision):
+def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision, message_key_id=None):
     """
     Sends an automated warning using Evolution API.
     Different text depending on who sent the bad message and whether it was blocked.
@@ -97,10 +97,23 @@ def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision
                 f"⚠️ _This incident has been lightly logged. Please maintain a respectful environment._"
             )
     
+    # 🎯 DELAY & TYPING LOGIC
     payload = {
         "number": remote_jid,
-        "text": warning_text
+        "text": warning_text,
+        "delay": 1500
     }
+    
+    # 🎯 QUOTED REPLY LOGIC
+    # Evolution API v2 requires the 'quoted' object to be placed at the ROOT of the payload!
+    if message_key_id:
+        payload["quoted"] = {
+            "key": {
+                "id": message_key_id,
+                "remoteJid": remote_jid,
+                "fromMe": is_from_me
+            }
+        }
 
     try:
         response = requests.post(url, json=payload, headers=headers)
@@ -112,6 +125,64 @@ def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision
         
     return False
 
+
+def send_aegis_reaction(instance_name, remote_jid, message_key_id, is_from_me, reaction="🚨"):
+    """
+    Instantly slaps a reaction emoji onto a bad message to visually tag it before the warning.
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    
+    if not api_key or not message_key_id:
+        return False
+        
+    url = f"{api_url}/message/sendReaction/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    
+    # Evolution V2 strictly requires the key object for Reactions!
+    payload = {
+        "key": {
+            "remoteJid": remote_jid,
+            "fromMe": is_from_me,
+            "id": message_key_id
+        },
+        "reaction": reaction
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code in [200, 201]:
+            logger.info(f"[AEGIS] 🚨 Successfully pinned '{reaction}' reaction to message {message_key_id}")
+            return True
+    except Exception as e:
+        logger.error(f"[AEGIS] ❌ Error sending reaction: {e}")
+        
+    return False
+
+def send_aegis_presence(instance_name, remote_jid, presence="composing", delay=1500):
+    """
+    Evolution V2 requires a dedicated endpoint to simulate AEGIS magically typing!
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    
+    if not api_key:
+        return False
+        
+    url = f"{api_url}/chat/sendPresence/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    
+    payload = {
+        "number": remote_jid,
+        "presence": presence,
+        "delay": delay
+    }
+    
+    try:
+        requests.post(url, json=payload, headers=headers)
+        return True
+    except Exception:
+        return False
 
 def send_parent_alert(instance_name, parent_phone_number, child_name, category, text):
     """

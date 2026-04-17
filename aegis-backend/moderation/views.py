@@ -12,7 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .evolution_api import delete_message_from_whatsapp, send_aegis_warning, create_whatsapp_instance, get_qr_code, send_parent_alert
+from .evolution_api import delete_message_from_whatsapp, send_aegis_warning, send_aegis_reaction, send_aegis_presence, create_whatsapp_instance, get_qr_code, send_parent_alert
 
 # for calculating some stats in the fly
 from django.utils import timezone
@@ -58,6 +58,8 @@ def get_avg_latency(agent, default=0):
 
 # import llm agent for grey zone classification
 from ml_pipeline.llm_agent import analyze_grey_zone
+# Our shiny new LangGraph Orchestrator!
+from ml_pipeline.graph import aegis_graph
 
 # Import the ML pipeline (Real or Stub)
 if getattr(settings, 'AEGIS_STUB_MODE', False):
@@ -140,7 +142,7 @@ def _broadcast_moderation_event(moderation: ModerationResult, result, alerte: Se
         "sender": moderation.sender_jid,
         "text": moderation.raw_text,
         "decision": moderation.decision.lower(),
-        "primary_class": getattr(result, 'primary_class', 'safe') or 'safe',
+        "primary_class": moderation.primary_class or 'safe',
         "language": getattr(moderation, 'language', 'unknown'),
         "m1_score": round(moderation.toxicity_score, 4),
         "m2_confidence": round(moderation.confidence_score, 4) if moderation.confidence_score else None,
@@ -234,110 +236,68 @@ def webhook_messages(request):
     print(f"│ 🎯 Recipient: {recipient_label}")
     print(f"│ 📝 Text:      '{raw_text[:80] + ('...' if len(raw_text) > 80 else '')}'")
 
-    # 3. 🧠 SEND TO AI PIPELINE
+    # 3. 🧠 SEND TO AI PIPELINE (LangGraph Orchestrator)
     t_ml_start = time.time()
     
-    llm_explanation = None
-    llm_triggered = False
-    llm_latency_total = 0
-
-    # 1. Run Core ML Pipeline
-    result = run_pipeline(raw_text)
+    # Prepare the initial state
+    initial_state = {
+        "raw_text": raw_text,
+        "sender_jid": sender_jid,
+        "instance_name": instance,
+        "message_key_id": message_key_id,
+        "push_name": push_name,
+        "is_from_me": is_from_me
+    }
     
-    # Real M1/M2 latencies from the pipeline
-    log_latency('agent_1', result.m1_latency_ms)
-    log_latency('agent_2', result.m2_latency_ms)
-
-    # --- AGENT 3 (LLM) INTERVENTION ---
-    # If it is NOT completely safe, AND confidence is low (< AGENT3_CONFIDENCE_THRESHOLD), call Groq!
-    if result.decision != 'ALLOW' and result.m2_confidence is not None and result.m2_confidence < AGENT3_CONFIDENCE_THRESHOLD:
-        print(f"│ 🤖 [AGENT 3] Low confidence ({result.m2_confidence:.2f} -> {result.primary_class}). Checking Semantic Cache...")
-        
-        t_llm_start = time.time()
-        
-        # 1. SEMANTIC CACHE LOOKUP
-        cached_llm_response = search_semantic_cache(raw_text)
-        
-        if cached_llm_response:
-            llm_response = cached_llm_response
-            print(f"│ ⚡ [SEMANTIC CACHE HIT] Bypassed Groq! Exact meaning recognized.")
-        else:
-            print(f"│ 🤖 [AGENT 3] No semantic match. Asking Groq...")
-            llm_response = analyze_grey_zone(raw_text, result.primary_class, result.m2_confidence, result.m1_score)
-            
-            # 2. SAVE NEW KNOWLEDGE TO CACHE
-            add_to_semantic_cache(raw_text, llm_response)
-            
-        t_llm_end = time.time()
-        llm_latency_total = t_llm_end - t_llm_start
-        log_latency('agent_3', int(llm_latency_total * 1000))
-        
-        # Override the ML's decisions with Groq's smart decisions
-        llm_decision = llm_response.get("decision", "REVISE").upper()
-        result.decision = llm_decision
-        
-        # CRITICAL: Always take the corrected class from the LLM
-        corrected_category = llm_response.get("category", result.primary_class)
-        result.primary_class = corrected_category
-        
-        llm_explanation = llm_response.get("explanation", "")
-        llm_triggered = True
-
-        if llm_decision == 'HUMAN_REVIEW':
-            print(f"│ ⚠️  [AGENT 3] TOO AMBIGUOUS — Flagging for HUMAN REVIEW")
-        else:
-            print(f"│ ✨ [AGENT 3] Groq says: {result.decision} ({result.primary_class}) - {llm_explanation}")
-
-    # --- SHADOW REVIEW: Catch "False Safes" ---
-    elif result.decision == 'ALLOW' and SHADOW_LOW <= result.m1_score <= SHADOW_HIGH:
-        print(f"│ 🕵️ [SHADOW] High score ({result.m1_score:.2f}) but SAFE decision. Checking Semantic Cache...")
-        t_llm_start = time.time()
-        
-        # 1. SEMANTIC CACHE LOOKUP FOR SHADOW
-        cached_llm_response = search_semantic_cache(raw_text)
-        
-        if cached_llm_response:
-            llm_response = cached_llm_response
-            print(f"│ ⚡ [SEMANTIC CACHE HIT] Bypassed Groq for Shadow Review! Meaning recognized.")
-        else:
-            print(f"│ 🤖 [SHADOW] No semantic match. Asking Groq to audit...")
-            llm_response = analyze_grey_zone(raw_text, "safe", 0.99, result.m1_score)
-            
-            # 2. SAVE NEW KNOWLEDGE TO CACHE
-            add_to_semantic_cache(raw_text, llm_response)
-
-        t_llm_end = time.time()
-        llm_latency_total = t_llm_end - t_llm_start
-        
-        if llm_response.get("decision", "ALLOW").upper() != 'ALLOW':
-            result.decision = llm_response.get("decision").upper()
-            result.primary_class = llm_response.get("category", result.primary_class)
-            llm_explanation = llm_response.get("explanation", "")
-            llm_triggered = True
-            print(f"│ 🛡️ [SHADOW] Audit complete: Reclassified as {result.decision} ({result.primary_class})")
-
+    # 🚀 EXECUTE THE GRAPH
+    final_state = aegis_graph.invoke(initial_state)
+    
+    llm_latency_total = 0 # We'll abstract latency logging better in Phase 2
     t_ml_end = time.time()
 
-    # Print the AI Brain Predictions
-    if result.decision == 'ALLOW':
-        print(f"│ 🟢 M1 (GATE):  {result.m1_score:.2f} -> SAFE")
-        print(f"│ ✅ VERDICT:    ALLOW")
-    else:
-        print(f"│ 🔴 M1 (GATE):  {result.m1_score:.2f} -> HARMFUL")
-        if result.m2_confidence is not None:
-            print(f"│ 🧬 M2 (SPEC):  {result.primary_class.upper()} (Confidence: {result.m2_confidence:.2f})")
-        print(f"│ 🚨 VERDICT:    {result.decision}")
+    # Extract the final results from the graph's memory!
+    decision = final_state.get("decision", "ALLOW")
+    m1_score = final_state.get("m1_score", 0.0)
+    primary_class = final_state.get("primary_class", "safe")
+    m2_confidence = final_state.get("m2_confidence")
+    llm_triggered = final_state.get("llm_triggered", False)
+    llm_explanation = final_state.get("llm_explanation", "")
+    ml_corrected = final_state.get("ml_corrected", False)
+    ml_original_decision = final_state.get("ml_original_decision", None)
+    ml_original_class = final_state.get("ml_original_class", None)
+
+    # Print the Multi-Agent Execution Results to the console
+    print(f"│ 🧭 [ORCHESTRATOR] Graph Execution Complete in {int((t_ml_end - t_ml_start) * 1000)}ms")
+    print(f"│ 🛡️  [AGENT 1: GATEKEEPER] Toxicity Score: {m1_score:.2f}")
     
-    print(f"└──────────────────────────────────────────────┘")
+    if m2_confidence is not None:
+        print(f"│ 🔬 [AGENT 2: CLASSIFIER] Primary Threat: {primary_class.upper()} (Confidence: {m2_confidence:.2f})")
+        
+    # Escalation Gate display
+    escalation_risk = final_state.get("escalation_risk", 0.0)
+    escalation_reason = final_state.get("escalation_reason", "")
+    if escalation_risk >= 0.40:
+        print(f"│ 🚨 [ESCALATION GATE] Score: {escalation_risk:.2f} — {escalation_reason}")
+
+    if final_state.get("shadow_reviewed", False):
+        print(f"│ 🕵️  [AGENT 3: AUDITOR] Triggered by Shadow Zone! Verified as {decision}")
+    elif llm_triggered:
+        correction_tag = " 🔁 CORRECTED ML" if ml_corrected else ""
+        print(f"│ 🤖 [AGENT 3: AUDITOR] Triggered! Groq Decision: {decision} - \"{llm_explanation}\"{correction_tag}")
+        
+    print(f"│ 📊 [AGENT 4: PROFILER] Target Risk Score: {final_state.get('risk_score', 0.0):.2f} ({final_state.get('risk_level', 'LOW')})")
+    print(f"│ ⚡ [AGENT 5: ENFORCER] Final Action Executed: {decision}")
+    
+    print(f"└────────────────────────────────────────────────────────────┘")
+
 
     # 4. Save the result to PostgreSQL (ModerationResult)
-    is_human_review = result.decision == 'HUMAN_REVIEW'
+    is_human_review = decision == 'HUMAN_REVIEW'
 
     # --- Link to HarassmentCategory reference table ---
-    detected_class = getattr(result, 'primary_class', 'safe') or 'safe'
     harassment_category = None
     try:
-        harassment_category = HarassmentCategory.objects.get(code=detected_class)
+        harassment_category = HarassmentCategory.objects.get(code=primary_class)
     except HarassmentCategory.DoesNotExist:
         pass  # Unknown category — leave FK null
 
@@ -347,17 +307,22 @@ def webhook_messages(request):
         sender_name=push_name,
         is_from_me=is_from_me,
         raw_text=raw_text,
-        normalized_text=result.normalized_text,
+        normalized_text=final_state.get("normalized_text", ""),
         message_key_id=message_key_id,
-        primary_class=detected_class,
+        primary_class=primary_class,
         category=harassment_category,
-        toxicity_score=result.m1_score,
-        confidence_score=result.m2_confidence,  # NULL for ALLOW decisions
-        final_score=result.m1_score,
-        decision=result.decision,
+        toxicity_score=m1_score,
+        confidence_score=m2_confidence,
+        final_score=m1_score,
+        decision=decision,
         llm_triggered=llm_triggered,
         llm_explanation=llm_explanation,
-        flagged_for_review=is_human_review,  # Auto-flag HUMAN_REVIEW cases
+        flagged_for_review=is_human_review,
+        behavioral_risk_score=final_state.get("risk_score", 0.0),
+        # 🔁 Retraining fields: preserve what the ML said before Agent 3 corrected it
+        ml_corrected=ml_corrected,
+        ml_original_decision=ml_original_decision,
+        ml_original_class=ml_original_class,
     )
 
     # --- Create Conversation + Message records (UML Package 2) ---
@@ -398,7 +363,7 @@ def webhook_messages(request):
             conversation=conversation,
             content=raw_text,
             content_hash=hashlib.sha256(raw_text.encode('utf-8')).hexdigest(),
-            language=getattr(result, 'detected_language', 'unknown') or 'unknown',
+            language=final_state.get('detected_language', 'unknown') or 'unknown',
             is_blocked=moderation.decision in ('BLOCK', 'ESCALATE'),
             is_displayed=moderation.decision not in ('BLOCK', 'ESCALATE'),
             platform='whatsapp',
@@ -408,14 +373,6 @@ def webhook_messages(request):
         )
     except Exception as e:
         logger.warning(f"Could not create Message: {e}")
-
-    # 5. Agent 4: Update behavior profile and sync risk score
-    t_b_start = time.time()
-    profile = _update_behavioral_profile(sender_jid, moderation)
-    moderation.behavioral_risk_score = profile.risk_score
-    moderation.save(update_fields=['behavioral_risk_score'])
-    t_b_end = time.time()
-    log_latency('agent_4', int((t_b_end - t_b_start) * 1000))
 
     # 6. If it's harmful, trigger an Alert
     if moderation.decision != ModerationResult.Decision.ALLOW:
@@ -434,7 +391,7 @@ def webhook_messages(request):
             message_preview=raw_text[:200]
         )
 
-        _broadcast_moderation_event(moderation, result, alerte)
+        _broadcast_moderation_event(moderation, None, alerte)
 
         # --- SPRINT 2: ACTIVE SHIELD (DELETE MESSAGE) ---
         # Only BLOCK/ESCALATE — HUMAN_REVIEW waits for human decision
@@ -445,17 +402,23 @@ def webhook_messages(request):
         # --- SPRINT 2: AUTO-REPLY ---
         # Don't send a warning for HUMAN_REVIEW — wait for admin
         if moderation.decision in ['BLOCK', 'ESCALATE', 'WARN', 'REVISE']:
-            send_aegis_warning(instance, sender_jid, result.primary_class, is_from_me, moderation.decision)
+            if message_key_id:
+                # Instantly tag the bad message with a siren!
+                send_aegis_reaction(instance, sender_jid, message_key_id, is_from_me, "🚨")
+                
+            # Then AI starts "typing..." and drops the warning
+            send_aegis_presence(instance, sender_jid, "composing", 1500)
+            send_aegis_warning(instance, sender_jid, primary_class, is_from_me, moderation.decision, message_key_id)
             
             # --- NEXT-GEN: NOTIFY PARENT ON CRITICAL ESCALATIONS ---
             if moderation.decision == 'ESCALATE' and child and child.parent and child.parent.user.phone_number:
-                send_parent_alert(instance, child.parent.user.phone_number, child.full_name, result.primary_class, raw_text)
+                send_parent_alert(instance, child.parent.user.phone_number, child.full_name, primary_class, raw_text)
     else:
         # It's SAFE! Broadcast it so the Activity Feed shows the system actively ignoring good messages
-        _broadcast_moderation_event(moderation, result)
+        _broadcast_moderation_event(moderation, None)
 
     t_end = time.time()
-    t_orch = (t_end - t_start) - (t_ml_end - t_ml_start) - llm_latency_total - (t_b_end - t_b_start)
+    t_orch = (t_end - t_start) - (t_ml_end - t_ml_start) - llm_latency_total
     log_latency('agent_5', int(max(0, t_orch) * 1000))
 
     # 7. Return 200 OK so Evolution API knows we received it

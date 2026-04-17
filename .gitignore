@@ -74,3 +74,5 @@ Thumbs.db
 docs/
 aegis-backend/docs/
 evolution-api/
+testing/
+*.txt

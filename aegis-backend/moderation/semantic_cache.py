@@ -1,6 +1,15 @@
 import os
 import uuid
 import logging
+import warnings
+
+# Suppress all the messy HuggingFace, httpx, and sentence-transformer logs!
+warnings.filterwarnings("ignore", category=FutureWarning)
+logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 import chromadb 
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer

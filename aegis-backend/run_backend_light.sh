@@ -1,10 +1,10 @@
 #!/bin/bash
 # -----------------------------------------------------------------------------
-# Aegis AI - Lightweight Backend Shortcut
+# Aegis AI - Lightweight Multi-Agent Backend
 # -----------------------------------------------------------------------------
 # This script runs the Django backend WITHOUT loading the heavy PyTorch models.
-# It enables STUB MODE, which uses quick heuristic keyword matching instead
-# of XLM-RoBERTa, ensuring your computer stays fast while you work on the UI.
+# It enables STUB MODE for testing the LangGraph Orchestrator and Agent routing
+# without burning through GPU/RAM limits.
 # -----------------------------------------------------------------------------
 
 cd "$(dirname "$0")"
@@ -14,13 +14,21 @@ if [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Force STUB_MODE to True to bypass model loading in apps.py
+# Force STUB_MODE to True to bypass PyTorch model loading
 export AEGIS_STUB_MODE="True"
 
-echo "============================================="
-echo "Starting AEGIS Backend in LIGHTWEIGHT mode"
-echo "============================================="
-echo "STUB MODE is ON. Heavy PyTorch models will NOT be loaded."
+# Clear terminal for a clean start
+clear
+
+echo "╔════════════════════════════════════════════════════╗"
+echo "║      AEGIS AI — MULTI-AGENT STATE (LIGHT MODE)     ║"
+echo "╠════════════════════════════════════════════════════╣"
+echo "║ ✅ Orchestrator Agent     : Active                 ║"
+echo "║ ⚠️ ML Agents (M1/M2)      : STUB MATCHING (Fast)   ║"
+echo "║ 🤖 Auditor Agent (Groq)   : Active                 ║"
+echo "║ 📊 Profiler Agent         : Active                 ║"
+echo "║ ⚡ Enforcer Agent         : Active                 ║"
+echo "╚════════════════════════════════════════════════════╝"
 echo ""
 
 # Run standard Django development server

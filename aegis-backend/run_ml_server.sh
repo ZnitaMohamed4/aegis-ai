@@ -1,10 +1,9 @@
 #!/bin/bash
 # -----------------------------------------------------------------------------
-# Aegis AI - Heavy ML Pipeline Shortcut
+# Aegis AI - Heavy Multi-Agent Pipeline
 # -----------------------------------------------------------------------------
-# This script runs the FULL architecture using Daphne (ASGI). 
-# It loads the heavy PyTorch XLM-RoBERTa models into RAM for real-time 
-# inference and handles WebSockets for live Angular dashboard updates.
+# This script runs the FULL LangGraph architecture using Daphne (ASGI). 
+# It loads the heavy PyTorch XLM-RoBERTa models into RAM for real-time inference.
 # -----------------------------------------------------------------------------
 
 cd "$(dirname "$0")"
@@ -14,13 +13,23 @@ if [ -d "venv" ]; then
     source venv/bin/activate
 fi
 
-# Ensure STUB_MODE is False to definitely load models
+# Ensure STUB_MODE is False to fully load PyTorch models
 export AEGIS_STUB_MODE="False"
 
-echo "============================================="
-echo "Starting AEGIS Backend + ML PIPELINE (Daphne)"
-echo "============================================="
-echo "Loading PyTorch models into RAM... This may take a moment."
+# Clear terminal for a clean start
+clear
+
+echo "╔════════════════════════════════════════════════════╗"
+echo "║      AEGIS AI — MULTI-AGENT STATE (PROD MODE)      ║"
+echo "╠════════════════════════════════════════════════════╣"
+echo "║ 🚀 Booting PyTorch Pipeline. Please wait...        ║"
+echo "║ ✅ Orchestrator Agent     : Active                 ║"
+echo "║ 🧠 ML Gatekeeper (M1)     : XLM-RoBERTa Binary     ║"
+echo "║ 🔬 ML Classifier (M2)     : XLM-RoBERTa 4-Class    ║"
+echo "║ 🤖 Auditor Agent (Groq)   : Llama 3 API            ║"
+echo "║ 📊 Profiler Agent (Risk)  : Active                 ║"
+echo "║ ⚡ Enforcer Agent (Action): Active                 ║"
+echo "╚════════════════════════════════════════════════════╝"
 echo ""
 
 # Run ASGI server via Daphne

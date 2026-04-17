@@ -378,6 +378,14 @@ class ModerationResult(models.Model):
     original_ai_label = models.CharField(max_length=50, null=True, blank=True,
         help_text="AI's original class label before human override")
 
+    # 🔁 Agent 3 Correction Tracking (for ML Retraining Pipeline)
+    ml_corrected = models.BooleanField(default=False,
+        help_text="True when Agent 3 (Auditor) overrode the ML model's decision. Use to build retraining dataset.")
+    ml_original_decision = models.CharField(max_length=20, null=True, blank=True,
+        help_text="The raw ML decision BEFORE Agent 3 corrected it (e.g. BLOCK/ESCALATE overridden to ALLOW)")
+    ml_original_class = models.CharField(max_length=50, null=True, blank=True,
+        help_text="The raw ML category BEFORE Agent 3 corrected it (e.g. 'threat' overridden to 'safe')")
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

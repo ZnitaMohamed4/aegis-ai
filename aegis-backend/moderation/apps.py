@@ -26,6 +26,11 @@ class ModerationConfig(AppConfig):
         if any(cmd in sys.argv for cmd in ignored_commands):
             return
 
+        # 0.5 PRELOAD SEMANTIC CACHE (Embedding Model)
+        # This prevents the first message from taking 5+ seconds to reply!
+        from moderation.semantic_cache import initialize_semantic_cache
+        initialize_semantic_cache()
+
         # 1. Check if we are in "Stub Mode" (Fake AI for testing)
         stub_mode = getattr(settings, 'AEGIS_STUB_MODE', False)
         
