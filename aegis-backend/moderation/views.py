@@ -1,36 +1,30 @@
-import hashlib
 import json
 import logging
 import os
 import time
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.conf import settings
 from django.http import JsonResponse
-from django.db.models import F
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
-from .evolution_api import delete_message_from_whatsapp, send_aegis_warning, send_aegis_reaction, send_aegis_presence, create_whatsapp_instance, get_qr_code, send_parent_alert
-
-# for calculating some stats in the fly
 from django.utils import timezone
-from django.db import models as django_models
 from django.db.models import Count, Q
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+import redis
 
 from .models import (
     ModerationResult, UserBehaviorProfile, SecurityAlert,
     HarassmentCategory, Conversation, Message, MonitoredChild,
     AegisUser, ParentProfile
 )
-from .serializers import ModerationResultSerializer
-import redis
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
 from .serializers import ParentRegisterSerializer, AegisUserSerializer
+from .permissions import IsAdminUser, IsParentUser
+from .evolution_api import (
+    delete_message_from_whatsapp, send_aegis_warning, send_aegis_reaction,
+    send_aegis_presence, create_whatsapp_instance, get_qr_code, send_parent_alert
+)
 
 
 redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379/1')
@@ -82,82 +76,10 @@ SHADOW_MIN_WORDS = int(os.getenv('AEGIS_SHADOW_MIN_WORDS', '4'))
 AGENT3_CONFIDENCE_THRESHOLD = float(os.getenv('AEGIS_LLM_THRESHOLD', '0.80'))
 
 
-def _update_behavioral_profile(sender_jid: str, result):
-    """
-    Agent 4 Logic:
-    Updates the sender's historically tracked behavior and computes risk score.
-    """
-    profile, created = UserBehaviorProfile.objects.get_or_create(user_jid=sender_jid)
-    
-    profile.total_messages_sent += 1
-    
-    # Exponential moving average for toxicity (recent messages matter more)
-    alpha = 0.3 
-    profile.average_toxicity_score = (profile.average_toxicity_score * (1 - alpha)) + (result.toxicity_score * alpha)
-    
-    if result.decision != ModerationResult.Decision.ALLOW:
-        profile.total_blocked_messages_sent += 1
-
-    # Real-world mathematical Risk Score (0.0 to 1.0)
-    # A high absolute volume of blocked messages is the strongest indicator of risk
-    
-    # 1. Volume Penalty: +8% risk for EVERY blocked message. 
-    # (e.g. 10 blocked messages = 80% baseline risk automatically!)
-    volume_penalty = profile.total_blocked_messages_sent * 0.08
-    
-    # 2. Ratio Penalty: Up to +20% risk if a high percentage of their overall messages are bad
-    blocked_ratio = profile.total_blocked_messages_sent / max(1, profile.total_messages_sent)
-    ratio_penalty = blocked_ratio * 0.20
-    
-    # 3. Toxicity Penalty: Up to +30% based on how severe the AI scores their texts on average
-    toxicity_penalty = profile.average_toxicity_score * 0.30
-    
-    raw_risk = volume_penalty + ratio_penalty + toxicity_penalty
-        
-    profile.risk_score = min(1.0, max(0.0, raw_risk))
-    
-    # Map back to Risk Level for the Angular Dashboard icons
-    if profile.risk_score >= 0.8:
-        profile.risk_level = 'CRITICAL'
-    elif profile.risk_score >= 0.5:
-        profile.risk_level = 'HIGH'
-    elif profile.risk_score >= 0.25:
-        profile.risk_level = 'MEDIUM'
-    else:
-        profile.risk_level = 'LOW'
-        
-    profile.save()
-    return profile
-
-
-def _broadcast_moderation_event(moderation: ModerationResult, result, alerte: SecurityAlert = None):
-    """
-    Pushes an event via Django Channels to the Angular Dashboard.
-    If it's an Alert, it includes severity. If just a log, severity is none.
-    """
-    channel_layer = get_channel_layer()
-    payload = {
-        "id": str(alerte.id) if alerte else str(moderation.id),
-        "type": "alert" if alerte else "log",
-        "sender": moderation.sender_jid,
-        "text": moderation.raw_text,
-        "decision": moderation.decision.lower(),
-        "primary_class": moderation.primary_class or 'safe',
-        "language": getattr(moderation, 'language', 'unknown'),
-        "m1_score": round(moderation.toxicity_score, 4),
-        "m2_confidence": round(moderation.confidence_score, 4) if moderation.confidence_score else None,
-        "llm_triggered": moderation.llm_triggered,
-        "llm_explanation": moderation.llm_explanation,
-        "severity": alerte.severity if alerte else "none",
-        "timestamp": (alerte.sent_at if alerte else moderation.created_at).isoformat(),
-    }
-    try:
-        async_to_sync(channel_layer.group_send)(
-            "alerts",
-            {"type": "alert.message", "data": payload}
-        )
-    except Exception as e:
-        logger.warning(f"[WS] Failed to push alert via channels: {e}")
+# NOTE: _update_behavioral_profile() and _broadcast_moderation_event()
+# were removed during Phase 1 audit (2026-04-21).
+# They are superseded by profiler_node() and enforcer_node._broadcast()
+# in ml_pipeline/graph.py. See docs/DISABLED_FEATURES.md for archived code.
 
 
 @csrf_exempt
@@ -212,10 +134,9 @@ def webhook_messages(request):
         logger.debug("Ignoring message: raw_text is empty.")
         return JsonResponse({"status": "ignored", "reason": "no_text_content"})
 
-    # Don't moderate messages sent *by* the system running Evolution API (UNLESS TESTING)
-    # Since you are messaging yourself for tests, we will bypass this check!
-    # if key.get("fromMe", False):
-    #     return JsonResponse({"status": "ignored", "reason": "from_me"})
+    # Don't moderate messages sent *by* the system running Evolution API
+    if key.get("fromMe", False):
+        return JsonResponse({"status": "ignored", "reason": "from_me"})
 
     # 2. Extract Sender Info
     instance = body.get("instance", "unknown_instance")
@@ -229,17 +150,6 @@ def webhook_messages(request):
     sender_lid_jid = sender_jid
     
     pure_number = sender_phone_jid.split('@')[0]
-    
-    # 🚫 APPLICATION-LEVEL BLOCKLIST CHECK (DISABLED)
-    # If this sender has been blocked by the Enforcer, silently drop their message.
-    # No pipeline, no response, no warning — they're shouting into the void.
-    # from moderation.models import BlockedContact
-    # if BlockedContact.objects.filter(
-    #     sender_jid__in=[sender_jid, sender_phone_jid],
-    #     is_active=True
-    # ).exists():
-    #     logger.info(f"[AEGIS] 🚫 BLOCKED sender {sender_phone_jid} — message silently dropped.")
-    #     return JsonResponse({"status": "blocked", "reason": "sender_blocked"})
     
     # Extract pushName from data or inner_data
     push_name = data.get("pushName") or inner_data.get("pushName")
@@ -325,6 +235,7 @@ def webhook_messages(request):
 # --- Simple endpoints for Angular to fetch historical data ---
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def alert_list(request):
     """GET /api/v1/alerts/ - History for the Admin Dashboard (all harmful decisions)"""
     results = ModerationResult.objects.filter(
@@ -364,6 +275,7 @@ def alert_list(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def review_queue_list(request):
     """
     GET /api/v1/review/
@@ -406,6 +318,7 @@ def review_queue_list(request):
 
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def human_override(request, moderation_id):
     """
     POST /api/v1/review/<id>/override/
@@ -463,6 +376,7 @@ def human_override(request, moderation_id):
         return Response({"status": "error", "reason": str(e)}, status=400)
 
 @api_view(['DELETE'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def admin_user_detail(request, user_id):
     """DELETE /api/v1/admin/users/<id>/ - Admin deletes a parent account"""
     try:
@@ -476,6 +390,7 @@ def admin_user_detail(request, user_id):
 
 
 @api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def admin_user_list(request):
     """GET /api/v1/admin/users/ - List parents for the admin dashboard
        POST /api/v1/admin/users/ - Admin creates a new parent user (child optional)"""
@@ -605,6 +520,7 @@ def admin_user_list(request):
     return Response(data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def admin_conversations(request):
     """GET /api/v1/admin/conversations/"""
     all_results = ModerationResult.objects.all().order_by('-created_at')
@@ -717,6 +633,7 @@ def admin_conversations(request):
 
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def flag_for_review(request, moderation_id):
     """
     POST /api/v1/review/<id>/flag/
@@ -734,6 +651,7 @@ def flag_for_review(request, moderation_id):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def dashboard_stats(request):
     """GET /api/v1/stats/dashboard/ - Live stats from PostgreSQL"""
     today = timezone.now().date()
@@ -849,6 +767,7 @@ def dashboard_stats(request):
     })
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def llm_audit_list(request):
     """GET /api/v1/audits/llm/ - History of LLM interventions"""
     audits = ModerationResult.objects.filter(llm_triggered=True).order_by('-created_at')[:50]
@@ -863,9 +782,9 @@ def llm_audit_list(request):
             "queue_reason": "SCORE_AMBIGU" if a.confidence_score and a.confidence_score < 0.75 else "LANGUE_NON_IDENTIFIABLE",
             "confidence_score": a.confidence_score or 0.0,
             "toxicity_score": a.toxicity_score,
-            "behavioral_risk_score": 0.5, # Safe fallback
+            "behavioral_risk_score": a.behavioral_risk_score if a.behavioral_risk_score else 0.0,
             "final_score": a.toxicity_score,
-            "language": "unknown",
+            "language": a.language or 'unknown',
             "agents_used": ["Agent 1", "Agent 2", "Agent 3"],
             "llm_explanation": a.llm_explanation,
             "submitted_at": a.created_at.isoformat(),
@@ -873,9 +792,9 @@ def llm_audit_list(request):
             "decision": a.decision,
             "child": {
                 "id": a.sender_jid,
-                "name": a.sender_jid.split('@')[0],
+                "name": a.sender_name or a.sender_jid.split('@')[0],
                 "risk_level": "medium",
-                "risk_score": 0.5
+                "risk_score": a.behavioral_risk_score if a.behavioral_risk_score else 0.0
             },
             "previous_messages": []
         })
@@ -883,6 +802,7 @@ def llm_audit_list(request):
 
 @csrf_exempt
 @api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def override_llm_decision(request, moderation_id):
     """POST /api/v1/audits/llm/<id>/override/ - Admin overriding LLM"""
     try:
@@ -899,6 +819,7 @@ def override_llm_decision(request, moderation_id):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def activity_feed(request):
     """
     GET /api/v1/activity/
@@ -960,6 +881,7 @@ def current_user(request):
     return Response(serializer.data)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def admin_risk_profiles(request):
     """GET /api/v1/admin/risk-profiles/"""
     
@@ -985,7 +907,6 @@ def admin_risk_profiles(request):
             
     # Calculate stats per instance
     import datetime
-    import random
     thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
     
     for instance_name, entity in instances.items():
@@ -1026,7 +947,7 @@ def admin_risk_profiles(request):
             "unique_harassers": len(list(results.exclude(is_from_me=True).values_list('sender_jid', flat=True).distinct())),
             "escalation_count": results.filter(decision='ESCALATE').count(),
             "most_common_category": "threat" if blocked_count > 0 else "N/A",
-            "risk_trend": [max(0.1, risk_score - random.uniform(-0.2, 0.2)) for _ in range(7)],
+            "risk_trend": [round(risk_score, 2)] * 7,  # Flat trend (no BehavioralSnapshot data yet)
             "snapshots": [],
             "category_breakdown": {
                 "verbal": 0, "threat": blocked_count, "sexual": 0, "discrimination": 0
@@ -1084,7 +1005,7 @@ def admin_risk_profiles(request):
             "nombre_cibles_differentes": len(related_child_ids),
             "other_monitored_children_count": len(related_child_ids) - 1 if len(related_child_ids) > 0 else 0,
             "dominant_category": dominant_cat,
-            "toxicity_trend": [max(0.1, prof.risk_score - random.uniform(-0.2, 0.2)) for _ in range(7)],
+            "toxicity_trend": [round(prof.risk_score, 2)] * 7,  # Flat trend (no BehavioralSnapshot data yet)
             "last_seen": timezone.now().isoformat(),
             "related_child_ids": related_child_ids
         })
@@ -1209,7 +1130,7 @@ def _get_parent_filter(user):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsParentUser])
 def parent_dashboard_stats(request):
     """
     GET /api/v1/parent/stats/
@@ -1217,8 +1138,6 @@ def parent_dashboard_stats(request):
     Same structure as /stats/dashboard/ but scoped.
     """
     user = request.user
-    if not user.is_parent():
-        return Response({"error": "Parent access only"}, status=status.HTTP_403_FORBIDDEN)
 
     parent_q, profile, child_jids = _get_parent_filter(user)
     today = timezone.now().date()
@@ -1396,7 +1315,7 @@ def parent_dashboard_stats(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsParentUser])
 def parent_alert_list(request):
     """
     GET /api/v1/parent/alerts/
@@ -1404,8 +1323,6 @@ def parent_alert_list(request):
     Same response format as /alerts/ for UI reuse.
     """
     user = request.user
-    if not user.is_parent():
-        return Response({"error": "Parent access only"}, status=status.HTTP_403_FORBIDDEN)
 
     parent_q, profile, child_jids = _get_parent_filter(user)
 
@@ -1446,7 +1363,7 @@ def parent_alert_list(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsParentUser])
 def parent_activity_feed(request):
     """
     GET /api/v1/parent/activity/
@@ -1454,8 +1371,6 @@ def parent_activity_feed(request):
     Seeds the parent dashboard activity feed.
     """
     user = request.user
-    if not user.is_parent():
-        return Response({"error": "Parent access only"}, status=status.HTTP_403_FORBIDDEN)
 
     parent_q, _, _ = _get_parent_filter(user)
 
@@ -1489,12 +1404,10 @@ def parent_activity_feed(request):
     return Response(data)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsParentUser])
 def parent_blocked_messages(request):
     """GET /api/v1/parent/blocked-messages/ - Only BLOCK or ESCALATE"""
     user = request.user
-    if not user.is_parent():
-        return Response({"error": "Parent access only"}, status=status.HTTP_403_FORBIDDEN)
 
     parent_q, profile, child_jids = _get_parent_filter(user)
     
@@ -1517,13 +1430,11 @@ def parent_blocked_messages(request):
     return Response(data)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsParentUser])
 def parent_conversations(request):
     """GET /api/v1/parent/conversations/"""
     user = request.user
-    if not user.is_parent():
-        return Response({"error": "Parent access only"}, status=status.HTTP_403_FORBIDDEN)
-        
+
     parent_q, profile, child_jids = _get_parent_filter(user)
     
     # We want to group everything by conversation.
@@ -1577,13 +1488,11 @@ def parent_conversations(request):
     })
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, IsParentUser])
 def parent_risk_profile(request):
     """GET /api/v1/parent/risk-profile/"""
     user = request.user
-    if not user.is_parent():
-        return Response({"error": "Parent access only"}, status=status.HTTP_403_FORBIDDEN)
-        
+
     parent_q, profile, child_jids = _get_parent_filter(user)
     
     child = profile.children.first()
@@ -1670,13 +1579,22 @@ def parent_risk_profile(request):
         
     current_score = min(1.0, round(current_score, 2))
     
-    # Generate some realistic trend data that leads up to the current score
-    import random
+    # Generate trend data based on actual moderation history (not random)
+    import datetime as _dt
     trend_data = []
     trend_labels = ["Week 1", "Week 2", "Week 3", "Week 4", "Today"]
     for i in range(4):
-        # Create a trend that generally approaches the current score, maybe from a higher value to show "Improving"
-        point = max(0.05, min(0.95, current_score + random.uniform(0.05, 0.25)))
+        week_start = timezone.now() - _dt.timedelta(weeks=4-i)
+        week_end = timezone.now() - _dt.timedelta(weeks=3-i)
+        week_blocked = all_results.filter(
+            decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
+            created_at__range=(week_start, week_end)
+        ).count()
+        # Map weekly blocked count to a 0-1 score using same thresholds
+        if week_blocked >= 10: point = 0.85
+        elif week_blocked >= 5: point = 0.65
+        elif week_blocked >= 1: point = 0.35
+        else: point = 0.10
         trend_data.append(round(point, 2))
     trend_data.append(current_score)
                 

@@ -1,48 +1,13 @@
-// import { Injectable, signal } from '@angular/core';
-// import { Router } from '@angular/router';
-
-// @Injectable({
-//   providedIn: 'root'
-// })
-// export class AuthService {
-//   role = signal<'admin' | 'parent' | null>(null);
-
-//   constructor(private router: Router) {
-//     const savedRole = localStorage.getItem('aegis_role');
-//     if (savedRole === 'admin' || savedRole === 'parent') {
-//       this.role.set(savedRole);
-//     }
-//   }
-
-//   login(selectedRole: 'admin' | 'parent') {
-//     this.role.set(selectedRole);
-//     localStorage.setItem('aegis_role', selectedRole);
-//   }
-
-//   logout() {
-//     this.role.set(null);
-//     localStorage.removeItem('aegis_role');
-//     this.router.navigate(['/login']);
-//   }
-
-//   getRole() {
-//     return this.role();
-//   }
-
-//   isLoggedIn() {
-//     return this.role() !== null;
-//   }
-// }
-
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, tap } from 'rxjs';
+import { environment } from '../../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class AuthService {
-  private apiUrl = 'http://localhost:8000/api/v1/auth';
+  private apiUrl = `${environment.apiBaseUrl}/auth`;
   private currentUserSubject = new BehaviorSubject<any>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
 

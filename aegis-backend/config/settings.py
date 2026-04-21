@@ -14,9 +14,11 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Security settings
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback')
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("FATAL: SECRET_KEY environment variable is not set. Add it to your .env file.")
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = ['*']  # For development. In production, restrict this!
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # Application definition
 INSTALLED_APPS = [
@@ -87,8 +89,11 @@ CHANNEL_LAYERS = {
     },
 }
 
-# Allow Angular frontend to connect
-CORS_ALLOW_ALL_ORIGINS = True
+# CORS — restrict to known frontend origins
+CORS_ALLOWED_ORIGINS = os.getenv(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:4200,http://127.0.0.1:4200'
+).split(',')
 
 # ML Pipeline Configuration loaded from .env
 M1_MODEL_PATH = os.getenv('M1_MODEL_PATH')

@@ -3,6 +3,7 @@ import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { Subject, Observable } from 'rxjs';
 import { retry } from 'rxjs/operators';
 import { Alert } from '../models/alert.model'; // We will use your models
+import { environment } from '../../../environments/environment';
 
 export interface WebSocketAlertPayload {
   id: string;
@@ -25,8 +26,12 @@ export interface WebSocketAlertPayload {
   providedIn: 'root'
 })
 export class AlertService {
-  // The path to the Django Channels WebSocket we built
-  private readonly WS_URL = 'ws://localhost:8000/ws/alerts/';
+  // WebSocket URL built from environment + JWT token for authentication
+  private get WS_URL(): string {
+    const token = localStorage.getItem('access_token');
+    const base = environment.wsBaseUrl || `ws://${window.location.host}`;
+    return `${base}/ws/alerts/?token=${token}`;
+  }
   
   // RxJS WebSocket hook
   private socket$!: WebSocketSubject<WebSocketAlertPayload>;

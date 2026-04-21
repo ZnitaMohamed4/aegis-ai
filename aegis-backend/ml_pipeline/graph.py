@@ -283,17 +283,12 @@ def auditor_node(state: ModerationState) -> dict:
                 "ml_corrected": False,
             }
 
-    # 1. SEMANTIC CACHE LOOKUP (DISABLED TEMPORARILY)
+    # 1. SEMANTIC CACHE LOOKUP
+    # NOTE: Semantic cache is temporarily disabled for slow-burn pattern testing.
+    # See docs/DISABLED_FEATURES.md for the original cache lookup/save logic.
     escalation_risk = state.get("escalation_risk", 0.0)
     is_escalation = escalation_risk >= ESCALATION_AUDIT_THRESHOLD
-
-    # if is_escalation:
-    #     logger.info(f"[AGENT 3: AUDITOR] ⚡ Skipping Semantic Cache: Escalation Gate requires full history context.")
-    #     cached_response = None
-    # else:
-    #     cached_response = search_semantic_cache(raw_text)
-    
-    cached_response = None # Cache disabled for slow-burn pattern testing
+    cached_response = None
 
     if cached_response:
         llm_response = cached_response
@@ -303,10 +298,10 @@ def auditor_node(state: ModerationState) -> dict:
             raw_text, check_class, check_conf, m1_score,
             state["sender_jid"], state["instance_name"]
         )
-        # 3. SAVE KNOWLEDGE (DISABLED TEMPORARILY)
+        # 3. SAVE KNOWLEDGE
+        # NOTE: Semantic cache save is temporarily disabled.
+        # See docs/DISABLED_FEATURES.md for the original logic.
         new_decision = llm_response.get("decision", "REVISE").upper()
-        # if not is_escalation and (m1_score > 0.12 or new_decision != "ALLOW"):
-        #     add_to_semantic_cache(raw_text, llm_response)
         
     new_decision = llm_response.get("decision", "REVISE").upper()
     new_class = llm_response.get("category", check_class)
@@ -777,38 +772,12 @@ def enforcer_node(state: ModerationState) -> dict:
                     f"has_full_msg={full_warning_message is not None}"
                 )
                 
-                # archive_chat(
-                #     instance_name,
-                #     phone_jid,
-                #     warning_msg_key_id,
-                #     exact_warning_ts,
-                #     full_warning_message,
-                #     lid_jid=lid_jid
-                # )
-                # enforcement_actions.append("archive")
-                
-                # 🚫 APPLICATION-LEVEL BLOCK (DISABLED)
-                # Baileys' updateBlockStatus and archiveChat return silent errors or 'bad-request'.
-                # Instead, we save the sender to our BlockedContact table.
-                # The webhook checks this table and silently drops all future messages.
-                # from moderation.models import BlockedContact
-                # try:
-                #     BlockedContact.objects.update_or_create(
-                #         sender_jid=phone_jid,
-                #         defaults={
-                #             "instance_name": instance_name,
-                #             "reason": decision,
-                #             "is_active": True,
-                #         }
-                #     )
-                #     logger.info(f"[AEGIS] 🚫 APP-BLOCKED {phone_jid} — all future messages will be silently dropped.")
-                #     enforcement_actions.append("app_block")
-                # except Exception as e:
-                #     logger.error(f"[AEGIS] ❌ Failed to save app-level block: {e}")
-                
-                # Also attempt the real WhatsApp block (best-effort, may fail)
-                # block_contact(instance_name, phone_jid)
-                # enforcement_actions.append("block_contact_attempted")
+                # 📦 Archive + Block are disabled due to Baileys protocol instability.
+                # See docs/DISABLED_FEATURES.md for the original code.
+                logger.info(
+                    f"[AGENT 5: ENFORCER] ⚠️ Archive/Block disabled for {phone_jid} "
+                    f"(decision={decision}). See DISABLED_FEATURES.md."
+                )
     else:
         # Safe message — still broadcast for the Activity Feed
         _broadcast(moderation)
