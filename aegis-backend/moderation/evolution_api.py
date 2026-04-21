@@ -119,6 +119,17 @@ def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision
         response = requests.post(url, json=payload, headers=headers)
         if response.status_code in [200, 201]:
             logger.info(f"[AEGIS] 🚨 Successfully sent warning Auto-Reply to {remote_jid}")
+            # Extract the message key ID, exact timestamp, AND the full node response from Evolution API.
+            # Building a fully valid `lastMessage` anchor requires the full node structural shape.
+            try:
+                resp_data = response.json()
+                warning_msg_id = resp_data.get("key", {}).get("id")
+                warning_ts = resp_data.get("messageTimestamp")
+                if warning_msg_id and warning_ts:
+                    logger.info(f"[AEGIS] 📌 Warning message key ID: {warning_msg_id}, TS: {warning_ts}")
+                    return (warning_msg_id, warning_ts, resp_data)
+            except Exception:
+                pass
             return True
     except Exception as e:
         logger.error(f"[AEGIS] ❌ Error sending warning: {e}")
@@ -183,6 +194,181 @@ def send_aegis_presence(instance_name, remote_jid, presence="composing", delay=1
         return True
     except Exception:
         return False
+
+def block_contact(instance_name, remote_jid):
+    """
+    Instantly blocks the contact so they can't send any more messages.
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    
+    if not api_key: return False
+    
+    # /chat/ is the correct path for v2.3.6 (/message/ returns 404)
+    url = f"{api_url}/chat/updateBlockStatus/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    
+    # Extract plain phone number from the phone-based JID
+    clean_number = remote_jid.split('@')[0]
+    
+    payload = {
+        "number": clean_number,
+        "status": "block"
+    }
+    
+    try:
+        logger.info(f"[AEGIS] 🛡️ Attempting to BLOCK {clean_number} via {url}")
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code in [200, 201]:
+            logger.info(f"[AEGIS] 🛑 Successfully BLOCKED attacker: {remote_jid}")
+            return True
+        else:
+            logger.error(f"[AEGIS] ❌ Failed to block contact. Status: {response.status_code}, Resp: {response.text}")
+    except Exception as e:
+        logger.error(f"[AEGIS] ❌ Error blocking contact: {e}")
+    return False
+
+def archive_chat(
+    instance_name,
+    remote_jid,               # phone JID (@s.whatsapp.net)
+    warning_msg_key_id=None,
+    warning_timestamp=None,
+    full_last_message=None,
+    lid_jid=None,             # LID JID (@lid)
+):
+    """
+    Archives a chat via Evolution API / Baileys chatModify.
+
+    CRITICAL BUG FOUND IN EVOLUTION API SOURCE CODE:
+    ─────────────────────────────────────────────────
+    When `lastMessage` is provided, Evolution API IGNORES the `chat` field entirely.
+    The JID passed to Baileys' chatModify() is extracted from `lastMessage.key.remoteJid`:
+
+        // Evolution API source (whatsapp.baileys.service.mjs):
+        if (!t && o)
+            t = await this.getLastMessage(o);   // only when NO lastMessage
+        else
+            (t = e.lastMessage, o = t?.key?.remoteJid);  // OVERWRITES chat target!
+        await this.client.chatModify({...}, W(o));  // uses overwritten 'o'
+
+    This means our `chat: @lid` was NEVER reaching Baileys.
+    The fix: put the LID in `lastMessage.key.remoteJid` so it becomes the chatModify target.
+
+    Strategy A: LID in lastMessage.key.remoteJid (preferred)
+    Strategy B: No lastMessage, just `chat` field → Prisma auto-lookup (fallback)
+    """
+    import time as _time
+    import json as _json
+
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+
+    if not api_key:
+        return False
+
+    url = f"{api_url}/chat/archiveChat/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+
+    # Resolve the target JID — prefer LID, fallback to phone JID
+    effective_target = lid_jid if lid_jid else remote_jid
+
+    # ── STRATEGY A: LID in lastMessage.key.remoteJid ─────────────────────
+    # Since Evolution API extracts the chatModify JID from lastMessage.key.remoteJid,
+    # we MUST put the correct target (LID) there, not the phone JID.
+    def _build_strategy_a_payload():
+        """Build payload with LID in lastMessage.key.remoteJid."""
+        payload = {"chat": effective_target, "archive": True}
+
+        if full_last_message:
+            last_msg_node = dict(full_last_message)
+            if isinstance(last_msg_node.get("key"), dict):
+                last_msg_node["key"] = dict(last_msg_node["key"])
+                # ✅ THE FIX: Put LID here so Evolution API passes it to chatModify
+                last_msg_node["key"]["remoteJid"] = effective_target
+                last_msg_node["key"]["participant"] = remote_jid  # phone JID for participant
+            if not last_msg_node.get("message"):
+                last_msg_node["message"] = {"conversation": "⚠️"}
+            payload["lastMessage"] = last_msg_node
+
+        elif warning_msg_key_id:
+            ts = warning_timestamp or int(_time.time())
+            payload["lastMessage"] = {
+                "key": {
+                    "remoteJid": effective_target,  # ✅ LID here
+                    "fromMe": True,
+                    "id": warning_msg_key_id,
+                    "participant": remote_jid,
+                },
+                "messageTimestamp": ts,
+                "message": {"conversation": "⚠️"},
+            }
+        return payload
+
+    # ── STRATEGY B: No lastMessage — Prisma auto-lookup ──────────────────
+    # Let Evolution API's getLastMessage() query Prisma by the phone JID.
+    # When no lastMessage is provided, the `chat` field IS used as the
+    # chatModify JID target (it doesn't get overwritten).
+    def _build_strategy_b_payload():
+        """Build minimal payload — let Evolution API handle lastMessage lookup."""
+        return {"chat": remote_jid, "archive": True}
+
+    # ── EXECUTE WITH RETRY ───────────────────────────────────────────────
+    strategies = [
+        ("A: LID-in-remoteJid", _build_strategy_a_payload),
+        ("B: Prisma-auto-lookup", _build_strategy_b_payload),
+    ]
+
+    for strategy_name, build_fn in strategies:
+        payload = build_fn()
+
+        logger.info("=" * 60)
+        logger.info(f"[ARCHIVE] ── Strategy {strategy_name} ──")
+        logger.info(f"[ARCHIVE] chat         : {payload.get('chat')}")
+        last_key = payload.get("lastMessage", {}).get("key", {})
+        logger.info(f"[ARCHIVE] lm.remoteJid : {last_key.get('remoteJid', 'N/A (Prisma lookup)')}")
+        logger.info(f"[ARCHIVE] lm.id        : {last_key.get('id', 'N/A')}")
+        logger.info(f"[ARCHIVE] FULL JSON:\n{_json.dumps(payload, indent=2, default=str)}")
+        logger.info("=" * 60)
+
+        # Retry loop: 3 attempts with exponential backoff
+        delays = [0, 3, 7]  # seconds before each attempt
+        for attempt, delay in enumerate(delays, 1):
+            if delay > 0:
+                logger.info(f"[ARCHIVE] ⏳ Retry {attempt}/3 in {delay}s...")
+                _time.sleep(delay)
+
+            try:
+                response = requests.post(url, json=payload, headers=headers)
+                resp_text = response.text[:500]
+
+                if response.status_code in [200, 201]:
+                    logger.info(f"[ARCHIVE] ✅ HTTP {response.status_code} | Strategy {strategy_name} | Attempt {attempt}/3")
+                    logger.info(f"[ARCHIVE] Response: {resp_text}")
+
+                    # Check for actual success vs silent failure
+                    try:
+                        resp_data = response.json()
+                        if resp_data.get("archived") is True:
+                            logger.info(f"[AEGIS] 🗃️ ✅ Archive CONFIRMED for {effective_target}")
+                            return True
+                        elif resp_data.get("archived") is False:
+                            logger.warning(f"[ARCHIVE] ⚠️ API returned archived=false: {resp_text}")
+                            break  # Try next strategy
+                    except Exception:
+                        pass
+
+                    return True  # HTTP 200 but couldn't parse — assume success
+                else:
+                    logger.error(f"[ARCHIVE] ❌ HTTP {response.status_code} | Attempt {attempt}/3 | {resp_text}")
+                    if response.status_code == 404:
+                        break  # Instance doesn't exist, don't retry
+            except Exception as e:
+                logger.error(f"[ARCHIVE] ❌ Exception on attempt {attempt}/3: {e}")
+
+        logger.warning(f"[ARCHIVE] Strategy {strategy_name} exhausted. Trying next...")
+
+    logger.error(f"[AEGIS] ❌ All archive strategies failed for {effective_target}")
+    return False
 
 def send_parent_alert(instance_name, parent_phone_number, child_name, category, text):
     """

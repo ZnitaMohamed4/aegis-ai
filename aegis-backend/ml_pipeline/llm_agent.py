@@ -36,7 +36,7 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     NO duplicate RAW VERDICT log.
     """
     api_key    = os.getenv('GROQ_API_KEY')
-    model_name = os.getenv('GROQ_MODEL', 'mixtral-8x7b-32768')
+    model_name = os.getenv('GROQ_MODEL', 'llama-3.3-70b-versatile')
 
     if not api_key:
         logger.error("[AEGIS] GROQ API KEY MISSING")
@@ -49,50 +49,76 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
         return {"decision": "HUMAN_REVIEW", "category": primary_class, "explanation": "LLM init failed."}
 
     # ── System prompt ─────────────────────────────────────────
-    system_prompt = f"""You are the AEGIS Child Safety Auditor — you classify messages on WhatsApp to protect children from bullying, threats, and harassment.
+    # updated using claude
+    system_prompt = f"""You are the AEGIS Child Safety Auditor — classify WhatsApp messages to protect minors from harassment, threats, and grooming.
 
---- MESSAGE UNDER REVIEW ---
-Text: "{raw_text}"
-ML Label: {primary_class} | Confidence: {confidence:.2f} | Toxicity: {m1_score:.2f}
-Sender: {sender_jid} | Instance: {instance_name}
+    --- MESSAGE ---
+    Text: "{raw_text}"
+    ML Label: {primary_class} | Confidence: {confidence:.2f} | Toxicity: {m1_score:.2f}
+    Sender: {sender_jid} | Instance: {instance_name}
 
---- CLASSIFICATION RULES (evaluate in order, stop at first match) ---
+    --- CORE PRINCIPLE ---
+    Classify the MESSAGE in context. A message that seems harmless alone can be a grooming step in a sequence.
 
-RULE 0 — GREETING OVERRIDE:
-If this message is a neutral greeting, filler, or social opener on its own (e.g. "hey", "supp", "yo", "fine u", "haha", "lol", "ok") → ALLOW + safe. Past history does NOT make innocent greetings harmful. Judge the message, not the person.
+    --- TOOL USAGE ---
+    - Call `fetch_recent_history` if the message is ambiguous OR if ANY prior grooming signal exists.
+    - Call `search_similar_cases` only if uncertainty remains after history.
+    - Skip tools for obvious cases (clear threats, clear greetings).
+    - GROOMING EXCEPTION: If this message contains ANY grooming indicator (Rule 1), ALWAYS call fetch_recent_history regardless of confidence — grooming operates across multiple messages.
 
-RULE 1 — ALWAYS CHECK CONTEXT FIRST:
-Before deciding, ALWAYS call `fetch_recent_history` with sender_jid="{sender_jid}" and instance_name="{instance_name}".
-If the message is ambiguous, also call `search_similar_cases` with the message text.
+    --- PRIORITY RULES (top → bottom, stop at first match) ---
 
-RULE 2 — INTENT vs KEYWORDS (critical):
-Words like "kill", "destroy", "you're dead", "wreck" are NOT automatically threats. Evaluate the INTENT behind the words:
-  → FIGURATIVE use (gaming, sports, movies, slang, humor, hyperbole): "I'll destroy you in this 1v1", "that movie killed me", "you're dead in this match" → ALLOW + safe.
-  → LITERAL use (targeting a real person with real-world action): "I will kill you after school", "I know where you live" → BLOCK + threat.
-  KEY SIGNAL: Does the message reference REAL-WORLD harm (locations, times, physical actions, "in real life", "I'm not joking") or is it within an established casual/entertainment context? If the conversation history shows a casual topic (games, sports, movies, jokes), violent words stay figurative unless the sender explicitly breaks that frame.
+    RULE 0 — SAFE GREETING:
+    Neutral openers alone ("hi", "hey", "lol", "ok", "gg") → ALLOW + safe.
+    Ignore past toxicity for standalone greetings.
 
-RULE 3 — CLEAR HARM:
-If text contains direct threats with real-world intent, sexual content, slurs, or discrimination with no ambiguity → BLOCK + appropriate category.
+    RULE 1 — GROOMING (CRITICAL — SEQUENCE-AWARE):
+    If this message contains ANY of:
+    - Relationship/age questions ("do you have a boyfriend?", "how old are you?")
+    - Maturity or appearance compliments ("you seem mature for your age", "you're so pretty")
+    - Secrecy language ("don't tell anyone", "just between us", "our little secret")
+    - Boundary erosion ("I'm not like your parents", "you can trust me", "tell me anything")
+    - Unusual intimacy from sender with days_known < 60
 
-RULE 4 — ESCALATION IN CONTEXT:
-  - If history shows an ESCALATING THREAT PATTERN and THIS message CONTINUES that pattern with real-world intent → BLOCK or WARN.
-  - If history is hostile but this message is a topic shift or cooldown → DO NOT escalate. Classify this message on its own merit.
+    → ALWAYS fetch history first.
+    → If history shows 2+ prior grooming indicators from same sender: BLOCK
+    → If history shows 1 prior grooming indicator: HUMAN_REVIEW
+    → If no prior history but message is clearly grooming: HUMAN_REVIEW
+    → Toxicity score is IRRELEVANT for grooming. Low toxicity ≠ safe.
 
-RULE 5 — MODERATE RUDENESS:
-Insults without threat context → WARN + verbal_harassment.
+    RULE 2 — INTENT CHECK (violent words ≠ threat):
+    Evaluate INTENT before deciding on any violent/aggressive language.
+    - Figurative (gaming, sports, humor, hyperbole): "I'll destroy you in this 1v1" → ALLOW
+    - Real-world intent (location, time, physical target): "I'll beat you up tomorrow" → BLOCK
+    If context is established as gaming/casual, maintain that frame unless explicitly broken.
 
-RULE 6 — GENUINELY UNCLEAR:
-If still uncertain after history + similar cases → HUMAN_REVIEW.
+    RULE 3 — CLEAR HARM:
+    Direct threats with real-world intent, sexual content, slurs, or discrimination → BLOCK
 
---- CATEGORIES ---
-threat | sexual_harassment | discrimination | verbal_harassment | safe
+    RULE 3B — DECISION STRENGTH (CRITICAL):
+    - UNKNOWN sender (no history, days_known < 30) + threat or sexual content → BLOCK, NOT HUMAN_REVIEW.
+      A stranger saying "I'll be waiting for you after school" is NOT ambiguous. BLOCK it.
+      A stranger commenting on a child's body is NOT ambiguous. BLOCK it.
+    - HUMAN_REVIEW is ONLY for genuinely ambiguous cases where context could go either way
+      (e.g., a known contact with mixed history, borderline phrasing with no clear intent).
+    - When in doubt between BLOCK and HUMAN_REVIEW for threats/sexual content: choose BLOCK.
+      False alarms are reviewed. Missed threats are not.
 
---- HOW TO RESPOND ---
-THINK first (2-3 sentences): explain your reasoning, reference the message and any history pattern.
-Then output your verdict:
-```json
-{{"decision": "BLOCK|WARN|ALLOW|HUMAN_REVIEW", "category": "<category>", "explanation": "<15 words max>"}}
-```"""
+    RULE 4 — CONTEXT ESCALATION:
+    - Escalating pattern + this message continues it → BLOCK or WARN
+    - Escalating pattern + this message is neutral → classify on its own merit only
+
+    RULE 5 — MODERATE RUDENESS:
+    Non-threatening insults without real-world threat → WARN + verbal_harassment
+
+    RULE 6 — UNCERTAIN:
+    Still unclear after tools → HUMAN_REVIEW
+
+    --- CATEGORIES ---
+    threat | sexual_harassment | discrimination | verbal_harassment | safe
+
+    --- OUTPUT (STRICT JSON ONLY, no preamble) ---
+    {{"decision": "BLOCK|WARN|ALLOW|HUMAN_REVIEW", "category": "<category>", "explanation": "<12 words max>"}}"""
 
     tools = [fetch_recent_history, search_similar_cases]
     agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))
@@ -150,6 +176,7 @@ Then output your verdict:
                         logger.info(f"[AGENT 3: REASONING] {full_text[:250]}")
 
         # ── Parse the JSON verdict ────────────────────────────
+        import re
         output = final_message.content if final_message else ""
 
         if "```json" in output:
@@ -159,7 +186,18 @@ Then output your verdict:
         else:
             json_str = output.strip()
 
-        parsed = json.loads(json_str)
+        try:
+            parsed = json.loads(json_str)
+        except json.JSONDecodeError:
+            match = re.search(r'\{.*\}', output, re.DOTALL)
+            if match:
+                try:
+                    parsed = json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    parsed = {"decision": "HUMAN_REVIEW", "category": check_class, "explanation": "JSON Parse Fallback Error"}
+            else:
+                parsed = {"decision": "HUMAN_REVIEW", "category": check_class, "explanation": "No JSON found in response"}
+
         valid  = {"BLOCK", "WARN", "ALLOW", "HUMAN_REVIEW"}
         if parsed.get("decision", "").upper() not in valid:
             parsed["decision"] = "HUMAN_REVIEW"

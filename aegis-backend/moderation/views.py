@@ -220,7 +220,26 @@ def webhook_messages(request):
     # 2. Extract Sender Info
     instance = body.get("instance", "unknown_instance")
     sender_jid = key.get("remoteJid", "unknown_sender")
-    pure_number = sender_jid.split('@')[0]
+    
+    sender_phone_jid = key.get("remoteJidAlt") or sender_jid
+
+    # Note: Evolution API v2 normalizes the incoming webhook, so @lid is NOT present here.
+    # We set sender_lid_jid to sender_jid (the phone string) as a base.
+    # Agent 5 (Enforcer) will extract the true @lid from the sendText response later!
+    sender_lid_jid = sender_jid
+    
+    pure_number = sender_phone_jid.split('@')[0]
+    
+    # 🚫 APPLICATION-LEVEL BLOCKLIST CHECK (DISABLED)
+    # If this sender has been blocked by the Enforcer, silently drop their message.
+    # No pipeline, no response, no warning — they're shouting into the void.
+    # from moderation.models import BlockedContact
+    # if BlockedContact.objects.filter(
+    #     sender_jid__in=[sender_jid, sender_phone_jid],
+    #     is_active=True
+    # ).exists():
+    #     logger.info(f"[AEGIS] 🚫 BLOCKED sender {sender_phone_jid} — message silently dropped.")
+    #     return JsonResponse({"status": "blocked", "reason": "sender_blocked"})
     
     # Extract pushName from data or inner_data
     push_name = data.get("pushName") or inner_data.get("pushName")
@@ -242,7 +261,8 @@ def webhook_messages(request):
     # Prepare the initial state
     initial_state = {
         "raw_text": raw_text,
-        "sender_jid": sender_jid,
+        "sender_jid": sender_lid_jid,        # ← mapped to true LID
+        "sender_phone_jid": sender_phone_jid,
         "instance_name": instance,
         "message_key_id": message_key_id,
         "push_name": push_name,
@@ -252,7 +272,6 @@ def webhook_messages(request):
     # 🚀 EXECUTE THE GRAPH
     final_state = aegis_graph.invoke(initial_state)
     
-    llm_latency_total = 0 # We'll abstract latency logging better in Phase 2
     t_ml_end = time.time()
 
     # Extract the final results from the graph's memory!
@@ -263,8 +282,6 @@ def webhook_messages(request):
     llm_triggered = final_state.get("llm_triggered", False)
     llm_explanation = final_state.get("llm_explanation", "")
     ml_corrected = final_state.get("ml_corrected", False)
-    ml_original_decision = final_state.get("ml_original_decision", None)
-    ml_original_class = final_state.get("ml_original_class", None)
 
     # Print the Multi-Agent Execution Results to the console
     print(f"│ 🧭 [ORCHESTRATOR] Graph Execution Complete in {int((t_ml_end - t_ml_start) * 1000)}ms")
@@ -286,146 +303,23 @@ def webhook_messages(request):
         print(f"│ 🤖 [AGENT 3: AUDITOR] Triggered! Groq Decision: {decision} - \"{llm_explanation}\"{correction_tag}")
         
     print(f"│ 📊 [AGENT 4: PROFILER] Target Risk Score: {final_state.get('risk_score', 0.0):.2f} ({final_state.get('risk_level', 'LOW')})")
-    print(f"│ ⚡ [AGENT 5: ENFORCER] Final Action Executed: {decision}")
+    
+    # Agent 5 now runs INSIDE the graph — enforcement is complete by this point
+    actions = final_state.get("enforcement_actions", [])
+    alert_sev = final_state.get("alert_severity", "none") or "none"
+    print(f"│ ⚡ [AGENT 5: ENFORCER] Action: {decision} | Severity: {alert_sev} | Actions: {actions}")
     
     print(f"└────────────────────────────────────────────────────────────┘")
 
-
-    # 4. Save the result to PostgreSQL (ModerationResult)
-    is_human_review = decision == 'HUMAN_REVIEW'
-
-    # --- Link to HarassmentCategory reference table ---
-    harassment_category = None
-    try:
-        harassment_category = HarassmentCategory.objects.get(code=primary_class)
-    except HarassmentCategory.DoesNotExist:
-        pass  # Unknown category — leave FK null
-
-    moderation = ModerationResult.objects.create(
-        instance_name=instance,
-        sender_jid=sender_jid,
-        sender_name=push_name,
-        is_from_me=is_from_me,
-        raw_text=raw_text,
-        normalized_text=final_state.get("normalized_text", ""),
-        message_key_id=message_key_id,
-        primary_class=primary_class,
-        category=harassment_category,
-        toxicity_score=m1_score,
-        confidence_score=m2_confidence,
-        final_score=m1_score,
-        decision=decision,
-        llm_triggered=llm_triggered,
-        llm_explanation=llm_explanation,
-        flagged_for_review=is_human_review,
-        behavioral_risk_score=final_state.get("risk_score", 0.0),
-        # 🔁 Retraining fields: preserve what the ML said before Agent 3 corrected it
-        ml_corrected=ml_corrected,
-        ml_original_decision=ml_original_decision,
-        ml_original_class=ml_original_class,
-    )
-
-    # --- Create Conversation + Message records (UML Package 2) ---
-    # Try to find the MonitoredChild by checking if the recipient is a monitored child
-    # (In AEGIS, messages arrive TO the monitored child's WhatsApp from contacts)
-    child = None
-    try:
-        # The Evolution instance belongs to a parent — find the child by looking at
-        # which child's conversations this sender_jid maps to, OR create a new convo
-        child = MonitoredChild.objects.filter(
-            parent__evolution_instance_name=instance,
-        ).first()
-    except Exception:
-        pass
-
-    # Create or get conversation for this sender+child pair
-    conversation = None
-    try:
-        conversation, _ = Conversation.objects.get_or_create(
-            contact_jid=sender_jid,
-            child=child,
-            defaults={
-                'contact_name': inner_data.get('pushName', '') or key.get('pushName', ''),
-                'platform': 'whatsapp',
-            }
-        )
-        # Update contact name if it changed
-        push_name = inner_data.get('pushName', '') or key.get('pushName', '')
-        if push_name and push_name != conversation.contact_name:
-            conversation.contact_name = push_name
-            conversation.save(update_fields=['contact_name', 'updated_at'])
-    except Exception as e:
-        logger.warning(f"Could not create Conversation: {e}")
-
-    # Create Message record linked to this ModerationResult
-    try:
-        Message.objects.create(
-            conversation=conversation,
-            content=raw_text,
-            content_hash=hashlib.sha256(raw_text.encode('utf-8')).hexdigest(),
-            language=final_state.get('detected_language', 'unknown') or 'unknown',
-            is_blocked=moderation.decision in ('BLOCK', 'ESCALATE'),
-            is_displayed=moderation.decision not in ('BLOCK', 'ESCALATE'),
-            platform='whatsapp',
-            platform_message_id=message_key_id or '',
-            sender_jid=sender_jid,
-            moderation_result=moderation,
-        )
-    except Exception as e:
-        logger.warning(f"Could not create Message: {e}")
-
-    # 6. If it's harmful, trigger an Alert
-    if moderation.decision != ModerationResult.Decision.ALLOW:
-        # Determine Severity based on the decision
-        severity_map = {
-            'WARN': 'medium',
-            'REVISE': 'high',
-            'BLOCK': 'high',
-            'ESCALATE': 'critical',
-            'HUMAN_REVIEW': 'high',  # Treat as high severity until human decides
-        }
-
-        alerte = SecurityAlert.objects.create(
-            moderation_result=moderation,
-            severity=severity_map.get(moderation.decision, 'medium'),
-            message_preview=raw_text[:200]
-        )
-
-        _broadcast_moderation_event(moderation, None, alerte)
-
-        # --- SPRINT 2: ACTIVE SHIELD (DELETE MESSAGE) ---
-        # Only BLOCK/ESCALATE — HUMAN_REVIEW waits for human decision
-        if moderation.decision in ['BLOCK', 'ESCALATE']:
-            if message_key_id:
-                delete_message_from_whatsapp(instance, message_key_id, sender_jid, is_from_me)
-
-        # --- SPRINT 2: AUTO-REPLY ---
-        # Don't send a warning for HUMAN_REVIEW — wait for admin
-        if moderation.decision in ['BLOCK', 'ESCALATE', 'WARN', 'REVISE']:
-            if message_key_id:
-                # Instantly tag the bad message with a siren!
-                send_aegis_reaction(instance, sender_jid, message_key_id, is_from_me, "🚨")
-                
-            # Then AI starts "typing..." and drops the warning
-            send_aegis_presence(instance, sender_jid, "composing", 1500)
-            send_aegis_warning(instance, sender_jid, primary_class, is_from_me, moderation.decision, message_key_id)
-            
-            # --- NEXT-GEN: NOTIFY PARENT ON CRITICAL ESCALATIONS ---
-            if moderation.decision == 'ESCALATE' and child and child.parent and child.parent.user.phone_number:
-                send_parent_alert(instance, child.parent.user.phone_number, child.full_name, primary_class, raw_text)
-    else:
-        # It's SAFE! Broadcast it so the Activity Feed shows the system actively ignoring good messages
-        _broadcast_moderation_event(moderation, None)
-
     t_end = time.time()
-    t_orch = (t_end - t_start) - (t_ml_end - t_ml_start) - llm_latency_total
+    t_orch = (t_end - t_start) - (t_ml_end - t_ml_start)
     log_latency('agent_5', int(max(0, t_orch) * 1000))
 
     # 7. Return 200 OK so Evolution API knows we received it
     return JsonResponse({
         "status": "success",
-        "decision": moderation.decision,
-        "m1_score": round(moderation.toxicity_score, 4),
+        "decision": decision,
+        "m1_score": round(m1_score, 4),
     })
 
 # --- Simple endpoints for Angular to fetch historical data ---

@@ -437,6 +437,16 @@ class UserBehaviorProfile(models.Model):
     repeated_harassers_count = models.IntegerField(default=0,
         help_text="Number of distinct harassers who targeted this user 3+ times (victim profiling)")
 
+    # --- Tier 2 Features (Digital Twin Extended) ---
+    message_frequency_1h = models.FloatField(default=0.0, help_text="Messages in last hour")
+    avg_message_length = models.FloatField(default=0.0, help_text="Typical message length")
+    correction_rate = models.FloatField(default=0.0, help_text="How often Agent 3 overrides ML")
+    first_seen_at = models.DateTimeField(auto_now_add=True, null=True, help_text="Account age")
+    burst_count_24h = models.IntegerField(default=0, help_text="Number of burst episodes in 24h (5+ msgs in 10 mins)")
+    max_toxicity_24h = models.FloatField(default=0.0, help_text="Worst toxicity score today")
+    ml_corrections_total = models.IntegerField(default=0, help_text="Total ML overrides by Agent 3")
+    llm_triggers_total = models.IntegerField(default=0, help_text="Total times Agent 3 was triggered")
+
     # Risk assessment
     risk_score = models.FloatField(default=0.0)
     risk_level = models.CharField(
@@ -453,16 +463,7 @@ class UserBehaviorProfile(models.Model):
     def __str__(self):
         return f"{self.user_jid} - Risk: {self.risk_level}"
 
-    def calculate_risk_score(self):
-        """Simple weighted risk calculation. Replace with Random Forest in Sprint 6."""
-        score = (
-            self.block_ratio * 0.3 +
-            min(self.average_toxicity_score, 1.0) * 0.25 +
-            min(self.escalation_count / 10.0, 1.0) * 0.2 +
-            self.night_activity_ratio * 0.1 +
-            min(self.unique_targets_count / 5.0, 1.0) * 0.15
-        )
-        return round(min(score, 1.0), 4)
+
 
 
 class BehavioralSnapshot(models.Model):
@@ -620,3 +621,39 @@ class ChatMessage(models.Model):
     def __str__(self):
         preview = self.content[:40] + '...' if len(self.content) > 40 else self.content
         return f"[{self.role}] {preview}"
+
+
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  PACKAGE 7 — APPLICATION-LEVEL BLOCKLIST                    ║
+# ║  BlockedContact                                              ║
+# ║  Workaround: Baileys updateBlockStatus is broken for LID    ║
+# ║  contacts. This model silently drops future messages.       ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+class BlockedContact(models.Model):
+    """
+    Application-level block. When the Enforcer decides BLOCK, the sender's JID
+    is saved here. The webhook checks this table BEFORE processing any message —
+    if the sender is blocked, the message is silently dropped (no pipeline, no response).
+    
+    This is a workaround for the Baileys bug where updateBlockStatus returns
+    'bad-request' for LID contacts on all Evolution API versions.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sender_jid = models.CharField(max_length=255, unique=True,
+        help_text="WhatsApp JID of the blocked contact")
+    instance_name = models.CharField(max_length=255,
+        help_text="Evolution API instance where the block was triggered")
+    reason = models.CharField(max_length=50, default='BLOCK',
+        help_text="Why the contact was blocked (BLOCK, ESCALATE, MANUAL)")
+    blocked_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True,
+        help_text="Set to False to unblock a contact")
+
+    class Meta:
+        verbose_name = "Blocked Contact"
+        verbose_name_plural = "Blocked Contacts"
+        ordering = ['-blocked_at']
+
+    def __str__(self):
+        return f"🚫 {self.sender_jid} (blocked {self.blocked_at.strftime('%Y-%m-%d %H:%M')})"

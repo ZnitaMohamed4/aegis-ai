@@ -1,0 +1,26 @@
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: aegis_n8n
+    network_mode: "host"
+    # ports:
+    #   - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      # Sets n8n to your local Moroccan timezone for accurate daily reports
+      - GENERIC_TIMEZONE=Africa/Casablanca 
+    volumes:
+      # This saves your workflows locally so they aren't lost if Docker restarts
+      - ./n8n_data:/home/node/.n8n 
+    restart: always
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: aegis_pdf_engine
+    ports:
+      - "3000:3000"
+    restart: always
