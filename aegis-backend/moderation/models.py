@@ -440,11 +440,13 @@ class UserBehaviorProfile(models.Model):
     # --- Tier 2 Features (Digital Twin Extended) ---
     message_frequency_1h = models.FloatField(default=0.0, help_text="Messages in last hour")
     avg_message_length = models.FloatField(default=0.0, help_text="Typical message length")
-    correction_rate = models.FloatField(default=0.0, help_text="How often Agent 3 overrides ML")
-    first_seen_at = models.DateTimeField(auto_now_add=True, null=True, help_text="Account age")
+    first_seen_at = models.DateTimeField(default=timezone.now, null=True, help_text="Account age (can be backdated via WhatsApp history)")
+    child_initiated = models.BooleanField(default=False, help_text="True if the child sent the very first message in the relationship")
+    shared_groups_count = models.IntegerField(default=0, help_text="Number of shared WhatsApp groups (synced by background task)")
     burst_count_24h = models.IntegerField(default=0, help_text="Number of burst episodes in 24h (5+ msgs in 10 mins)")
     max_toxicity_24h = models.FloatField(default=0.0, help_text="Worst toxicity score today")
-    ml_corrections_total = models.IntegerField(default=0, help_text="Total ML overrides by Agent 3")
+    upward_corrections_total = models.IntegerField(default=0, help_text="Times Agent 3 escalated ML decision")
+    downward_corrections_total = models.IntegerField(default=0, help_text="Times Agent 3 de-escalated ML decision")
     llm_triggers_total = models.IntegerField(default=0, help_text="Total times Agent 3 was triggered")
 
     # Risk assessment

@@ -91,6 +91,8 @@ aegis-ml/digital_twin/models/
 # ------------------------------------------------------------------------------
 # 8. TEMPORARY & TEST FILES
 # ------------------------------------------------------------------------------
+aegis-backend/scratch_tests/
 aegis-backend/scratch_test.py
 test_payload.json
 qr.html
+n8n_agents/

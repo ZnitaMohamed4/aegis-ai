@@ -480,3 +480,75 @@ def get_instance_details(instance_name):
     except Exception as e:
         logger.error(f"Failed to get instance details: {e}")
         return None
+
+
+def fetch_relationship_start(instance_name, remote_jid):
+    """
+    Queries Evolution API to find the oldest synced message in the chat history.
+    Tries both remoteJid and remoteJidAlt to handle LID contacts.
+    """
+    from django.utils import timezone
+    import datetime
+
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+
+    if not api_key:
+        return timezone.now()
+
+    url = f"{api_url}/chat/findMessages/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+
+    def try_fetch(jid_field, jid_value):
+        payload = {
+            "where": {
+                "key": {
+                    jid_field: jid_value
+                }
+            },
+            "orderBy": {
+                "messageTimestamp": "asc"
+            },
+            "take": 1
+        }
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            if response.status_code in [200, 201]:
+                data = response.json()
+
+                messages = []
+                if isinstance(data, list):
+                    messages = data
+                elif isinstance(data, dict):
+                    if "messages" in data and isinstance(data["messages"], list):
+                        messages = data["messages"]
+                    elif "messages" in data and isinstance(data["messages"], dict) and "records" in data["messages"]:
+                        messages = data["messages"]["records"]
+                    elif "data" in data and isinstance(data["data"], list):
+                        messages = data["data"]
+
+                valid_msgs = [m for m in messages if isinstance(m, dict) and "messageTimestamp" in m]
+                return valid_msgs
+        except Exception as e:
+            logger.error(f"[AEGIS] ❌ Error in try_fetch({jid_field}={jid_value}): {e}")
+        return []
+
+    # Attempt 1: query by remoteJid (standard @s.whatsapp.net)
+    messages = try_fetch("remoteJid", remote_jid)
+
+    # Attempt 2: LID contacts store phone number in remoteJidAlt
+    if not messages:
+        logger.info(f"[AEGIS] 🔄 No messages found with remoteJid={remote_jid}, trying remoteJidAlt...")
+        messages = try_fetch("remoteJidAlt", remote_jid)
+
+    if messages:
+        oldest_msg = min(messages, key=lambda m: int(m["messageTimestamp"]))
+        oldest_ts = int(oldest_msg["messageTimestamp"])
+        oldest_date = datetime.datetime.fromtimestamp(oldest_ts, tz=datetime.timezone.utc)
+        child_initiated = oldest_msg.get("key", {}).get("fromMe", False)
+        logger.info(f"[AEGIS] 🕒 Retrieved true relationship start date for {remote_jid}: {oldest_date.strftime('%Y-%m-%d')} | Child Initiated: {child_initiated}")
+        return oldest_date, child_initiated
+
+    logger.info(f"[AEGIS] 🕒 No historical messages found for {remote_jid}. Defaulting to now.")
+    return timezone.now(), False
+

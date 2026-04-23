@@ -77,7 +77,8 @@ def auditor_node(state: ModerationState) -> dict:
     # 🔁 SEVERITY-AWARE CORRECTION DETECTION
     ml_original_decision = state.get("ml_original_decision")
     ml_original_class = state.get("ml_original_class")
-    ml_corrected = False
+    upward_corrected = False
+    downward_corrected = False
 
     if ml_original_decision and ml_original_decision != new_decision:
         # Map decisions to severity to distinguish between catching a predator vs saving a gamer
@@ -85,15 +86,15 @@ def auditor_node(state: ModerationState) -> dict:
         orig_sev = severity.get(ml_original_decision, 0)
         new_sev = severity.get(new_decision, 0)
         
-        # Only punish the user's Twin profile (ml_corrected=True) if Agent 3 UPSCALED the severity (caught a sneaky predator).
-        # Less severe overrides (saving a gamer from a false positive) will NOT increase correction_rate.
         if new_sev > orig_sev:
-            ml_corrected = True
+            upward_corrected = True
+        elif new_sev < orig_sev:
+            downward_corrected = True
 
         logger.warning(
             f"[AGENT 3: CORRECTION] ⚠️ ML said '{ml_original_decision}' ({ml_original_class}) -> "
             f"Auditor overrode to '{new_decision}' ({new_class}). "
-            f"Profile Punished? {'YES' if ml_corrected else 'NO (Gamer/Context override)'}"
+            f"Upward? {upward_corrected} | Downward? {downward_corrected}"
         )
     
     return {
@@ -102,5 +103,6 @@ def auditor_node(state: ModerationState) -> dict:
         "decision": new_decision,
         "primary_class": new_class,
         "shadow_reviewed": is_shadow,
-        "ml_corrected": ml_corrected,
+        "upward_corrected": upward_corrected,
+        "downward_corrected": downward_corrected,
     }
