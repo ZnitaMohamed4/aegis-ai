@@ -3,6 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ThemeService } from '../../../core/services/theme.service';
 import { THEME_PRESETS, type ThemePreset } from '../../admin/settings/settings.data';
+import { AuthService } from '../../../core/services/auth.service';
+import { OnInit } from '@angular/core';
 
 // Reusable components
 import { PageHeaderComponent } from '@shared/index';
@@ -26,9 +28,10 @@ import { MessageService } from 'primeng/api';
   templateUrl: './settings.html',
   styleUrls: ['./settings.css']
 })
-export class SettingsComponent {
+export class SettingsComponent implements OnInit {
   private themeService = inject(ThemeService);
   private messageService = inject(MessageService);
+  private authService = inject(AuthService);
 
   // Theme State
   themePresets = THEME_PRESETS;
@@ -49,10 +52,22 @@ export class SettingsComponent {
 
   // Parent Account Profile
   parentAccount = signal({
-    displayName: 'Emma\'s Dad',
-    email: 'parent@example.com',
+    displayName: '',
+    email: '',
     lastLogin: new Date().toLocaleString()
   });
+
+  ngOnInit() {
+    this.authService.currentUser$.subscribe(user => {
+      if (user) {
+        this.parentAccount.update(p => ({
+          ...p,
+          displayName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username,
+          email: user.email || ''
+        }));
+      }
+    });
+  }
 
   // Password change state
   showPasswordForm = signal(false);

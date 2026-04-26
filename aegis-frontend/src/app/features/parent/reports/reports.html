@@ -74,10 +74,12 @@
 
 <!-- ── REQUEST REPORT DRAWER ──────────────────────── -->
 <p-drawer
-  [(visible)]="requestDrawerVisible"
+  [visible]="requestDrawerVisible()"
+  (visibleChange)="requestDrawerVisible.set($event)"
   position="right"
   [style]="{ width: 'min(440px, 100vw)' }"
-  header="Request a Report for Emma">
+  header="Request a Report"
+  appendTo="body">
 
   <div class="flex flex-col gap-5 p-1">
 
@@ -131,11 +133,40 @@
       </div>
     </div>
 
+    <!-- Delivery Options -->
+    <div class="flex flex-col gap-2">
+      <label class="text-xs font-semibold text-[var(--text-muted)]">Delivery Method</label>
+      <div class="p-3 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg text-xs mb-1 text-[var(--text-primary)]">
+        <div class="mb-1"><strong class="text-[var(--text-muted)]">Recipient:</strong> {{ profileLoading() ? 'Loading...' : (parentName() || 'Parent User') }}</div>
+        <div class="mb-1"><strong class="text-[var(--text-muted)]">Email:</strong> {{ profileLoading() ? 'Loading...' : (parentEmail() || 'Not provided') }}</div>
+        <div><strong class="text-[var(--text-muted)]">WhatsApp:</strong> {{ profileLoading() ? 'Loading...' : (parentPhone() || 'Not provided') }}</div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        @for (ch of [
+          { value: 'dashboard', label: 'Dashboard Only', icon: 'pi-desktop' },
+          { value: 'email', label: 'Email PDF', icon: 'pi-envelope' },
+          { value: 'whatsapp', label: 'WhatsApp PDF', icon: 'pi-whatsapp' },
+          { value: 'both', label: 'Email & WA', icon: 'pi-send' }
+        ]; track ch.value) {
+          <button
+            class="flex items-center gap-2 p-2.5 rounded-lg border transition-all text-left"
+            [class]="requestForm().delivery_channel === ch.value
+              ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)] shadow-sm'
+              : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent)]/50 hover:text-[var(--text-primary)]'"
+            (click)="setDeliveryChannel(ch.value)">
+            <i class="pi {{ ch.icon }} text-sm"></i>
+            <span class="text-xs font-semibold">{{ ch.label }}</span>
+          </button>
+        }
+      </div>
+    </div>
+
     <button
-      class="w-full py-3 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity mt-2"
-      (click)="submitRequest()">
-      <i class="pi pi-sparkles mr-2"></i>
-      Generate Report
+      class="w-full py-3 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity mt-4"
+      (click)="submitRequest()"
+      [disabled]="isGenerating()">
+      <i class="pi" [ngClass]="isGenerating() ? 'pi-spin pi-spinner mr-2' : 'pi-sparkles mr-2'"></i>
+      {{ isGenerating() ? 'Generating...' : 'Generate Report' }}
     </button>
 
   </div>

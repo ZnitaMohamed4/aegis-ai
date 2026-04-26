@@ -473,6 +473,7 @@ class BehavioralSnapshot(models.Model):
     UML: SnapshotComportemental
     Daily snapshot of a user's behavioral metrics for historical tracking.
     Enables risk trend charts and regression analysis.
+    Enhanced with Bayesian Network pathway probabilities.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     profile = models.ForeignKey(UserBehaviorProfile, on_delete=models.CASCADE,
@@ -483,13 +484,29 @@ class BehavioralSnapshot(models.Model):
     blocked_count = models.IntegerField(default=0)
     risk_score_snapshot = models.FloatField(default=0.0)
 
+    # Bayesian Network output — populated by Agent 4 after BN inference
+    risk_level = models.CharField(max_length=20, default='LOW',
+        help_text="BN-inferred risk level (LOW/MEDIUM/HIGH/CRITICAL)")
+    archetype = models.CharField(max_length=40, default='Normal User',
+        help_text="BN archetype classification (Normal User, Groomer Pattern, Bully Pattern, Troll Pattern)")
+    grooming_prob = models.FloatField(default=0.0,
+        help_text="P(GroomingRisk=HIGH) from Bayesian inference")
+    bully_prob = models.FloatField(default=0.0,
+        help_text="P(BullyRisk=HIGH) from Bayesian inference")
+    troll_prob = models.FloatField(default=0.0,
+        help_text="P(TrollRisk=HIGH) from Bayesian inference")
+
+    # Link to triggering alert (if a spike was caused by a specific event)
+    alert_id = models.CharField(max_length=50, null=True, blank=True,
+        help_text="SecurityAlert ID that triggered this snapshot update")
+
     class Meta:
         verbose_name = "Behavioral Snapshot"
         unique_together = [('profile', 'date_snapshot')]
         ordering = ['-date_snapshot']
 
     def __str__(self):
-        return f"{self.profile.user_jid} @ {self.date_snapshot} (risk: {self.risk_score_snapshot:.2f})"
+        return f"{self.profile.user_jid} @ {self.date_snapshot} ({self.archetype}, risk: {self.risk_score_snapshot:.2f})"
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -659,3 +676,114 @@ class BlockedContact(models.Model):
 
     def __str__(self):
         return f"🚫 {self.sender_jid} (blocked {self.blocked_at.strftime('%Y-%m-%d %H:%M')})"
+
+
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  PACKAGE 8 — REPORTS                                       ║
+# ║  Report                                                    ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+class Report(models.Model):
+    """
+    Tracks AI-generated PDF reports (both scheduled and on-demand).
+    Created by Django, populated by n8n.
+    """
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        GENERATING = 'generating', 'Generating'
+        READY = 'ready', 'Ready'
+        FAILED = 'failed', 'Failed'
+
+    class ReportType(models.TextChoices):
+        SUMMARY = 'summary', 'Summary'
+        FULL = 'full', 'Full Analysis'
+        LEGAL = 'legal', 'Legal Evidence'
+        INTELLIGENCE = 'intelligence', 'Intelligence Brief'
+
+    class DeliveryChannel(models.TextChoices):
+        EMAIL = 'email', 'Email'
+        WHATSAPP = 'whatsapp', 'WhatsApp'
+        BOTH = 'both', 'Email & WhatsApp'
+        DASHBOARD = 'dashboard', 'Dashboard Only'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    requested_by = models.ForeignKey(AegisUser, on_delete=models.CASCADE, related_name='reports')
+    child = models.ForeignKey(MonitoredChild, on_delete=models.CASCADE, related_name='reports', null=True, blank=True)
+    
+    report_type = models.CharField(max_length=20, choices=ReportType.choices)
+    period_start = models.DateField()
+    period_end = models.DateField()
+    
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    delivery_channel = models.CharField(max_length=20, choices=DeliveryChannel.choices, default=DeliveryChannel.DASHBOARD)
+    
+    pdf_file = models.FileField(upload_to='reports/', null=True, blank=True)
+    ai_narrative = models.TextField(blank=True, default='')
+    stats_json = models.JSONField(default=dict, blank=True)
+    flagged_legal = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Report"
+        verbose_name_plural = "Reports"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Report {self.report_type} ({self.status}) for {self.child.full_name if self.child else 'Admin'}"
+
+
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  PACKAGE 9 — PLATFORM CONFIGURATION                        ║
+# ║  PlatformSettings (Singleton)                              ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+class PlatformSettings(models.Model):
+    """
+    Singleton model storing global configuration for the AEGIS platform.
+    Controls AI Agent thresholds, retention policies, and global notification rules.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # 1. AI Moderation Thresholds (Agent orchestration logic)
+    ai_warn_threshold = models.FloatField(default=0.50)
+    ai_review_threshold = models.FloatField(default=0.65)
+    ai_block_threshold = models.FloatField(default=0.75)
+    ai_critical_threshold = models.FloatField(default=0.90)
+    
+    # 2. Pipeline Toggles
+    agent_1_enabled = models.BooleanField(default=True, help_text="Regex Gate")
+    agent_2_enabled = models.BooleanField(default=True, help_text="ML Classification")
+    agent_3_enabled = models.BooleanField(default=True, help_text="Semantic LLM")
+    agent_4_enabled = models.BooleanField(default=True, help_text="Behavioral Engine")
+    agent_5_enabled = models.BooleanField(default=True, help_text="Decision Orchestrator")
+    
+    # 3. LLM Infrastructure
+    active_llm_provider = models.CharField(max_length=50, default='groq')
+    active_llm_model = models.CharField(max_length=100, default='llama3-70b-8192')
+    
+    # 4. Data Retention (Days)
+    log_retention_days = models.IntegerField(default=30)
+    message_retention_days = models.IntegerField(default=90)
+    alert_retention_days = models.IntegerField(default=365)
+    
+    # 5. Global Policy
+    strictness_level = models.CharField(max_length=20, default='balanced')
+    auto_escalate = models.BooleanField(default=True)
+    block_unknown = models.BooleanField(default=False)
+    
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Platform Settings"
+        verbose_name_plural = "Platform Settings"
+
+    def __str__(self):
+        return "Global Platform Configuration"
+
+    @classmethod
+    def get_settings(cls):
+        """Returns the singleton instance, creating it if it doesn't exist."""
+        obj, created = cls.objects.get_or_create(id=uuid.UUID('00000000-0000-0000-0000-000000000001'))
+        return obj

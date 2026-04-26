@@ -37,12 +37,19 @@ def register_parent(request):
         }, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-@api_view(['GET'])
+@api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def current_user(request):
-    """Returns details of the currently logged-in user."""
-    serializer = AegisUserSerializer(request.user)
-    return Response(serializer.data)
+    """Returns or updates details of the currently logged-in user."""
+    if request.method == 'GET':
+        serializer = AegisUserSerializer(request.user)
+        return Response(serializer.data)
+    elif request.method == 'PUT':
+        serializer = AegisUserSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUser])

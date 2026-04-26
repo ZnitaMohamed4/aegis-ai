@@ -191,6 +191,38 @@ def profiler_node(state: ModerationState) -> dict:
         
     profile.save()
     
+    # --- 2b. Upsert Daily Behavioral Snapshot ---
+    # Creates a time-series record for the frontend risk trajectory charts.
+    from moderation.models import BehavioralSnapshot
+    today = timezone.now().date()
+    
+    # Extract per-pathway HIGH probabilities for the snapshot
+    grooming_high = explanation.get("GroomingRisk", {}).get("HIGH", 0.0) if explanation else 0.0
+    bully_high = explanation.get("BullyRisk", {}).get("HIGH", 0.0) if explanation else 0.0
+    troll_high = explanation.get("TrollRisk", {}).get("HIGH", 0.0) if explanation else 0.0
+    
+    # Get alert_id if this message triggered an alert
+    alert_id = state.get("alert_id", None)
+    
+    try:
+        BehavioralSnapshot.objects.update_or_create(
+            profile=profile,
+            date_snapshot=today,
+            defaults={
+                'risk_score_snapshot': profile.risk_score,
+                'risk_level': profile.risk_level,
+                'archetype': archetype,
+                'grooming_prob': grooming_high,
+                'bully_prob': bully_high,
+                'troll_prob': troll_high,
+                'message_count': profile.total_messages_sent,
+                'blocked_count': profile.total_blocked_messages_sent,
+                'alert_id': str(alert_id) if alert_id else None,
+            }
+        )
+    except Exception as e:
+        logger.error(f"[AGENT 4] Failed to upsert BehavioralSnapshot: {e}")
+    
     # --- 3. Terminal Logging ---
     risk_color = C4_RED if profile.risk_level in ('CRITICAL','HIGH') else C4_YELLOW if profile.risk_level == 'MEDIUM' else C4_GREEN
     

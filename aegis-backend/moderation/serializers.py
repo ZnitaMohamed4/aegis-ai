@@ -6,6 +6,7 @@ from .models import (
     UserBehaviorProfile, BehavioralSnapshot,
     SecurityAlert,
     ChatSession, ChatMessage,
+    Report,
 )
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
@@ -20,7 +21,7 @@ class AegisUserSerializer(serializers.ModelSerializer):
     """Serializer for user details."""
     class Meta:
         model = AegisUser
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 'language_preference', 'phone_number')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 'language_preference', 'phone_number', 'auto_protection_enabled', 'notification_email')
         read_only_fields = ('id', 'role')
 
 
@@ -167,3 +168,27 @@ class ParentRegisterSerializer(serializers.ModelSerializer):
         return user
 
 
+# ── Package 8: Reports ──
+
+class ReportSerializer(serializers.ModelSerializer):
+    child_name = serializers.CharField(source='child.full_name', read_only=True, default='All Children')
+    requested_by = serializers.SerializerMethodField()
+
+    def get_requested_by(self, obj):
+        user = obj.requested_by
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+        return full_name or user.username or str(user.id)
+    
+    class Meta:
+        model = Report
+        fields = '__all__'
+
+
+# ── Package 9: Platform Configuration ──
+
+from .models import PlatformSettings
+
+class PlatformSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PlatformSettings
+        fields = '__all__'

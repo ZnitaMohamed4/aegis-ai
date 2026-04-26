@@ -34,6 +34,9 @@ urlpatterns = [
     # Admin Risk Profiles
     path('admin/risk-profiles/', views.admin_risk_profiles, name='admin-risk-profiles'),
 
+    # Admin Settings (Platform Config)
+    path('admin/settings/', views.admin_settings, name='admin-settings'),
+
     # 7. Auth Endpoints
     path('auth/register/', views.register_parent, name='auth-register'),
     path('auth/login/', TokenObtainPairView.as_view(), name='auth-login'),
@@ -49,4 +52,11 @@ urlpatterns = [
     path('parent/blocked-messages/', views.parent_blocked_messages, name='parent-blocked-messages'),
     path('parent/conversations/', views.parent_conversations, name='parent-conversations'),
     path('parent/risk-profile/', views.parent_risk_profile, name='parent-risk-profile'),
+    
+    # 9. Reports Endpoints
+    path('parent/reports/', views.parent_report_list, name='parent-report-list'),
+    path('admin/reports/', views.admin_report_list, name='admin-report-list'),
+    path('reports/generate/', views.generate_report, name='report-generate'),
+    path('reports/<str:report_id>/download/', views.download_report, name='report-download'),
+    path('reports/<str:report_id>/complete/', views.report_complete_webhook, name='report-complete-webhook'),
 ]

@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -11,7 +11,7 @@ import { AuthService } from '../../../core/services/auth.service';
   templateUrl: './login.html',
   styleUrl: './login.css'
 })
-export class LoginComponent implements OnInit {
+export class LoginComponent implements OnInit, OnDestroy {
   private authService = inject(AuthService);
   private router = inject(Router);
 
@@ -20,9 +20,11 @@ export class LoginComponent implements OnInit {
   errorMessage = '';
   isLoading = false;
 
+  private authSub: any;
+
   ngOnInit() {
     // If we're already logged in, redirect immediately
-    this.authService.currentUser$.subscribe(user => {
+    this.authSub = this.authService.currentUser$.subscribe(user => {
       if (user) {
         if (user.role === 'admin') {
           this.router.navigate(['/admin/dashboard']);
@@ -31,6 +33,12 @@ export class LoginComponent implements OnInit {
         }
       }
     });
+  }
+
+  ngOnDestroy() {
+    if (this.authSub) {
+      this.authSub.unsubscribe();
+    }
   }
 
   onSubmit() {

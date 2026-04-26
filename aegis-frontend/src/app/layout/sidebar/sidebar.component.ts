@@ -54,7 +54,6 @@ export class SidebarComponent {
       title: 'Surveillance',
       items: [
         { label: 'Live Alerts', icon: 'pi-bell', route: '/parent/alerts', dot: 'pulse' },
-        { label: 'Conversations', icon: 'pi-comments', route: '/parent/conversations' },
         { label: 'Risk Profile', icon: 'pi-chart-line', route: '/parent/risk-profile' },
       ]
     },
@@ -91,7 +90,7 @@ export class SidebarComponent {
       items: [
         { label: 'Live Alerts', icon: 'pi-bell', route: '/admin/alerts', dot: 'pulse' },
         { label: 'Review Queue', icon: 'pi-clock', route: '/admin/review-queue', dot: 'static' },
-        { label: 'Conversations', icon: 'pi-comments', route: '/admin/conversations' },
+        { label: 'Message Intel', icon: 'pi-shield', route: '/admin/conversations' },
         { label: 'Risk Profiles', icon: 'pi-user-minus', route: '/admin/risk-profiles' },
       ]
     },

@@ -3,14 +3,14 @@
   <!-- Header -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
     <div>
-      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">Reports</h1>
-      <p class="text-sm text-[var(--text-muted)]">AI-generated incident reports — evidence quality documents</p>
+      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">Platform Reports & Intelligence</h1>
+      <p class="text-sm text-[var(--text-muted)]">System-wide AI reports, intelligence briefs, and evidence documents</p>
     </div>
     <button
       class="flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity w-full sm:w-auto"
       (click)="openRequest()">
-      <i class="pi pi-plus text-xs"></i>
-      Request Report
+      <i class="pi pi-sparkles text-xs"></i>
+      Generate Intelligence Brief
     </button>
   </div>
 
@@ -19,25 +19,25 @@
     <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
       <div class="text-xs text-[var(--text-muted)] mb-1">Total Reports</div>
       <div class="text-2xl sm:text-3xl font-bold font-mono text-[var(--text-primary)]">
-        {{ reports().length }}
+        {{ totalCount() }}
       </div>
     </div>
     <div class="bg-[var(--bg-surface)] border border-green-500/30 rounded-xl p-4">
       <div class="text-xs text-[var(--text-muted)] mb-1">Ready</div>
       <div class="text-2xl sm:text-3xl font-bold font-mono text-[var(--low)]">
-        {{ reports().filter(r => r.status === 'ready').length }}
+        {{ readyCount() }}
       </div>
     </div>
     <div class="bg-[var(--bg-surface)] border border-yellow-500/30 rounded-xl p-4">
       <div class="text-xs text-[var(--text-muted)] mb-1">Generating</div>
       <div class="text-2xl sm:text-3xl font-bold font-mono text-[var(--medium)]">
-        {{ reports().filter(r => r.status === 'generating').length }}
+        {{ generatingCount() }}
       </div>
     </div>
     <div class="bg-[var(--bg-surface)] border border-red-500/30 rounded-xl p-4">
       <div class="text-xs text-[var(--text-muted)] mb-1">Legal Flagged</div>
       <div class="text-2xl sm:text-3xl font-bold font-mono text-[var(--critical)]">
-        {{ reports().filter(r => r.flagged_legal).length }}
+        {{ legalCount() }}
       </div>
     </div>
   </div>
@@ -57,7 +57,7 @@
       }
     </div>
     <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
-      @for (t of ['all', 'summary', 'full', 'legal']; track t) {
+      @for (t of ['all', 'summary', 'full', 'intelligence', 'legal']; track t) {
         <button
           class="px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all"
           [class]="filterType() === t
@@ -79,29 +79,31 @@
 
 </div>
 
-<!-- ── REQUEST REPORT DRAWER ──────────────────────── -->
+<!-- ── GENERATE INTELLIGENCE BRIEF DRAWER ──────────────────────── -->
 <p-drawer
-  [(visible)]="requestDrawerVisible"
+  [visible]="requestDrawerVisible()"
+  (visibleChange)="requestDrawerVisible.set($event)"
   position="right"
   [style]="{ width: 'min(440px, 100vw)' }"
-  header="Request a Report">
+  header="Generate Report"
+  appendTo="body">
 
   <div class="flex flex-col gap-5 p-1">
 
     <p class="text-sm text-[var(--text-muted)]">
-      The AI pipeline will analyze all messages in the selected period and generate
-      a structured report. Generation typically takes 10–30 seconds.
+      Generate an AI-powered report. Intelligence Briefs cover platform-wide health.
+      Child-specific reports analyze a single monitored device.
     </p>
 
-    <!-- Child -->
+    <!-- Scope -->
     <div class="flex flex-col gap-1">
-      <label class="text-xs font-semibold text-[var(--text-muted)]">Child</label>
+      <label class="text-xs font-semibold text-[var(--text-muted)]">Scope</label>
       <select class="input-field"
-              [(ngModel)]="requestForm().child_identifier">
-        <option>Child #A1</option>
-        <option>Child #B2</option>
-        <option>Child #C3</option>
-        <option>Child #D4</option>
+              [(ngModel)]="requestForm().child_id">
+        <option value="">All Children (Platform-wide)</option>
+        @for (child of children(); track child.id) {
+          <option [value]="child.id">{{ child.name }}</option>
+        }
       </select>
     </div>
 
@@ -124,8 +126,9 @@
       <label class="text-xs font-semibold text-[var(--text-muted)]">Report Type</label>
       <div class="flex flex-col gap-2">
         @for (type of [
-          { value: 'summary', label: 'Summary', desc: 'Quick overview + AI narrative' },
-          { value: 'full', label: 'Full Analysis', desc: 'Complete data + threat actors + charts' },
+          { value: 'intelligence', label: 'Intelligence Brief', desc: 'Platform-wide threat landscape, AI accuracy & system health' },
+          { value: 'summary', label: 'Summary', desc: 'Quick overview + AI narrative for a specific child' },
+          { value: 'full', label: 'Full Analysis', desc: 'Complete data + threat actors + charts (PDF)' },
           { value: 'legal', label: 'Legal Evidence', desc: 'Full incident log + timestamps + evidence hash' }
         ]; track type.value) {
           <button
@@ -151,11 +154,33 @@
       </div>
     </div>
 
+    <!-- Delivery Options -->
+    <div class="flex flex-col gap-2">
+      <label class="text-xs font-semibold text-[var(--text-muted)]">Delivery Method</label>
+      <div class="grid grid-cols-2 gap-2">
+        @for (ch of [
+          { value: 'dashboard', label: 'Dashboard Only', icon: 'pi-desktop' },
+          { value: 'email', label: 'Email PDF', icon: 'pi-envelope' }
+        ]; track ch.value) {
+          <button
+            class="flex items-center gap-2 p-2.5 rounded-lg border transition-all text-left"
+            [class]="requestForm().delivery_channel === ch.value
+              ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)] shadow-sm'
+              : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--accent)]/50 hover:text-[var(--text-primary)]'"
+            (click)="setDeliveryChannel(ch.value)">
+            <i class="pi {{ ch.icon }} text-sm"></i>
+            <span class="text-xs font-semibold">{{ ch.label }}</span>
+          </button>
+        }
+      </div>
+    </div>
+
     <button
       class="w-full py-3 bg-[var(--accent)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity mt-2"
-      (click)="submitRequest()">
-      <i class="pi pi-sparkles mr-2"></i>
-      Generate Report
+      (click)="submitRequest()"
+      [disabled]="isGenerating()">
+      <i class="pi" [ngClass]="isGenerating() ? 'pi-spin pi-spinner mr-2' : 'pi-sparkles mr-2'"></i>
+      {{ isGenerating() ? 'Generating...' : 'Generate Report' }}
     </button>
 
   </div>

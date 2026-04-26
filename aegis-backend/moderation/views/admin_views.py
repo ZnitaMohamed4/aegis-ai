@@ -655,6 +655,7 @@ def activity_feed(request):
 @permission_classes([IsAuthenticated, IsAdminUser])
 def admin_risk_profiles(request):
     """GET /api/v1/admin/risk-profiles/"""
+    from moderation.models import BehavioralSnapshot
     
     # 1. Build Children Profiles
     children_profiles = []
@@ -701,6 +702,30 @@ def admin_risk_profiles(request):
         elif base_risk == 'HIGH': risk_score = 0.65
         elif base_risk == 'MEDIUM': risk_score = 0.35
         
+        
+        # Real category breakdown from ModerationResult.primary_class
+        cat_counts = results.exclude(primary_class='safe').exclude(primary_class__isnull=True).exclude(primary_class='').values('primary_class').annotate(count=Count('id'))
+        category_breakdown = {}
+        for cc in cat_counts:
+            category_breakdown[cc['primary_class']] = cc['count']
+        if not category_breakdown:
+            category_breakdown = {"verbal": 0, "threat": 0, "sexual": 0, "discrimination": 0}
+        
+        # Compute most common category
+        most_common_cat = max(category_breakdown, key=category_breakdown.get) if category_breakdown else "N/A"
+        
+        # Build real risk_trend from incoming contact snapshots
+        incoming_jids = list(results.exclude(is_from_me=True).values_list('sender_jid', flat=True).distinct())
+        child_snapshots = BehavioralSnapshot.objects.filter(
+            profile__user_jid__in=incoming_jids,
+            date_snapshot__gte=thirty_days_ago
+        ).order_by('date_snapshot').values_list('date_snapshot', 'risk_score_snapshot')
+        
+        daily_risks = {}
+        for d, score in child_snapshots:
+            daily_risks[d] = max(daily_risks.get(d, 0), score)
+        risk_trend = list(daily_risks.values())[-14:] if daily_risks else [round(risk_score, 2)] * 7
+        
         children_profiles.append({
             "id": c_id,
             "identifier": identifier,
@@ -715,14 +740,12 @@ def admin_risk_profiles(request):
             "total_blocked": blocked_count,
             "total_messages_bloques_envoyes": results.filter(is_from_me=True, decision__in=['BLOCK', 'ESCALATE']).count(),
             "activite_nocturne": 0.1,
-            "unique_harassers": len(list(results.exclude(is_from_me=True).values_list('sender_jid', flat=True).distinct())),
+            "unique_harassers": len(incoming_jids),
             "escalation_count": results.filter(decision='ESCALATE').count(),
-            "most_common_category": "threat" if blocked_count > 0 else "N/A",
-            "risk_trend": [round(risk_score, 2)] * 7,  # Flat trend (no BehavioralSnapshot data yet)
+            "most_common_category": most_common_cat,
+            "risk_trend": risk_trend,
             "snapshots": [],
-            "category_breakdown": {
-                "verbal": 0, "threat": blocked_count, "sexual": 0, "discrimination": 0
-            },
+            "category_breakdown": category_breakdown,
             "last_activity": timezone.now().isoformat(),
             "monitored_since": timezone.now().isoformat()
         })
@@ -758,6 +781,21 @@ def admin_risk_profiles(request):
         
         related_child_ids = [f"c_{inst}" for inst in instances_talked_to]
         
+        # Build real toxicity_trend from BehavioralSnapshot
+        snapshots = BehavioralSnapshot.objects.filter(
+            profile=prof,
+            date_snapshot__gte=timezone.now().date() - datetime.timedelta(days=14)
+        ).order_by('date_snapshot')
+        
+        toxicity_trend = [round(s.risk_score_snapshot, 2) for s in snapshots] or [round(prof.risk_score, 2)] * 7
+        
+        # Latest snapshot for archetype & pathway data
+        latest_snap = snapshots.last()
+        archetype = latest_snap.archetype if latest_snap else 'Normal User'
+        grooming_prob = round(latest_snap.grooming_prob, 3) if latest_snap else 0.0
+        bully_prob = round(latest_snap.bully_prob, 3) if latest_snap else 0.0
+        troll_prob = round(latest_snap.troll_prob, 3) if latest_snap else 0.0
+        
         contact_profiles.append({
             "id": str(prof.id),
             "raw_jid": prof.user_jid,
@@ -776,7 +814,11 @@ def admin_risk_profiles(request):
             "nombre_cibles_differentes": len(related_child_ids),
             "other_monitored_children_count": len(related_child_ids) - 1 if len(related_child_ids) > 0 else 0,
             "dominant_category": dominant_cat,
-            "toxicity_trend": [round(prof.risk_score, 2)] * 7,  # Flat trend (no BehavioralSnapshot data yet)
+            "toxicity_trend": toxicity_trend,
+            "archetype": archetype,
+            "grooming_prob": grooming_prob,
+            "bully_prob": bully_prob,
+            "troll_prob": troll_prob,
             "last_seen": timezone.now().isoformat(),
             "related_child_ids": related_child_ids
         })
@@ -786,4 +828,27 @@ def admin_risk_profiles(request):
         "contacts": contact_profiles
     })
 
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def admin_settings(request):
+    """
+    GET /api/v1/admin/settings/
+    PUT /api/v1/admin/settings/
+    Retrieves or updates the global PlatformSettings (singleton).
+    """
+    from moderation.models import PlatformSettings
+    from moderation.serializers import PlatformSettingsSerializer
+    
+    settings = PlatformSettings.get_settings()
+    
+    if request.method == 'GET':
+        serializer = PlatformSettingsSerializer(settings)
+        return Response(serializer.data)
+        
+    elif request.method == 'PUT':
+        serializer = PlatformSettingsSerializer(settings, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

@@ -85,13 +85,37 @@ def webhook_messages(request):
 
     # Extract conversation text. Evolution API nests this depending on the message type.
     raw_text = ""
+    
+    # 0. Voice transcription from n8n
+    if inner_data.get("is_voice_transcription") or data.get("is_voice_transcription"):
+        transcribed_text = inner_data.get("transcription") or data.get("transcription") or ""
+        if transcribed_text:
+            raw_text = f"🎤 [Voice Message] {transcribed_text}"
+        else:
+            raw_text = "🎤 [Voice Message] (Transcription failed/empty)"
     # 1. Plain text
-    if "conversation" in message:
+    elif "conversation" in message:
         raw_text = message["conversation"]
     # 2. Extended text (links, quotes, etc)
     elif "extendedTextMessage" in message:
         raw_text = message["extendedTextMessage"].get("text", "")
-    # 3. Very deeply nested (sometimes Evo API v2 does this for regular messages)
+    # 3. Audio Message (Forward to n8n for transcription)
+    elif "audioMessage" in message:
+        logger.info("Audio message detected. Forwarding to n8n for transcription...")
+        import requests
+        import threading
+        
+        def forward_to_n8n():
+            try:
+                # Use the Production URL (remove '-test') so it runs automatically in the background
+                requests.post("http://localhost:5678/webhook/evolution-audio", json=body, timeout=5)
+            except Exception as e:
+                logger.error(f"Failed to forward audio to n8n: {e}")
+                
+        threading.Thread(target=forward_to_n8n).start()
+        
+        return JsonResponse({"status": "forwarded_to_n8n", "reason": "audio_message"})
+    # 4. Very deeply nested (sometimes Evo API v2 does this for regular messages)
     elif isinstance(message, str):
         raw_text = message
 

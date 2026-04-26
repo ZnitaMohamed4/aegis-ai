@@ -6,11 +6,12 @@ import { Contact, ConversationMessage } from '@core/models';
 import { SkeletonModule } from 'primeng/skeleton';
 import { OnInit, effect } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { DrawerModule } from 'primeng/drawer';
 
 @Component({
   selector: 'app-conversation-viewer',
   standalone: true,
-  imports: [CommonModule, PageHeaderComponent, RouterModule, SkeletonModule],
+  imports: [CommonModule, PageHeaderComponent, RouterModule, SkeletonModule, DrawerModule],
   templateUrl: './conversation-viewer.html',
   styleUrl: './conversation-viewer.css'
 })
@@ -18,8 +19,8 @@ export class ConversationViewerComponent implements OnInit {
   contacts = input.required<Contact[]>();
   messages = input.required<Record<string, ConversationMessage[]>>();
   isAdmin = input<boolean>(false);
-  title = input<string>('Conversations');
-  subtitle = input<string>('Investigative context layer: read full history before taking action');
+  title = input<string>('Message Intelligence');
+  subtitle = input<string>('Contact safety overview — flagged threat events only');
 
   openRiskProfileEvent = output<{tab: 'children' | 'contacts', contact: Contact}>();
   goToReportsEvent = output<void>();
@@ -39,30 +40,23 @@ export class ConversationViewerComponent implements OnInit {
   }
 
   syncStateWithUrl(params: any) {
-    const filter = params['filter'];
-    if (filter === 'flagged' || filter === 'blocked') {
-      this.messageFilter.set(filter);
-    } else {
-      this.messageFilter.set('all');
-    }
-
     if (params['child']) {
       this.selectedChildGroupId.set(params['child']);
       this.view.set('table');
     }
-    if (params['chat']) {
-      const chatParam = params['chat'];
-      const contact = this.contacts().find(c => c.id === chatParam || c.raw_jid === chatParam);
+    if (params['contact']) {
+      const contactParam = params['contact'];
+      const contact = this.contacts().find(c => c.id === contactParam || c.raw_jid === contactParam);
       if (contact) {
         this.selectedContact.set(contact);
-        this.view.set('chat');
-        
-        // If it was matched by raw_jid, convert the URL param to the specific conversation id
-        if (contact.id !== chatParam) {
+        this.threatDrawerVisible.set(true);
+
+        // Normalize URL param to the specific conversation id
+        if (contact.id !== contactParam) {
           setTimeout(() => {
             this.router.navigate([], {
               relativeTo: this.route,
-              queryParams: { chat: contact.id },
+              queryParams: { contact: contact.id },
               queryParamsHandling: 'merge',
               replaceUrl: true
             });
@@ -70,37 +64,35 @@ export class ConversationViewerComponent implements OnInit {
         }
       }
     }
-    if (!params['child'] && !params['chat']) {
+    if (!params['child'] && !params['contact']) {
       if (this.isAdmin()) this.view.set('children');
       else this.view.set('table');
     }
   }
 
-  view = signal<'children' | 'table' | 'chat'>('table');
+  view = signal<'children' | 'table'>('table');
   selectedContact = signal<Contact | null>(null);
   selectedChildGroupId = signal<string | null>(null);
-  messageFilter = signal<'all' | 'flagged' | 'blocked'>('all');
-  
+  threatDrawerVisible = signal(false);
+
   isLoading = signal(true);
   skeletonItems = [1, 2, 3, 4, 5];
-  mobileView = signal<'list' | 'chat'>('list');
   searchTerm = signal('');
   riskFilter = signal<'all' | 'high' | 'blocked'>('all');
-  selectedAlertMessage = signal<ConversationMessage | null>(null);
 
   getRiskHex = getRiskHex;
   getDecisionClass = getDecisionClass;
 
   get filteredContacts(): Contact[] {
     const term = this.searchTerm().toLowerCase();
-    
+
     // If admin and a child is selected, filter by that child id first
     let baseContacts = this.contacts();
     const selChild = this.selectedChildGroupId();
     if (this.isAdmin() && selChild) {
       baseContacts = baseContacts.filter(c => c.child_id === selChild);
     }
-    
+
     const filtered = baseContacts.filter(c =>
       c.number.toLowerCase().includes(term) ||
       c.child_name.toLowerCase().includes(term) ||
@@ -117,7 +109,7 @@ export class ConversationViewerComponent implements OnInit {
     }
     return filtered;
   }
-  
+
   get childGroups() {
     const groups = new Map<string, { child_id: string, child_name: string, risk_level: string, contacts: Contact[], total_messages: number, blocked_count: number }>();
     for (const c of this.contacts()) {
@@ -134,15 +126,30 @@ export class ConversationViewerComponent implements OnInit {
     return Array.from(groups.values());
   }
 
-  getMessagesForContact(contactId: string): ConversationMessage[] {
+  /** Returns ONLY flagged messages for a contact — safe messages are never exposed. */
+  getFlaggedMessages(contactId: string): ConversationMessage[] {
     const msgs = this.messages()[contactId] ?? [];
-    if (this.messageFilter() === 'blocked') {
-      return msgs.filter(msg => msg.decision === 'BLOCK' || msg.decision === 'ESCALATE');
-    }
-    if (this.messageFilter() === 'flagged') {
-      return msgs.filter(msg => this.isFlaggedMessage(msg));
-    }
-    return msgs;
+    return msgs.filter(msg => this.isFlaggedMessage(msg));
+  }
+
+  /** Returns count of safe (ALLOW) messages for a contact. */
+  getSafeMessageCount(contactId: string): number {
+    const msgs = this.messages()[contactId] ?? [];
+    return msgs.filter(msg => msg.decision === 'ALLOW').length;
+  }
+
+  /** Generates a threat summary string for the table view. */
+  getThreatSummary(contact: Contact): string {
+    const flagged = this.getFlaggedMessages(contact.id);
+    if (flagged.length === 0) return 'No threats detected';
+    const blocks = flagged.filter(m => m.decision === 'BLOCK' || m.decision === 'ESCALATE').length;
+    const warns = flagged.filter(m => m.decision === 'WARN').length;
+    const parts: string[] = [];
+    if (blocks > 0) parts.push(`${blocks} blocked`);
+    if (warns > 0) parts.push(`${warns} warned`);
+    const lastCategory = flagged[flagged.length - 1]?.category;
+    if (lastCategory && lastCategory !== 'safe') parts.push(`last: ${lastCategory}`);
+    return parts.join(', ');
   }
 
   ngOnInit() {
@@ -162,72 +169,31 @@ export class ConversationViewerComponent implements OnInit {
   backToChildren() {
     this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { child: null, chat: null, filter: null },
+      queryParams: { child: null, contact: null },
       queryParamsHandling: 'merge'
     });
   }
 
-  openChat(contact: Contact) {
-    this.closeAlertDrawer();
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { chat: contact.id, filter: null },
-      queryParamsHandling: 'merge'
-    });
-  }
-
-  openFirstFlaggedFromList(contact: Contact) {
-    this.closeAlertDrawer();
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { chat: contact.id, filter: 'blocked' },
-      queryParamsHandling: 'merge'
-    });
-  }
-
-  backToTable() {
-    const childId = this.selectedChildGroupId();
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { chat: null, child: childId || null, filter: null },
-      queryParamsHandling: 'merge'
-    });
-    this.selectedContact.set(null);
-  }
-
-  toggleMessageFilter() {
-    const current = this.messageFilter();
-    let next = 'all';
-    // Cycle logic: all -> blocked -> flagged -> all
-    if (current === 'all') next = 'blocked';
-    else if (current === 'blocked') next = 'flagged';
-    
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { filter: next === 'all' ? null : next },
-      queryParamsHandling: 'merge'
-    });
-  }
-
-  clearFilter() {
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { filter: null },
-      queryParamsHandling: 'merge'
-    });
-  }
-
-  selectContact(contact: Contact) {
+  /** Opens the threat detail drawer for a contact. */
+  openThreatDrawer(contact: Contact) {
     this.selectedContact.set(contact);
-    this.mobileView.set('chat');
+    this.threatDrawerVisible.set(true);
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { contact: contact.id },
+      queryParamsHandling: 'merge'
+    });
   }
 
-  backToList() {
-    this.mobileView.set('list');
-  }
-
-  isWarnMessage(msg: ConversationMessage): boolean {
-    return msg.decision === 'WARN';
+  /** Closes the threat detail drawer. */
+  closeThreatDrawer() {
+    this.threatDrawerVisible.set(false);
+    this.selectedContact.set(null);
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { contact: null },
+      queryParamsHandling: 'merge'
+    });
   }
 
   isFlaggedMessage(msg: ConversationMessage): boolean {
@@ -247,12 +213,18 @@ export class ConversationViewerComponent implements OnInit {
     return 'var(--low)';
   }
 
-  openAlertDrawer(msg: ConversationMessage) {
-    this.selectedAlertMessage.set(msg);
+  getDecisionColor(decision: string): string {
+    if (decision === 'ESCALATE') return 'var(--critical)';
+    if (decision === 'BLOCK') return 'var(--high)';
+    if (decision === 'WARN') return 'var(--medium)';
+    return 'var(--low)';
   }
 
-  closeAlertDrawer() {
-    this.selectedAlertMessage.set(null);
+  getDecisionIcon(decision: string): string {
+    if (decision === 'ESCALATE') return 'pi-exclamation-triangle';
+    if (decision === 'BLOCK') return 'pi-ban';
+    if (decision === 'WARN') return 'pi-exclamation-circle';
+    return 'pi-check-circle';
   }
 
   openRiskProfile(tab: 'children' | 'contacts', contact: Contact) {
@@ -263,23 +235,34 @@ export class ConversationViewerComponent implements OnInit {
     this.goToReportsEvent.emit();
   }
 
-  exportConversation() {
+  /** Exports metadata-only evidence log — NO raw message text. */
+  exportEvidenceLog() {
     const contact = this.selectedContact();
     if (!contact) return;
 
-    const rows = this.getMessagesForContact(contact.id).map(msg => {
-      const decision = msg.decision ?? '-';
+    const flagged = this.getFlaggedMessages(contact.id);
+    const rows = flagged.map(msg => {
       const toxicity = msg.toxicity_score !== null ? msg.toxicity_score.toFixed(2) : '-';
-      return `[${msg.sent_at}] ${msg.direction.toUpperCase()} (${msg.language}) ${decision} Tox:${toxicity} :: ${msg.content_preview}`;
+      return `[${msg.sent_at}] ${msg.direction.toUpperCase()} | Decision: ${msg.decision} | Category: ${msg.category || '-'} | Toxicity: ${toxicity} | Language: ${msg.language} | LLM: ${msg.llm_triggered ? 'YES' : 'NO'}`;
     });
 
+    const safeCount = this.getSafeMessageCount(contact.id);
+
     const header = [
-      `Conversation Evidence Export`,
+      `AEGIS — Threat Evidence Log`,
+      `Generated: ${new Date().toISOString()}`,
+      ``,
       `Contact: ${contact.sender_name} (${contact.number})`,
       `Child: ${contact.child_name}`,
       `Platform: ${contact.plateforme}`,
-      `Risk: ${contact.risk_level} (${contact.sender_risk_score.toFixed(2)})`,
-      ''
+      `Risk Level: ${contact.risk_level} (Score: ${contact.sender_risk_score.toFixed(2)})`,
+      ``,
+      `Total Messages: ${contact.total_messages}`,
+      `Safe Messages: ${safeCount} (content not recorded)`,
+      `Flagged Events: ${flagged.length}`,
+      ``,
+      `--- FLAGGED EVENTS ---`,
+      ``
     ].join('\n');
 
     const content = `${header}${rows.join('\n')}`;
@@ -287,7 +270,7 @@ export class ConversationViewerComponent implements OnInit {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `conversation-${contact.id}.txt`;
+    anchor.download = `aegis-evidence-${contact.id}.txt`;
     anchor.click();
     URL.revokeObjectURL(url);
   }

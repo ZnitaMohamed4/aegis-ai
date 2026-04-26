@@ -96,3 +96,16 @@ aegis-backend/scratch_test.py
 test_payload.json
 qr.html
 n8n_agents/
+
+# ------------------------------------------------------------------------------
+# 9. PROJECT-SPECIFIC EXCLUSIONS (Rapport PFE, Scratch, Internal)
+# ------------------------------------------------------------------------------
+rapport-pfe/
+rapport-pfe.zip
+aegis-backend/scratch/
+aegis-backend/media/
+aegis-backend/reports/
+.agents/
+skills-lock.json
+aegis-backend/delete_reports.py
+*Rapport de PFE AEGIS.md*

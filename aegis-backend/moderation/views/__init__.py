@@ -25,6 +25,7 @@ from moderation.views.admin_views import (
     override_llm_decision,
     activity_feed,
     admin_risk_profiles,
+    admin_settings,
 )
 
 # Auth + WhatsApp setup
@@ -43,4 +44,13 @@ from moderation.views.parent_views import (
     parent_blocked_messages,
     parent_conversations,
     parent_risk_profile,
+)
+
+# Reports
+from moderation.views.report_views import (
+    parent_report_list,
+    admin_report_list,
+    generate_report,
+    report_complete_webhook,
+    download_report,
 )

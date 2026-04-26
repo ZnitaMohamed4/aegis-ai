@@ -3,16 +3,17 @@ import { Report, ReportStatus, ReportType } from '@core/models';
 export const MOCK_REPORTS: Report[] = [
   {
     id: 'RPT-001',
-    child_identifier: 'Child #A1',
+    child_name: 'Child #A1',
     requested_by: 'Karim Benali',
     report_type: 'legal',
     period_start: 'Mar 1, 2026',
     period_end: 'Mar 11, 2026',
     status: 'ready',
+    delivery_channel: 'dashboard',
     flagged_legal: true,
-    requested_at: '2 hr ago',
+    created_at: '2 hr ago',
     ai_narrative: 'During the period March 1–11, 2026, Child #A1 received 142 messages from 3 distinct contacts. A total of 18 messages were blocked by the AI pipeline, representing a 12.7% block ratio. The dominant threat type was direct threats, with 5 escalation events requiring immediate parental notification. The child\'s risk score escalated from 0.45 to 0.91 over this period, indicating a rapidly deteriorating situation. Immediate intervention is strongly recommended.',
-    stats: {
+    stats_json: {
       total_messages: 142,
       total_blocked: 18,
       unique_harassers: 3,
@@ -29,16 +30,17 @@ export const MOCK_REPORTS: Report[] = [
   },
   {
     id: 'RPT-002',
-    child_identifier: 'Child #B2',
+    child_name: 'Child #B2',
     requested_by: 'Samira Ouhbi',
     report_type: 'full',
     period_start: 'Feb 25, 2026',
     period_end: 'Mar 4, 2026',
     status: 'ready',
+    delivery_channel: 'email',
     flagged_legal: false,
-    requested_at: '1 day ago',
+    created_at: '1 day ago',
     ai_narrative: 'During the period February 25 – March 4, 2026, Child #B2 received 98 messages from 1 contact. 9 messages were blocked, primarily categorized as verbal harassment. The situation shows a pattern of repeated targeting by a single contact, which is a strong behavioral indicator of persistent bullying.',
-    stats: {
+    stats_json: {
       total_messages: 98,
       total_blocked: 9,
       unique_harassers: 1,
@@ -53,16 +55,17 @@ export const MOCK_REPORTS: Report[] = [
   },
   {
     id: 'RPT-003',
-    child_identifier: 'Child #A1',
+    child_name: 'Child #A1',
     requested_by: 'Karim Benali',
     report_type: 'summary',
     period_start: 'Feb 1, 2026',
     period_end: 'Feb 28, 2026',
     status: 'generating',
+    delivery_channel: 'whatsapp',
     flagged_legal: false,
-    requested_at: '5 min ago',
+    created_at: '5 min ago',
     ai_narrative: '',
-    stats: {
+    stats_json: {
       total_messages: 0,
       total_blocked: 0,
       unique_harassers: 0,

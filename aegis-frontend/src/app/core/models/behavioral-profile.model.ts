@@ -80,4 +80,10 @@ export interface ContactProfile {
   toxicity_trend: number[];
   last_seen: string;
   related_child_ids: string[];
+
+  // Bayesian Network output
+  archetype?: string;
+  grooming_prob?: number;
+  bully_prob?: number;
+  troll_prob?: number;
 }

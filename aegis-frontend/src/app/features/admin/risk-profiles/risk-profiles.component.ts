@@ -82,6 +82,16 @@ export class RiskProfilesComponent implements OnInit {
     return map[level];
   }
 
+  getArchetypeColor(archetype: string): string {
+    const map: Record<string, string> = {
+      'Normal User': '#10D9A0',
+      'Troll Pattern': '#8b5cf6',
+      'Bully Pattern': '#f59e0b',
+      'Groomer Pattern': '#f43f5e'
+    };
+    return map[archetype] || '#94A3B8';
+  }
+
   getTrendChart(trend: number[], level: RiskLevel) {
     const color = this.getChartColor(level);
     return {

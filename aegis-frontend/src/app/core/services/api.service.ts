@@ -136,6 +136,21 @@ export class ApiService {
     return this.http.get<{children: any[], contacts: any[]}>(`${this.BASE_URL}/admin/risk-profiles/`);
   }
 
+  /** Updates the currently authenticated user's account details. */
+  updateCurrentUser(payload: any): Observable<any> {
+    return this.http.put<any>(`${this.BASE_URL}/auth/me/`, payload);
+  }
+
+  /** Fetches global platform settings (AI configuration, thresholds, retention). */
+  getSystemSettings(): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/admin/settings/`);
+  }
+
+  /** Updates global platform settings. */
+  updateSystemSettings(payload: any): Observable<any> {
+    return this.http.put<any>(`${this.BASE_URL}/admin/settings/`, payload);
+  }
+
   // ════════════════════════════════════════════════════════════════
   // PARENT ENDPOINTS (filtered to logged-in parent's child only)
   // ════════════════════════════════════════════════════════════════

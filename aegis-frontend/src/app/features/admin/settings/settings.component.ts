@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ToggleSwitch } from 'primeng/toggleswitch';
 import { Select } from 'primeng/select';
@@ -7,6 +7,8 @@ import { Toast } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 import { PageHeaderComponent } from '@shared/index';
 import { ThemeService } from '@core/services/theme.service';
+import { ApiService } from '@core/services/api.service';
+import { AuthService } from '@core/services/auth.service';
 import {
   DEFAULT_SETTINGS,
   LANGUAGE_OPTIONS,
@@ -26,9 +28,11 @@ import {
   templateUrl: './settings.html',
   styleUrl: './settings.css',
 })
-export class SettingsComponent {
+export class SettingsComponent implements OnInit {
   private readonly themeService = inject(ThemeService);
   private readonly messageService = inject(MessageService);
+  private readonly apiService = inject(ApiService);
+  private readonly authService = inject(AuthService);
 
   readonly themePresets = THEME_PRESETS;
   readonly languageOptions = LANGUAGE_OPTIONS;
@@ -52,6 +56,42 @@ export class SettingsComponent {
   });
 
   readonly showPurgeConfirmation = signal(false);
+
+  ngOnInit(): void {
+    this.apiService.getSystemSettings().subscribe({
+      next: (settings) => {
+        this.retention.set({
+          messagesLogDays: settings.log_retention_days,
+          blockedMessagesDays: settings.message_retention_days,
+          alertHistoryDays: settings.alert_retention_days,
+          riskProfileHistoryDays: 60 // Unused in backend
+        });
+        this.moderation.set({
+          ...this.moderation(),
+          defaultLanguage: 'auto',
+          autoResolveAllow: true,
+          rateLimitThreshold: 50,
+          parentPortalAccess: true,
+          strictnessLevel: settings.strictness_level as any,
+          autoEscalate: settings.auto_escalate,
+          blockUnknown: settings.block_unknown
+        } as any);
+      },
+      error: () => console.error('Failed to load system settings')
+    });
+
+    this.authService.currentUser$.subscribe(user => {
+      if (user) {
+        this.adminAccount.update(acc => ({
+          ...acc,
+          language: user.language_preference as any || 'en',
+          phone: user.phone_number || '',
+          email: user.notification_email || user.email || '',
+          desktopNotifications: user.auto_protection_enabled || false
+        }));
+      }
+    });
+  }
 
   selectTheme(themeId: ThemePreset['id']): void {
     this.themeService.selectTheme(themeId);
@@ -151,11 +191,50 @@ export class SettingsComponent {
   }
 
   saveSettings(): void {
-    this.messageService.add({
-      severity: 'success',
-      summary: 'Settings Saved',
-      detail: 'Your settings have been updated successfully.',
-      life: 3000,
+    const r = this.retention();
+    const m = this.moderation();
+    const a = this.adminAccount();
+
+    // 1. Save Platform Settings
+    const platformPayload = {
+      log_retention_days: r.messagesLogDays,
+      message_retention_days: r.blockedMessagesDays,
+      alert_retention_days: r.alertHistoryDays,
+      strictness_level: (m as any).strictnessLevel || 'balanced',
+      auto_escalate: (m as any).autoEscalate || true,
+      block_unknown: (m as any).blockUnknown || false
+    };
+    
+    this.apiService.updateSystemSettings(platformPayload).subscribe({
+      next: () => console.log('Platform settings updated'),
+      error: (err) => console.error('Failed to update platform settings', err)
+    });
+
+    // 2. Save User Settings
+    const userPayload = {
+      language_preference: a.language,
+      phone_number: a.phone,
+      notification_email: a.email,
+      auto_protection_enabled: a.desktopNotifications
+    };
+
+    this.apiService.updateCurrentUser(userPayload).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Settings Saved',
+          detail: 'Your settings have been updated successfully.',
+          life: 3000,
+        });
+      },
+      error: (err) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Save Failed',
+          detail: 'Failed to update your account settings.',
+          life: 3000,
+        });
+      }
     });
   }
 }

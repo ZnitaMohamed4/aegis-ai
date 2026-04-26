@@ -1,7 +1,7 @@
 <!-- ══════════════ CHILDREN CARDS VIEW ══════════════ -->
 @if (view() === 'children') {
-<div class="p-6">
-  <app-page-header [title]="title()" [subtitle]="'Select a monitored child device to view their conversations'" />
+<div class="p-4 sm:p-6">
+  <app-page-header [title]="title()" [subtitle]="'Select a monitored child device to review contact safety'" />
   
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
     @for (group of childGroups; track group.child_id) {
@@ -33,7 +33,7 @@
             <div class="text-2xl font-bold" [ngClass]="group.blocked_count > 0 ? 'text-[var(--critical)]' : 'text-[var(--text-primary)]'">
               {{ group.blocked_count }}
             </div>
-            <div class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Blocked Msgs</div>
+            <div class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mt-1">Threats</div>
           </div>
         </div>
       </button>
@@ -46,9 +46,9 @@
 </div>
 }
 
-<!-- ══════════════ TABLE VIEW ══════════════ -->
+<!-- ══════════════ CONTACT SAFETY TABLE ══════════════ -->
 @if (view() === 'table') {
-<div class="p-6">
+<div class="p-4 sm:p-6">
   @if (isAdmin() && selectedChildGroupId()) {
     <button (click)="backToChildren()" class="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors bg-[var(--bg-surface)] border border-[var(--border)] px-4 py-2 rounded-lg">
       <i class="pi pi-arrow-left text-xs"></i> Back to Children
@@ -56,6 +56,7 @@
   }
   <app-page-header [title]="title()" [subtitle]="subtitle()" />
 
+  <!-- Search & Filters -->
   <div class="flex flex-wrap items-center gap-3 mb-6">
     <div class="flex items-center gap-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg px-3 py-2 w-full max-w-sm">
       <i class="pi pi-search text-[var(--text-muted)] text-sm"></i>
@@ -74,15 +75,24 @@
         [value]="riskFilter()"
         (change)="riskFilter.set($any($event.target).value)"
       >
-        <option value="all">All</option>
-        <option value="high">High Risk</option>
-        <option value="blocked">Has Blocked Messages</option>
+        <option value="all">All Contacts</option>
+        <option value="high">High Risk Only</option>
+        <option value="blocked">Has Threats</option>
       </select>
     </div>
   </div>
 
+  <!-- Privacy Banner -->
+  <div class="flex items-center gap-3 mb-5 p-3 bg-[var(--accent)]/5 border border-[var(--accent)]/15 rounded-lg">
+    <i class="pi pi-shield text-[var(--accent)]"></i>
+    <p class="text-xs text-[var(--text-muted)]">
+      <strong class="text-[var(--text-primary)]">Privacy Protected</strong> — Message content is never stored or displayed. Only threat metadata (category, toxicity, AI decision) is shown.
+    </p>
+  </div>
+
+  <!-- Desktop Table -->
   <div class="hidden sm:block bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-x-auto">
-    <table class="w-full min-w-[1200px]">
+    <table class="w-full min-w-[900px]">
       <thead>
         <tr class="border-b border-[var(--border)]">
           @if (isAdmin() && !selectedChildGroupId()) {
@@ -93,8 +103,8 @@
           <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Platform</th>
           <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Risk</th>
           <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Messages</th>
-          <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Blocked</th>
-          <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Preview</th>
+          <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Threats</th>
+          <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Threat Summary</th>
           <th class="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Actions</th>
         </tr>
       </thead>
@@ -105,13 +115,13 @@
               @if (isAdmin() && !selectedChildGroupId()) {
                 <td class="px-5 py-4"><p-skeleton width="6rem" height="1.25rem"></p-skeleton></td>
               }
-              <td class="px-5 py-4"><div class="flex items-center gap-2"><p-skeleton width="7rem" height="1.25rem"></p-skeleton><p-skeleton width="3rem" height="1rem" borderRadius="16px"></p-skeleton></div></td>
+              <td class="px-5 py-4"><p-skeleton width="7rem" height="1.25rem"></p-skeleton></td>
               <td class="px-5 py-4"><p-skeleton width="7rem" height="1rem"></p-skeleton></td>
               <td class="px-5 py-4"><p-skeleton width="4rem" height="1.25rem" borderRadius="16px"></p-skeleton></td>
               <td class="px-5 py-4"><p-skeleton width="4rem" height="1.25rem" borderRadius="16px"></p-skeleton></td>
               <td class="px-5 py-4"><p-skeleton width="2rem"></p-skeleton></td>
               <td class="px-5 py-4"><p-skeleton width="2rem" height="1.25rem" borderRadius="4px"></p-skeleton></td>
-              <td class="px-5 py-4"><p-skeleton width="14rem"></p-skeleton></td>
+              <td class="px-5 py-4"><p-skeleton width="10rem"></p-skeleton></td>
               <td class="px-5 py-4 text-right"><p-skeleton width="4rem" height="1.5rem" borderRadius="8px"></p-skeleton></td>
             </tr>
           }
@@ -175,33 +185,23 @@
                   {{ contact.blocked_count }}
                 </span>
               } @else {
-                <span class="text-xs text-[var(--text-muted)]">0</span>
+                <span class="text-xs text-[var(--low)] font-semibold">Safe</span>
               }
             </td>
 
+            <!-- Threat Summary (replaces raw text Preview) -->
             <td class="px-5 py-4 max-w-[240px]">
-              <span class="text-sm text-[var(--text-muted)] truncate block">{{ contact.last_message }}</span>
+              <span class="text-xs text-[var(--text-muted)] truncate block">{{ getThreatSummary(contact) }}</span>
             </td>
 
             <td class="px-5 py-4 text-right">
-              <div class="inline-flex items-center gap-2">
-                <button
-                  (click)="openChat(contact)"
-                  class="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent)] hover:text-[var(--text-primary)] bg-[var(--accent)]/10 hover:bg-[var(--accent)]/20 px-3 py-1.5 rounded-lg transition-colors"
-                >
-                  <i class="pi pi-eye text-xs"></i>
-                  View Chat
-                </button>
-                @if (contact.blocked_count > 0) {
-                  <button
-                    (click)="openFirstFlaggedFromList(contact)"
-                    class="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--critical)] bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    <i class="pi pi-bell text-xs"></i>
-                    Blocked Msg
-                  </button>
-                }
-              </div>
+              <button
+                (click)="openThreatDrawer(contact)"
+                class="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent)] hover:text-[var(--text-primary)] bg-[var(--accent)]/10 hover:bg-[var(--accent)]/20 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <i class="pi pi-shield text-xs"></i>
+                Threat Intel
+              </button>
             </td>
           </tr>
         } @empty {
@@ -212,7 +212,7 @@
                   <div class="w-12 h-12 rounded-full bg-[var(--bg-surface-2)] flex items-center justify-center mb-3">
                     <i class="pi pi-filter-slash text-xl text-[var(--accent)]"></i>
                   </div>
-                  <h3 class="text-base font-semibold text-[var(--text-primary)] mb-1">No conversations match filters</h3>
+                  <h3 class="text-base font-semibold text-[var(--text-primary)] mb-1">No contacts match filters</h3>
                   <p class="text-sm text-[var(--text-muted)]">Try adjusting your search term or risk filter to see more results.</p>
                 </div>
               </td>
@@ -227,13 +227,14 @@
   @if (contacts().length === 0) {
     <div class="hidden sm:flex bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden py-24 flex-col items-center justify-center text-center px-4 mt-6">
       <div class="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center mb-4">
-        <i class="pi pi-comments text-2xl text-[var(--accent)]"></i>
+        <i class="pi pi-shield text-2xl text-[var(--accent)]"></i>
       </div>
-      <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">No conversations</h3>
-      <p class="text-sm text-[var(--text-muted)] max-w-md">No messages have been intercepted or monitored yet. Conversations will appear here once activity is detected.</p>
+      <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">No contact activity</h3>
+      <p class="text-sm text-[var(--text-muted)] max-w-md">No messages have been intercepted or monitored yet. Contact safety data will appear here once activity is detected.</p>
     </div>
   }
 
+  <!-- Mobile Cards -->
   <div class="sm:hidden flex flex-col gap-3">
     @if (isLoading()) {
       @for (i of skeletonItems; track i) {
@@ -249,7 +250,6 @@
           <p-skeleton width="7rem" height="1rem" styleClass="mb-3"></p-skeleton>
           <p-skeleton width="100%" height="1rem" styleClass="mb-3"></p-skeleton>
           <div class="flex justify-between">
-            <p-skeleton width="5rem" height="2rem" borderRadius="8px"></p-skeleton>
             <p-skeleton width="5rem" height="2rem" borderRadius="8px"></p-skeleton>
           </div>
         </div>
@@ -273,7 +273,7 @@
           </span>
         </div>
 
-        <div class="flex items-center gap-2 mb-3">
+        <div class="flex items-center gap-2 mb-2">
           <button class="text-xs text-[var(--accent)]" (click)="openRiskProfile('contacts', contact)">
             {{ contact.sender_name }}
           </button>
@@ -282,19 +282,23 @@
           </span>
         </div>
 
-        <div class="text-xs font-mono text-[var(--text-muted)] mb-3">{{ contact.number }}</div>
-        <div class="text-xs text-[var(--text-muted)] truncate mb-3">{{ contact.last_message }}</div>
+        <div class="text-xs font-mono text-[var(--text-muted)] mb-2">{{ contact.number }}</div>
 
-        <div class="flex gap-2">
-          <button (click)="openChat(contact)" class="flex-1 text-xs font-semibold text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-2 rounded-lg">
-            View Chat
-          </button>
+        <!-- Threat summary instead of raw message -->
+        <div class="flex items-center gap-2 mb-3 text-xs">
+          <span class="text-[var(--text-muted)]">{{ contact.total_messages }} msgs</span>
+          <span class="text-[var(--text-muted)]">·</span>
           @if (contact.blocked_count > 0) {
-            <button (click)="openFirstFlaggedFromList(contact)" class="text-xs font-semibold text-[var(--critical)] bg-red-500/10 px-3 py-2 rounded-lg">
-              Blocked
-            </button>
+            <span class="text-[var(--critical)] font-semibold">{{ contact.blocked_count }} threats</span>
+          } @else {
+            <span class="text-[var(--low)] font-semibold">Safe</span>
           }
         </div>
+
+        <button (click)="openThreatDrawer(contact)" class="w-full text-xs font-semibold text-[var(--accent)] bg-[var(--accent)]/10 px-3 py-2 rounded-lg flex items-center justify-center gap-1.5">
+          <i class="pi pi-shield text-xs"></i>
+          View Threat Intel
+        </button>
       </div>
     } @empty {
       @if (contacts().length > 0) {
@@ -313,238 +317,158 @@
   @if (contacts().length === 0) {
     <div class="sm:hidden flex flex-col items-center justify-center text-center py-16 px-4 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl mt-3">
       <div class="w-14 h-14 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center mb-4">
-        <i class="pi pi-comments text-2xl text-[var(--accent)]"></i>
+        <i class="pi pi-shield text-2xl text-[var(--accent)]"></i>
       </div>
-      <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">No conversations</h3>
+      <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">No contact activity</h3>
       <p class="text-sm text-[var(--text-muted)]">No messages have been intercepted yet.</p>
     </div>
   }
 </div>
 }
 
-<!-- ══════════════ CHAT VIEW ══════════════ -->
-@if (view() === 'chat') {
-<div class="fixed top-[64px] right-0 bottom-0 left-0 md:left-64 z-50 flex flex-col bg-[var(--bg-base)] overflow-hidden">
+<!-- ══════════════ THREAT DETAIL DRAWER ══════════════ -->
+<p-drawer
+  [visible]="threatDrawerVisible()"
+  (visibleChange)="threatDrawerVisible.set($event); !$event && closeThreatDrawer()"
+  position="right"
+  [style]="{ width: 'min(520px, 100vw)' }"
+  [header]="'Threat Intelligence'"
+  appendTo="body">
 
-  <!-- FIXED HEADER -->
-  <div class="flex items-center gap-4 px-6 py-4 bg-[var(--bg-surface)] border-b border-[var(--border)] shadow-sm z-10 shrink-0">
-    <button
-      (click)="backToTable()"
-      class="w-10 h-10 rounded-xl flex items-center justify-center border border-[var(--border)] hover:bg-[var(--bg-surface-2)] text-[var(--text-muted)] transition-all flex-shrink-0"
-    >
-      <i class="pi pi-arrow-left"></i>
-    </button>
+  @if (selectedContact(); as contact) {
+    <div class="flex flex-col gap-5 p-1">
 
-    <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 flex-wrap mb-1">
-        <span class="text-lg font-bold text-[var(--text-primary)] leading-tight">{{ selectedContact()!.sender_name }}</span>
-        <span class="platform-pill" [ngClass]="getPlatformTagClass(selectedContact()!.plateforme)">
-          {{ selectedContact()!.plateforme }}
-        </span>
-        <span class="text-[10px] uppercase font-black tracking-widest px-2 py-0.5 rounded-md"
-              [style.color]="getRiskHex(selectedContact()!.risk_level)"
-              [style.background]="getRiskHex(selectedContact()!.risk_level) + '15'"
-              [style.border]="'1px solid ' + getRiskHex(selectedContact()!.risk_level) + '33'">
-          {{ selectedContact()!.risk_level }} risk
+      <!-- Contact Header -->
+      <div class="flex items-center gap-4 pb-4 border-b border-[var(--border)]">
+        <div class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0"
+             [style.background]="getRiskHex(contact.risk_level) + '18'"
+             [style.color]="getRiskHex(contact.risk_level)">
+          <i class="pi pi-user text-xl"></i>
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1">
+            <h3 class="text-base font-bold text-[var(--text-primary)] truncate">{{ contact.sender_name }}</h3>
+            <span class="platform-pill" [ngClass]="getPlatformTagClass(contact.plateforme)">{{ contact.plateforme }}</span>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-[var(--text-muted)]">
+            <span class="font-mono">{{ contact.number }}</span>
+            <span>·</span>
+            <span>Child: <strong class="text-[var(--text-primary)]">{{ contact.child_name }}</strong></span>
+          </div>
+        </div>
+        <span class="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full flex-shrink-0"
+              [style.color]="getRiskHex(contact.risk_level)"
+              [style.background]="getRiskHex(contact.risk_level) + '22'"
+              [style.border]="'1px solid ' + getRiskHex(contact.risk_level) + '33'">
+          {{ contact.risk_level }}
         </span>
       </div>
 
-      <div class="flex items-center gap-2 overflow-x-auto no-scrollbar">
-        <div class="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
-          <i class="pi pi-phone text-[9px]"></i> {{ selectedContact()!.number }}
+      <!-- Stats Row -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-[var(--bg-surface-2)] rounded-lg p-3 text-center">
+          <div class="text-xl font-bold text-[var(--text-primary)] font-mono">{{ contact.total_messages }}</div>
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Total Msgs</div>
         </div>
-        <span class="opacity-30 text-xs text-nowrap">|</span>
-        <div class="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
-          <i class="pi pi-user text-[9px]"></i> Child: 
-          @if (isAdmin()) {
-            <button class="header-link px-1" (click)="openRiskProfile('children', selectedContact()!)">
-              {{ selectedContact()!.child_name }}
-            </button>
-          } @else {
-            <span class="font-bold text-[var(--text-primary)] px-1">{{ selectedContact()!.child_name }}</span>
-          }
+        <div class="bg-[var(--bg-surface-2)] rounded-lg p-3 text-center">
+          <div class="text-xl font-bold font-mono" [style.color]="contact.blocked_count > 0 ? 'var(--critical)' : 'var(--low)'">{{ contact.blocked_count }}</div>
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Threats</div>
         </div>
-        <span class="opacity-30 text-xs text-nowrap">|</span>
-        <div class="text-[11px] text-[var(--text-muted)] whitespace-nowrap">
-           <span class="font-bold text-[var(--accent)]">{{ selectedContact()!.total_messages }}</span> total
-           · <span class="text-[var(--critical)] font-bold">{{ selectedContact()!.blocked_count }} blocked</span> 
+        <div class="bg-[var(--bg-surface-2)] rounded-lg p-3 text-center">
+          <div class="text-xl font-bold text-[var(--low)] font-mono">{{ getSafeMessageCount(contact.id) }}</div>
+          <div class="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Safe</div>
         </div>
       </div>
-    </div>
 
-    <div class="flex items-center gap-2">
-      <button 
-        class="header-action hidden md:flex items-center gap-1.5" 
-        [ngClass]="messageFilter() !== 'all' ? 'bg-[var(--accent)]/10 text-[var(--accent)] border-[var(--accent)]/30' : ''"
-        (click)="toggleMessageFilter()"
-      >
-        <i class="pi" [ngClass]="messageFilter() !== 'all' ? 'pi-filter-slash' : 'pi-filter'"></i>
-        {{ messageFilter() === 'all' ? 'Filter Threats' : 'Show All' }}
-      </button>
+      <!-- Privacy Notice -->
+      <div class="flex items-start gap-2 p-3 bg-[var(--accent)]/5 border border-[var(--accent)]/15 rounded-lg">
+        <i class="pi pi-lock text-[var(--accent)] mt-0.5 text-sm"></i>
+        <p class="text-[11px] text-[var(--text-muted)] leading-relaxed">
+          Message content is <strong class="text-[var(--text-primary)]">never recorded or displayed</strong>. Only AI-analyzed threat metadata is shown below.
+        </p>
+      </div>
 
-      <button class="header-action hidden md:flex items-center gap-1.5" (click)="goToReports()">
-        <i class="pi pi-file-pdf"></i> Generate Report
-      </button>
-      <button class="header-action flex items-center gap-1.5" (click)="exportConversation()">
-        <i class="pi pi-download"></i> Export
-      </button>
-    </div>
-  </div>
+      <!-- Flagged Events Timeline -->
+      <div>
+        <h4 class="text-xs font-bold uppercase tracking-widest text-[var(--text-muted)] mb-3">Flagged Threat Events</h4>
 
-  @if (messageFilter() !== 'all') {
-    <div class="bg-[var(--accent)]/5 border-b border-[var(--accent)]/20 px-6 py-2 text-xs text-[var(--text-muted)] flex justify-between items-center z-10 shrink-0">
-      <span><i class="pi pi-info-circle mr-1 text-[var(--accent)]"></i> 
-        @if (messageFilter() === 'blocked') {
-          Showing only severe threats (Block | Escalate)
+        @if (getFlaggedMessages(contact.id).length === 0) {
+          <div class="py-8 text-center bg-[var(--bg-surface-2)] rounded-lg">
+            <div class="w-10 h-10 rounded-full bg-[var(--low)]/10 flex items-center justify-center mx-auto mb-2">
+              <i class="pi pi-check-circle text-lg text-[var(--low)]"></i>
+            </div>
+            <p class="text-sm font-semibold text-[var(--text-primary)]">No threats detected</p>
+            <p class="text-xs text-[var(--text-muted)] mt-1">All messages from this contact were classified as safe.</p>
+          </div>
         } @else {
-          Showing all flagged messages (Warn | Block | Escalate)
-        }
-      </span>
-      <button (click)="clearFilter()" class="hover:text-[var(--text-primary)] transition-colors underline">Clear Filter</button>
-    </div>
-  }
-
-  @if (selectedContact()!.is_first_contact) {
-    <div class="first-contact-warning">
-      <i class="pi pi-exclamation-triangle"></i>
-      <span>First contact - unknown sender</span>
-    </div>
-  }
-
-  <!-- MESSAGES LIST - THE ONLY SCROLLABLE PART -->
-  <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-4 bg-[var(--bg-base)]">
-    @for (msg of getMessagesForContact(selectedContact()!.id); track msg.id) {
-
-      @if (msg.direction === 'outgoing') {
-        <div class="flex justify-end pl-12">
-          <div class="flex flex-col max-w-lg min-w-[200px] items-end">
-            @if (isFlaggedMessage(msg)) {
-              <button
-                class="bubble bubble-flagged animate-fade-in group hover:scale-[1.01] transition-transform text-right"
-                [ngClass]="{
-                  'flagged-block': msg.decision === 'BLOCK' || msg.decision === 'ESCALATE',
-                  'flagged-warn': msg.decision === 'WARN'
-                }"
-                (click)="openAlertDrawer(msg)"
-                style="border-radius: 1rem 1rem 0 1rem;"
-              >
-                <div class="flex items-center justify-end gap-2 mb-2 pb-1.5 border-b border-black/10">
-                  <span class="mr-auto text-[9px] opacity-60 font-mono">{{ msg.sent_at }}</span>
-                  @if (msg.llm_triggered) {
-                    <span class="llm-tag">LLM</span>
-                  }
-                  <span class="text-[10px] font-black uppercase tracking-widest">
-                    {{ msg.decision }} @if (msg.category) { - {{ msg.category }} }
-                  </span>
-                  <i class="pi" [ngClass]="msg.decision === 'WARN' ? 'pi-exclamation-circle' : 'pi-ban'"></i>
-                </div>
-
-                <p class="text-sm font-semibold text-[var(--text-primary)] mb-3 leading-relaxed">{{ msg.content_preview }}</p>
-
-                <div class="flex items-center justify-between mt-1">
-                  <div class="text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[var(--accent)]">
-                    <i class="pi pi-chevron-left text-[8px]"></i> Audit Data
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="lang-chip dark-chip">{{ msg.language }}</span>
-                    @if (msg.toxicity_score !== null && msg.toxicity_score !== undefined) {
-                      <span class="score-badge">TOX {{ msg.toxicity_score | percent:'1.0-0' }}</span>
-                    }
-                  </div>
-                </div>
-              </button>
-            } @else {
-              <div class="bubble bubble-outgoing animate-fade-in text-right">
-                <div class="flex items-center justify-between gap-4 mb-1 border-b border-white/10 pb-1">
-                  <span class="text-[9px] text-white/60 font-mono">{{ msg.sent_at }}</span>
-                  <span class="text-[9px] font-bold tracking-widest text-white/50 uppercase">{{ selectedContact()!.child_name }}</span>
-                </div>
-                <p class="text-sm text-white leading-relaxed inline-block">{{ msg.content_preview }}</p>
-              </div>
-            }
-          </div>
-        </div>
-      }
-
-      @if (msg.direction === 'incoming') {
-        <div class="flex justify-start pr-12">
-          <div class="flex flex-col max-w-lg min-w-[200px]">
-
-            @if (isFlaggedMessage(msg)) {
-              <button
-                class="bubble bubble-flagged animate-fade-in group hover:scale-[1.01] transition-transform text-left"
-                [ngClass]="{
-                  'flagged-block': msg.decision === 'BLOCK' || msg.decision === 'ESCALATE',
-                  'flagged-warn': msg.decision === 'WARN'
-                }"
-                (click)="openAlertDrawer(msg)"
-                style="border-radius: 1rem 1rem 1rem 0;"
-              >
-                <div class="flex items-center gap-2 mb-2 pb-1.5 border-b border-black/10">
-                  <i class="pi" [ngClass]="msg.decision === 'WARN' ? 'pi-exclamation-circle' : 'pi-ban'"></i>
-                  <span class="text-[10px] font-black uppercase tracking-widest">
-                    {{ msg.decision }} @if (msg.category) { - {{ msg.category }} }
-                  </span>
-                  @if (msg.llm_triggered) {
-                    <span class="llm-tag">LLM</span>
-                  }
-                  <span class="ml-auto text-[9px] opacity-60 font-mono">{{ msg.sent_at }}</span>
-                </div>
-
-                <p class="text-sm font-semibold text-[var(--text-primary)] mb-3 leading-relaxed">{{ msg.content_preview }}</p>
-
-                <div class="flex items-center justify-between mt-1">
-                   <div class="flex items-center gap-1.5">
-                    @if (msg.toxicity_score !== null && msg.toxicity_score !== undefined) {
-                      <span class="score-badge">TOX {{ msg.toxicity_score | percent:'1.0-0' }}</span>
-                    }
-                    <span class="lang-chip dark-chip">{{ msg.language }}</span>
-                  </div>
-                  <div class="text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[var(--accent)]">
-                    Audit Data <i class="pi pi-chevron-right text-[8px]"></i>
-                  </div>
-                </div>
-              </button>
-            } @else {
-              <div class="bubble bubble-incoming animate-fade-in shadow-sm">
-                <div class="flex items-center justify-between gap-4 mb-1.5 border-b border-[var(--border)] pb-1">
-                  <span class="text-[9px] font-bold tracking-widest text-[var(--text-muted)] uppercase">{{ selectedContact()!.sender_name }}</span>
+          <div class="flex flex-col gap-2">
+            @for (msg of getFlaggedMessages(contact.id); track msg.id) {
+              <div class="threat-event"
+                   [style.border-left-color]="getDecisionColor(msg.decision || 'ALLOW')">
+                <!-- Event Header -->
+                <div class="flex items-center justify-between gap-2 mb-2">
                   <div class="flex items-center gap-2">
-                    <span class="lang-chip text-[8px] py-0 px-1">{{ msg.language }}</span>
-                    <span class="text-[9px] text-[var(--text-muted)] font-mono">{{ msg.sent_at }}</span>
+                    <i class="pi text-sm" [ngClass]="getDecisionIcon(msg.decision || 'ALLOW')" [style.color]="getDecisionColor(msg.decision || 'ALLOW')"></i>
+                    <span class="text-xs font-black uppercase tracking-widest" [style.color]="getDecisionColor(msg.decision || 'ALLOW')">
+                      {{ msg.decision }}
+                    </span>
+                    @if (msg.category && msg.category !== 'safe') {
+                      <span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--bg-surface-2)] text-[var(--text-muted)]">
+                        {{ msg.category }}
+                      </span>
+                    }
+                    @if (msg.llm_triggered) {
+                      <span class="llm-tag">LLM</span>
+                    }
+                  </div>
+                  <span class="text-[10px] font-mono text-[var(--text-muted)]">{{ msg.sent_at }}</span>
+                </div>
+
+                <!-- Metadata Grid -->
+                <div class="grid grid-cols-3 gap-2 text-[11px]">
+                  <div class="flex flex-col">
+                    <span class="text-[var(--text-muted)]">Direction</span>
+                    <span class="font-semibold text-[var(--text-primary)] capitalize">{{ msg.direction }}</span>
+                  </div>
+                  <div class="flex flex-col">
+                    <span class="text-[var(--text-muted)]">Toxicity</span>
+                    <span class="font-semibold font-mono" [style.color]="getDecisionColor(msg.decision || 'ALLOW')">
+                      {{ msg.toxicity_score !== null && msg.toxicity_score !== undefined ? (msg.toxicity_score | percent:'1.0-0') : '—' }}
+                    </span>
+                  </div>
+                  <div class="flex flex-col">
+                    <span class="text-[var(--text-muted)]">Language</span>
+                    <span class="font-semibold text-[var(--text-primary)] uppercase">{{ msg.language }}</span>
                   </div>
                 </div>
-                <p class="text-sm text-[var(--text-primary)] leading-relaxed inline-block">{{ msg.content_preview }}</p>
+
+                <!-- Redacted Content Notice -->
+                <div class="mt-2 py-2 px-3 bg-[var(--bg-base)] rounded text-[11px] text-[var(--text-muted)] italic flex items-center gap-2">
+                  <i class="pi pi-lock text-[10px]"></i>
+                  [CONTENT REDACTED FOR PRIVACY]
+                </div>
               </div>
             }
           </div>
-        </div>
-      }
-    }
-  </div>
+        }
+      </div>
 
-  @if (selectedAlertMessage(); as alertMsg) {
-    <div class="alert-overlay" (click)="closeAlertDrawer()"></div>
-    <aside class="alert-drawer">
-      <div class="flex items-center justify-between mb-4">
-        <h3 class="text-sm font-semibold text-[var(--text-primary)]">Alert Preview</h3>
-        <button class="text-[var(--text-muted)] hover:text-[var(--text-primary)]" (click)="closeAlertDrawer()">
-          <i class="pi pi-times"></i>
+      <!-- Actions -->
+      <div class="flex flex-col gap-2 pt-2 border-t border-[var(--border)]">
+        <button (click)="openRiskProfile('contacts', contact)" class="drawer-action-btn">
+          <i class="pi pi-chart-line text-sm"></i>
+          View Risk Profile
+        </button>
+        <button (click)="goToReports()" class="drawer-action-btn">
+          <i class="pi pi-file-pdf text-sm"></i>
+          Generate Report
+        </button>
+        <button (click)="exportEvidenceLog()" class="drawer-action-btn">
+          <i class="pi pi-download text-sm"></i>
+          Export Evidence Log
         </button>
       </div>
 
-      <div class="text-xs text-[var(--text-muted)] mb-1">Flagged message</div>
-      <p class="text-sm text-[var(--text-primary)] leading-relaxed mb-4">{{ alertMsg.content_preview }}</p>
-
-      <div class="grid grid-cols-2 gap-2 text-xs mb-4">
-        <div class="drawer-meta"><span>Decision</span><strong>{{ alertMsg.decision }}</strong></div>
-        <div class="drawer-meta"><span>Language</span><strong>{{ alertMsg.language }}</strong></div>
-        <div class="drawer-meta"><span>Toxicity</span><strong>{{ alertMsg.toxicity_score !== null && alertMsg.toxicity_score !== undefined ? (alertMsg.toxicity_score | percent:'1.0-0') : '-' }}</strong></div>
-        <div class="drawer-meta"><span>Time</span><strong>{{ alertMsg.sent_at }}</strong></div>
-      </div>
-
-      <a routerLink="/admin/alerts" class="drawer-link">Open Full Alerts Page</a>
-    </aside>
+    </div>
   }
-</div>
-}
+</p-drawer>

@@ -33,6 +33,9 @@ export interface AdminAccountSettings {
   displayName: string;
   email: string;
   lastLogin: string;
+  language?: 'auto' | 'fr' | 'ar' | 'en';
+  phone?: string;
+  desktopNotifications?: boolean;
 }
 
 export interface ThemeVariableSet {

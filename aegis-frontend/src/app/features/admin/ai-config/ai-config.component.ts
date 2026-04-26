@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, signal, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Select } from 'primeng/select';
 import { ToggleSwitch } from 'primeng/toggleswitch';
@@ -11,6 +11,9 @@ import {
   PipelineAgent,
 } from '@core/models/ai-config.model';
 import { PageHeaderComponent } from '@shared/index';
+import { ApiService } from '@core/services/api.service';
+import { MessageService } from 'primeng/api';
+import { ToastModule } from 'primeng/toast';
 import {
   AGENT_CARDS,
   AGENT_STATUS_TONE,
@@ -41,11 +44,14 @@ interface SimulationUiResult {
 @Component({
   selector: 'app-ai-config',
   standalone: true,
-  imports: [CommonModule, FormsModule, PageHeaderComponent, Select, ToggleSwitch],
+  imports: [CommonModule, FormsModule, PageHeaderComponent, Select, ToggleSwitch, ToastModule],
+  providers: [MessageService],
   templateUrl: './ai-config.html',
   styleUrl: './ai-config.css',
 })
-export class AiConfigComponent {
+export class AiConfigComponent implements OnInit {
+  private readonly apiService = inject(ApiService);
+  private readonly messageService = inject(MessageService);
   readonly zoneMeta = DECISION_ZONES;
   readonly providerCards = PROVIDER_CARDS;
   readonly languageTabs = LANGUAGE_TABS;
@@ -80,10 +86,59 @@ export class AiConfigComponent {
     ];
   });
 
+  ngOnInit(): void {
+    this.apiService.getSystemSettings().subscribe({
+      next: (s) => {
+        this.boundaries.set({
+          warn: s.ai_warn_threshold,
+          review: s.ai_review_threshold,
+          block: s.ai_block_threshold,
+          critical: s.ai_critical_threshold
+        });
+        
+        this.agents.update(list => list.map(a => {
+          const enabled = !!s[`agent_${a.id}_enabled`];
+          return { ...a, enabled, status: enabled ? (a.id === 3 ? 'DEGRADED' : 'ACTIVE') : 'OFFLINE' };
+        }));
+        
+        if (s.active_llm_provider) this.selectedProvider.set(s.active_llm_provider);
+        if (s.active_llm_model) this.selectedModel.set(s.active_llm_model);
+      },
+      error: () => console.error("Could not fetch PlatformSettings")
+    });
+  }
+
+  private saveSettingsToBackend(): void {
+    const b = this.boundaries();
+    const a = this.agents();
+    const payload: any = {
+      ai_warn_threshold: b.warn,
+      ai_review_threshold: b.review,
+      ai_block_threshold: b.block,
+      ai_critical_threshold: b.critical,
+      active_llm_provider: this.selectedProvider(),
+      active_llm_model: this.selectedModel(),
+    };
+    
+    a.forEach(agent => {
+      payload[`agent_${agent.id}_enabled`] = agent.enabled;
+    });
+
+    this.apiService.updateSystemSettings(payload).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: 'Saved', detail: 'Config applied to backend', life: 1500 });
+      },
+      error: () => {
+        this.messageService.add({ severity: 'error', summary: 'Error', detail: 'Failed to save config' });
+      }
+    });
+  }
+
   selectProvider(provider: LlmProviderId): void {
     this.selectedProvider.set(provider);
     this.selectedModel.set(PROVIDER_MODELS[provider][0].value);
     this.connectionResult.set(null);
+    this.saveSettingsToBackend();
   }
 
   updateBoundary(key: keyof DecisionBoundaries, raw: string): void {
@@ -95,6 +150,7 @@ export class AiConfigComponent {
     next.block = this.clamp(next.block, next.review + 0.01, 0.95);
     next.critical = this.clamp(next.critical, next.block + 0.01, 0.99);
     this.boundaries.set(next);
+    this.saveSettingsToBackend();
   }
 
   updateAgentEnabled(agentId: number, enabled: boolean): void {
@@ -105,6 +161,7 @@ export class AiConfigComponent {
           : { ...agent, enabled, status: enabled ? (agent.id === 3 ? 'DEGRADED' : 'ACTIVE') : 'OFFLINE' }
       )
     );
+    this.saveSettingsToBackend();
   }
 
   testConnection(): void {

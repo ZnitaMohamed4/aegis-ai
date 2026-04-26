@@ -16,7 +16,7 @@
 .shell-content {
   flex: 1;
   overflow-y: auto;
-  padding: 1.5rem;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
@@ -27,8 +27,6 @@
 }
 
 @media (max-width: 640px) {
-  .shell-content { padding: 0; }
-
   .sidebar-overlay {
     position: fixed;
     inset: 0;

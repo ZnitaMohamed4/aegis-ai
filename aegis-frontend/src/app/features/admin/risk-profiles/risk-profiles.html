@@ -416,6 +416,49 @@
         </span>
       </div>
 
+      <!-- Behavioral Archetype -->
+      @if (selectedContact()!.archetype && selectedContact()!.archetype !== 'Normal User') {
+        <div class="flex items-center gap-2 p-3 rounded-lg border"
+             [style.border-color]="getArchetypeColor(selectedContact()!.archetype!) + '44'"
+             [style.background]="getArchetypeColor(selectedContact()!.archetype!) + '0A'">
+          <i class="pi pi-brain text-lg" [style.color]="getArchetypeColor(selectedContact()!.archetype!)"></i>
+          <div>
+            <div class="text-sm font-bold" [style.color]="getArchetypeColor(selectedContact()!.archetype!)">{{ selectedContact()!.archetype }}</div>
+            <div class="text-[10px] text-[var(--text-muted)]">Bayesian Network classification based on behavioral signals</div>
+          </div>
+        </div>
+      }
+
+      <!-- BN Pathway Decomposition -->
+      @if (selectedContact()!.grooming_prob !== undefined) {
+        <div class="bg-[var(--bg-surface-2)] rounded-xl p-4">
+          <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">Risk Pathway Decomposition</div>
+          <div class="flex flex-col gap-3">
+            <div class="flex items-center gap-3">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] w-24">Grooming</span>
+              <div class="flex-1 h-2 bg-[var(--bg-base)] rounded-full overflow-hidden">
+                <div class="h-full rounded-full bg-[#f43f5e] transition-all" [style.width.%]="(selectedContact()!.grooming_prob || 0) * 100"></div>
+              </div>
+              <span class="text-xs font-mono font-bold w-10 text-right" [style.color]="(selectedContact()!.grooming_prob || 0) > 0.5 ? '#f43f5e' : 'var(--text-muted)'">{{ ((selectedContact()!.grooming_prob || 0) * 100).toFixed(0) }}%</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] w-24">Bully</span>
+              <div class="flex-1 h-2 bg-[var(--bg-base)] rounded-full overflow-hidden">
+                <div class="h-full rounded-full bg-[#f59e0b] transition-all" [style.width.%]="(selectedContact()!.bully_prob || 0) * 100"></div>
+              </div>
+              <span class="text-xs font-mono font-bold w-10 text-right" [style.color]="(selectedContact()!.bully_prob || 0) > 0.5 ? '#f59e0b' : 'var(--text-muted)'">{{ ((selectedContact()!.bully_prob || 0) * 100).toFixed(0) }}%</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] w-24">Troll</span>
+              <div class="flex-1 h-2 bg-[var(--bg-base)] rounded-full overflow-hidden">
+                <div class="h-full rounded-full bg-[#8b5cf6] transition-all" [style.width.%]="(selectedContact()!.troll_prob || 0) * 100"></div>
+              </div>
+              <span class="text-xs font-mono font-bold w-10 text-right" [style.color]="(selectedContact()!.troll_prob || 0) > 0.5 ? '#8b5cf6' : 'var(--text-muted)'">{{ ((selectedContact()!.troll_prob || 0) * 100).toFixed(0) }}%</span>
+            </div>
+          </div>
+        </div>
+      }
+
       <div class="metric-box">
         <div class="metric-label">nombre_cibles_differentes</div>
         <div class="metric-value" [style.color]="selectedContact()!.nombre_cibles_differentes >= 3 ? 'var(--critical)' : 'var(--text-primary)'">
