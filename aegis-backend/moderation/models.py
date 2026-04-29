@@ -483,6 +483,10 @@ class BehavioralSnapshot(models.Model):
     message_count = models.IntegerField(default=0)
     blocked_count = models.IntegerField(default=0)
     risk_score_snapshot = models.FloatField(default=0.0)
+    peak_risk_score = models.FloatField(default=0.0, help_text="Highest risk score observed today")
+    peak_risk_time = models.DateTimeField(null=True, blank=True, help_text="When the peak occurred")
+    snapshot_count = models.IntegerField(default=0, help_text="Number of updates today")    
+
 
     # Bayesian Network output — populated by Agent 4 after BN inference
     risk_level = models.CharField(max_length=20, default='LOW',

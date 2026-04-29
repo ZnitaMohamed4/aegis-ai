@@ -2,7 +2,6 @@ import { Component, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ConversationViewerComponent } from '@shared/index';
-import { MOCK_CONTACTS, MOCK_MESSAGES } from './conversations.data';
 import { Contact, ConversationMessage } from '@core/models';
 import { ApiService } from '@core/services/api.service';
 
@@ -26,9 +25,7 @@ export class ConversationsComponent {
         this.messages.set(data.messages);
       },
       error: (err) => {
-        console.error('Failed to load conversations from backend. Falling back to mock data.', err);
-        this.contacts.set(MOCK_CONTACTS);
-        this.messages.set(MOCK_MESSAGES);
+        console.error('[AEGIS] Failed to load conversations:', err);
       }
     });
   }

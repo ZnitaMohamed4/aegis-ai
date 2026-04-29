@@ -205,21 +205,47 @@ def profiler_node(state: ModerationState) -> dict:
     alert_id = state.get("alert_id", None)
     
     try:
-        BehavioralSnapshot.objects.update_or_create(
-            profile=profile,
-            date_snapshot=today,
-            defaults={
-                'risk_score_snapshot': profile.risk_score,
-                'risk_level': profile.risk_level,
-                'archetype': archetype,
-                'grooming_prob': grooming_high,
-                'bully_prob': bully_high,
-                'troll_prob': troll_high,
-                'message_count': profile.total_messages_sent,
-                'blocked_count': profile.total_blocked_messages_sent,
-                'alert_id': str(alert_id) if alert_id else None,
-            }
-        )
+            # Instead of just update_or_create, we need to fetch the existing one first
+            # to ensure we don't overwrite the peak if it was higher earlier today.
+            snapshot, created = BehavioralSnapshot.objects.get_or_create(
+                profile=profile,
+                date_snapshot=today,
+                defaults={
+                    'risk_score_snapshot': profile.risk_score,
+                    'peak_risk_score': profile.risk_score,
+                    'peak_risk_time': timezone.now(),
+                    'snapshot_count': 1,
+                    'risk_level': profile.risk_level,
+                    'archetype': archetype,
+                    'grooming_prob': grooming_high,
+                    'bully_prob': bully_high,
+                    'troll_prob': troll_high,
+                    'message_count': profile.total_messages_sent,
+                    'blocked_count': profile.total_blocked_messages_sent,
+                    'alert_id': str(alert_id) if alert_id else None,
+                }
+            )
+            if not created:
+                # Update existing snapshot for today
+                snapshot.risk_score_snapshot = profile.risk_score
+                snapshot.risk_level = profile.risk_level
+                snapshot.archetype = archetype
+                snapshot.grooming_prob = grooming_high
+                snapshot.bully_prob = bully_high
+                snapshot.troll_prob = troll_high
+                snapshot.message_count = profile.total_messages_sent
+                snapshot.blocked_count = profile.total_blocked_messages_sent
+                snapshot.snapshot_count += 1
+                
+                # THE CRITICAL FIX: Only update the peak if the new score is higher
+                if profile.risk_score > snapshot.peak_risk_score:
+                    snapshot.peak_risk_score = profile.risk_score
+                    snapshot.peak_risk_time = timezone.now()
+                    
+                if alert_id:
+                    snapshot.alert_id = str(alert_id)
+                    
+                snapshot.save()
     except Exception as e:
         logger.error(f"[AGENT 4] Failed to upsert BehavioralSnapshot: {e}")
     

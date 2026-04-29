@@ -189,7 +189,7 @@ class BayesianProfiler:
         category_states = ["SAFE", "VERBAL", "THREAT", "SEXUAL", "DISCRIMINATION"]
 
         # Grooming contribution scores for each parent state
-        stranger_scores = {"NO": 0.0, "YES": 0.35}
+        stranger_scores = {"NO": 0.0, "YES": 0.45}  # Increased from 0.35 for stronger stranger signal
         child_init_scores = {"NO": 0.15, "YES": -0.20}
         groups_scores = {"ZERO": 0.0, "ONE": -0.30, "MANY": -0.40}
         night_scores = {"LOW": 0.0, "MEDIUM": 0.10, "HIGH": 0.20}
@@ -213,6 +213,9 @@ class BayesianProfiler:
                                                  groups_scores[sg] + night_scores[n] +
                                                  upward_scores[u] + downward_scores[d] +
                                                  style_scores[st] + category_scores[c])
+                                        # Interaction: Stranger + NightActive HIGH = extra grooming signal
+                                        if s == "YES" and n == "HIGH":
+                                            score += 0.15
                                         # Clamp to [0, 1]
                                         score = max(0.0, min(1.0, score))
                                         # Convert score to probabilities
@@ -262,7 +265,7 @@ class BayesianProfiler:
         target_scores = {"FEW": 0.10, "SOME": 0.05, "MANY": -0.05}
         cat_scores = {"SAFE": -0.05, "VERBAL": 0.15, "THREAT": 0.25,
                       "SEXUAL": 0.0, "DISCRIMINATION": 0.15}
-        down_scores = {"LOW": 0.0, "MEDIUM": -0.10, "HIGH": -0.25}
+        down_scores = {"LOW": 0.0, "MEDIUM": -0.15, "HIGH": -0.40}  # Stronger: Agent 3 clearing = strong exoneration
 
         values = []
         for t in tox_states:
@@ -397,7 +400,7 @@ class BayesianProfiler:
             if bl == 1:
                 return (0.05, 0.15, 0.40, 0.40)
             if tl == 2:
-                return (0.05, 0.20, 0.35, 0.40)
+                return (0.05, 0.25, 0.50, 0.20)   # Troll dominant — HIGH, not CRITICAL
             return (0.10, 0.30, 0.35, 0.25)
 
         # No grooming signal — bully/troll only
@@ -413,9 +416,9 @@ class BayesianProfiler:
                 return (0.10, 0.40, 0.40, 0.10)
             return (0.15, 0.45, 0.30, 0.10)
 
-        # No bully signal either
+        # No bully signal either — troll alone should NOT reach CRITICAL
         if tl == 2:
-            return (0.10, 0.55, 0.30, 0.05)       # Pure troll
+            return (0.08, 0.32, 0.50, 0.10)        # Pure troll → cap at HIGH
         if tl == 1:
             return (0.30, 0.50, 0.15, 0.05)
         return (0.85, 0.10, 0.03, 0.02)            # All LOW → normal user

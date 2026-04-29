@@ -132,21 +132,41 @@ def generate_summary_direct(report):
     child_name = report.child.full_name if report.child else "the monitored children"
     period = f"{report.period_start} to {report.period_end}"
     
+    # Compute trajectory context for richer summaries
+    total_messages = stats.get('total_messages', 0)
+    total_blocked = stats.get('total_blocked', 0)
+    escalations = stats.get('escalations', 0)
+    block_ratio = round(total_blocked / total_messages * 100, 1) if total_messages else 0
+    dominant = stats.get('dominant_category', 'None') or 'None'
+    risk_start = stats.get('risk_score_start', 0)
+    risk_end = stats.get('risk_score_end', 0)
+    
+    # Determine trend direction
+    if risk_end > risk_start + 0.05:
+        trend_desc = f"rising (from {risk_start:.0%} to {risk_end:.0%})"
+    elif risk_end < risk_start - 0.05:
+        trend_desc = f"improving (from {risk_start:.0%} to {risk_end:.0%})"
+    else:
+        trend_desc = f"stable (around {risk_end:.0%})"
+    
     prompt = f"""You are AEGIS, an AI child safety monitoring system. 
-Please generate a brief, reassuring, yet professional summary of the child's activity for the parent.
+Generate a brief summary of the child's messaging activity for the parent.
+
 Child: {child_name}
 Period: {period}
-Stats:
-- Total Messages: {stats.get('total_messages', 0)}
-- Blocked Messages: {stats.get('total_blocked', 0)}
-- Unique Harassers: {stats.get('unique_harassers', 0)}
-- Escalations: {stats.get('escalations', 0)}
-- Dominant Threat Category: {stats.get('dominant_category', 'None')}
+Messages analyzed: {total_messages}
+Messages blocked: {total_blocked} ({block_ratio}% block rate)
+Escalation events: {escalations}
+Dominant threat category: {dominant}
+Risk trend: {trend_desc}
 
 CRITICAL INSTRUCTIONS:
 1. You MUST write exactly ONE short paragraph (maximum 3 sentences).
 2. DO NOT use any bullet points, lists, or markdown formatting.
-3. Address the parent directly in a professional and reassuring tone."""
+3. Address the parent directly in a professional and reassuring tone.
+4. If the block rate is under 5% and escalations are 0, be reassuring.
+5. If the block rate is high or escalations exist, be factual but not alarmist.
+6. Mention the trend direction naturally within the narrative."""
 
     api_key = os.environ.get('GROQ_API_KEY')
     model = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile')

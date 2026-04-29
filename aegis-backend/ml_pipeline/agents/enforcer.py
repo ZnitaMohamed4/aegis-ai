@@ -165,10 +165,17 @@ def enforcer_node(state: ModerationState) -> dict:
             "timestamp": (alerte.sent_at if alerte else mod.created_at).isoformat(),
         }
         try:
+            # 1. Global Admin Broadcast
             async_to_sync(channel_layer.group_send)(
                 "alerts",
                 {"type": "alert.message", "data": payload}
             )
+            # 2. Instance-Scoped Parent Broadcast
+            if mod.instance_name:
+                async_to_sync(channel_layer.group_send)(
+                    f"alerts_{mod.instance_name}",
+                    {"type": "alert.message", "data": payload}
+                )
         except Exception as e:
             logger.warning(f"[AGENT 5: ENFORCER] WS broadcast failed: {e}")
 

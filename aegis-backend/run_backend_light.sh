@@ -7,29 +7,38 @@
 # without burning through GPU/RAM limits.
 # -----------------------------------------------------------------------------
 
+set -e
+
+# Logging utilities
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${BLUE}[INFO]${NC} $(date +'%Y-%m-%d %H:%M:%S') - $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $(date +'%Y-%m-%d %H:%M:%S') - $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $(date +'%Y-%m-%d %H:%M:%S') - $1"; }
+
 cd "$(dirname "$0")"
 
-# Activate virtual environment if it exists
+log_info "Initializing AEGIS AI Multi-Agent Backend (Light Mode)"
+
 if [ -d "venv" ]; then
+    log_info "Activating virtual environment..."
     source venv/bin/activate
 fi
 
-# Force STUB_MODE to True to bypass PyTorch model loading
+log_warn "Configuring environment variables: AEGIS_STUB_MODE=True"
 export AEGIS_STUB_MODE="True"
 
-# Clear terminal for a clean start
-clear
+log_info "Component Status:"
+log_info "  - Orchestrator Agent     : Active"
+log_warn "  - ML Agents (M1/M2)      : STUB MATCHING (Fast Mode)"
+log_info "  - Auditor Agent (Groq)   : Active"
+log_info "  - Profiler Agent (Risk)  : Active"
+log_info "  - Enforcer Agent (Action): Active"
 
-echo "╔════════════════════════════════════════════════════╗"
-echo "║      AEGIS AI — MULTI-AGENT STATE (LIGHT MODE)     ║"
-echo "╠════════════════════════════════════════════════════╣"
-echo "║ ✅ Orchestrator Agent     : Active                 ║"
-echo "║ ⚠️ ML Agents (M1/M2)      : STUB MATCHING (Fast)   ║"
-echo "║ 🤖 Auditor Agent (Groq)   : Active                 ║"
-echo "║ 📊 Profiler Agent         : Active                 ║"
-echo "║ ⚡ Enforcer Agent         : Active                 ║"
-echo "╚════════════════════════════════════════════════════╝"
-echo ""
+log_success "Lightweight initialization complete."
+log_info "Starting standard Django development server on 0.0.0.0:8000"
 
-# Run standard Django development server
 python manage.py runserver 0.0.0.0:8000

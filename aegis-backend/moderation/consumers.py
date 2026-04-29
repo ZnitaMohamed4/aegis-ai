@@ -54,13 +54,10 @@ class AlertConsumer(AsyncWebsocketConsumer):
         if user.role == 'admin':
             self.groups_joined.append("alerts")
         else:
-            # Parent — scope to their instance
+            # Parent — scope to their instance ONLY
             instance_name = await self._get_parent_instance(user)
             if instance_name:
                 self.groups_joined.append(f"alerts_{instance_name}")
-            # Also join global so enforcer broadcasts reach them
-            # (enforcer sends to "alerts" group — we keep this for backwards compat)
-            self.groups_joined.append("alerts")
 
         for group in self.groups_joined:
             await self.channel_layer.group_add(group, self.channel_name)

@@ -1,4 +1,5 @@
 import { Component, signal, inject, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AlertsTableComponent } from '@shared/components/alerts-table/alerts-table';
 import { MockAlert } from '@core/models';
@@ -36,27 +37,32 @@ export class AlertsComponent implements OnInit, OnDestroy {
   private messageService = inject(MessageService);
   private cdr = inject(ChangeDetectorRef);
   private alertSub?: Subscription;
+  private route = inject(ActivatedRoute);
 
   ngOnInit() {
-    // Load historical alerts from the backend (now includes WARN + real severity)
-    this.apiService.getAlerts().subscribe({
-      next: (data: any[]) => {
-        const history = data.map(a => ({
-          id: a.id,
-          sent_at: a.created_at,
-          category: (a.primary_class || 'unknown').replace(/_/g, ' '),
-          // Prefer the severity field the backend now sends (source of truth from SecurityAlert)
-          severity: (a.severity as 'low' | 'medium' | 'high' | 'critical') || mapSeverity(a.decision),
-          is_resolved: false,
-          preview: a.raw_text,
-          decision: (a.decision || '').toUpperCase(),
-          toxicity_score: a.toxicity_score ?? 0,
-          confidence_score: a.confidence_score ?? 0,
-          llm_triggered: a.llm_triggered ?? false,
-          llm_explanation: a.llm_explanation ?? null,
-          language: a.language || 'unknown'
-        }));
-        this.alerts.set(history);
+    this.route.queryParams.subscribe(params => {
+      const senderJid = params['jid'];
+
+      // Load historical alerts from the backend (now includes WARN + real severity)
+      this.apiService.getAlerts(senderJid).subscribe({
+        next: (data: any[]) => {
+          const history = data.map(a => ({
+            id: a.id,
+            sent_at: a.created_at,
+            category: (a.primary_class || 'unknown').replace(/_/g, ' '),
+            // Prefer the severity field the backend now sends (source of truth from SecurityAlert)
+            severity: (a.severity as 'low' | 'medium' | 'high' | 'critical') || mapSeverity(a.decision),
+            is_resolved: a.is_resolved || false,
+            preview: a.raw_text,
+            decision: (a.decision || '').toUpperCase(),
+            toxicity_score: a.toxicity_score ?? 0,
+            confidence_score: a.confidence_score ?? 0,
+            llm_triggered: a.llm_triggered ?? false,
+            llm_explanation: a.llm_explanation ?? null,
+            language: a.language || 'unknown',
+            contact_number: a.contact_number
+          }));
+          this.alerts.set(history);
 
 
         this.cdr.detectChanges();
@@ -64,7 +70,8 @@ export class AlertsComponent implements OnInit, OnDestroy {
       error: (err) => {
         console.error('[AEGIS] Failed to load alerts history:', err);
       }
-    });
+    }); // Close apiService.getAlerts.subscribe
+    }); // Close route.queryParams.subscribe
 
     // Listen for real-time WebSocket alerts
     this.alertSub = this.alertService.alerts$.subscribe((alert: WebSocketAlertPayload) => {
@@ -91,7 +98,8 @@ export class AlertsComponent implements OnInit, OnDestroy {
           confidence_score: alert.m2_confidence || 0,
           llm_triggered: alert.llm_triggered || false,
           llm_explanation: alert.llm_explanation || null,
-          language: alert.language || 'unknown'
+          language: alert.language || 'unknown',
+          contact_number: alert.sender
         };
         this.alerts.update(list => [newAlert, ...list]);
 
@@ -104,8 +112,27 @@ export class AlertsComponent implements OnInit, OnDestroy {
   }
 
   onResolve(alert: MockAlert) {
-    this.alerts.update(list =>
-      list.map(a => a.id === alert.id ? { ...a, is_resolved: true } : a)
-    );
+    this.apiService.resolveAlert(alert.id).subscribe({
+      next: () => {
+        this.alerts.update(list =>
+          list.map(a => a.id === alert.id ? { ...a, is_resolved: true } : a)
+        );
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Alert Resolved',
+          detail: 'The alert has been marked as resolved.',
+          life: 3000
+        });
+      },
+      error: (err) => {
+        console.error('[AEGIS] Failed to resolve alert:', err);
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Error',
+          detail: 'Failed to resolve the alert. Please try again.',
+          life: 3000
+        });
+      }
+    });
   }
 }

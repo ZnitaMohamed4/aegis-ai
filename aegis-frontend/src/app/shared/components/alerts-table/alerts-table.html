@@ -46,6 +46,19 @@
     }
   </div>
 
+  <!-- Status Filter -->
+  <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
+    @for (st of statusFilters; track st) {
+      <button
+        class="px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all"
+        [class.active-filter]="selectedStatus() === st"
+        [class.inactive-filter]="selectedStatus() !== st"
+        (click)="selectedStatus.set(st); resetPagination()">
+        {{ st }}
+      </button>
+    }
+  </div>
+
 </div>
 
 <!-- ── Filter Row 2: Category Filter ── -->
@@ -68,6 +81,7 @@
     <thead>
       <tr class="border-b border-[var(--border)]">
         <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Severity</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Contact</th>
         <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Preview</th>
         <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Category</th>
         <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Decision</th>
@@ -83,6 +97,7 @@
         @for (i of skeletonItems; track i) {
           <tr class="border-b border-[var(--border)]">
             <td class="px-4 py-3"><p-skeleton width="4rem" height="1.25rem" borderRadius="16px"></p-skeleton></td>
+            <td class="px-4 py-3"><p-skeleton width="6rem"></p-skeleton></td>
             <td class="px-4 py-3"><div class="flex items-center gap-2"><p-skeleton width="14rem"></p-skeleton></div></td>
             <td class="px-4 py-3"><p-skeleton width="6rem"></p-skeleton></td>
             <td class="px-4 py-3"><p-skeleton width="4rem" height="1.5rem" borderRadius="4px"></p-skeleton></td>
@@ -110,6 +125,11 @@
                 {{ alert.severity }}
               </span>
             </div>
+          </td>
+
+          <!-- Contact -->
+          <td class="px-4 py-3">
+            <span class="text-xs font-mono text-[var(--text-primary)]">{{ alert.contact_number || 'Unknown' }}</span>
           </td>
 
           <!-- Preview -->
@@ -141,10 +161,17 @@
 
           <!-- Toxicity Score -->
           <td class="px-4 py-3">
-            <span class="text-sm font-mono font-bold"
-                  [style.color]="getRiskHex(alert.severity)">
-              {{ alert.toxicity_score.toFixed(2) }}
-            </span>
+            @if (alert.llm_triggered && alert.decision !== 'ALLOW' && alert.toxicity_score < 0.50) {
+              <div class="flex flex-col">
+                <span class="text-[10px] line-through text-[var(--text-muted)]">{{ alert.toxicity_score.toFixed(2) }}</span>
+                <span class="text-xs font-mono font-bold text-purple-400" title="Overridden by Agent 3">LLM <i class="pi pi-sparkles text-[10px]"></i></span>
+              </div>
+            } @else {
+              <span class="text-sm font-mono font-bold"
+                    [style.color]="getRiskHex(alert.severity)">
+                {{ alert.toxicity_score.toFixed(2) }}
+              </span>
+            }
           </td>
 
           <!-- Language -->
@@ -184,7 +211,7 @@
 
       @if (alerts().length > 0 && filteredAlerts().length === 0) {
         <tr>
-          <td colspan="9" class="px-4 py-16 text-center">
+          <td colspan="10" class="px-4 py-16 text-center">
             <div class="flex flex-col items-center justify-center max-w-sm mx-auto">
               <div class="w-12 h-12 rounded-full bg-[var(--bg-surface-2)] flex items-center justify-center mb-3">
                 <i class="pi pi-filter-slash text-xl text-[var(--accent)]"></i>
@@ -261,12 +288,22 @@
         </span>
       </div>
       <p class="text-sm text-[var(--text-primary)] mb-2 line-clamp-2">{{ alert.preview }}</p>
+      <div class="mb-2">
+        <span class="text-xs font-mono text-[var(--text-muted)] bg-[var(--bg-surface-2)] px-2 py-0.5 rounded">{{ alert.contact_number || 'Unknown' }}</span>
+      </div>
       @if (alert.llm_explanation) {
         <p class="text-xs text-[var(--text-muted)] mb-2 italic line-clamp-1">{{ truncateExplanation(alert.llm_explanation, 60) }}</p>
       }
       <div class="flex items-center justify-between text-xs text-[var(--text-muted)]">
         <span class="capitalize">{{ alert.category }}</span>
-        <span class="font-mono font-bold" [style.color]="getRiskHex(alert.severity)">{{ alert.toxicity_score.toFixed(2) }}</span>
+        @if (alert.llm_triggered && alert.decision !== 'ALLOW' && alert.toxicity_score < 0.50) {
+          <div class="flex items-center gap-1">
+            <span class="text-xs line-through text-[var(--text-muted)]">{{ alert.toxicity_score.toFixed(2) }}</span>
+            <span class="font-mono font-bold text-purple-400 text-sm">LLM <i class="pi pi-sparkles text-[10px]"></i></span>
+          </div>
+        } @else {
+          <span class="font-mono font-bold" [style.color]="getRiskHex(alert.severity)">{{ alert.toxicity_score.toFixed(2) }}</span>
+        }
         <span>{{ formatDate(alert.sent_at) }}</span>
       </div>
     </div>
@@ -336,10 +373,17 @@
       <div class="grid grid-cols-2 gap-3">
         <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
           <div class="text-xs text-[var(--text-muted)] mb-1">Toxicity Score</div>
-          <div class="text-2xl font-bold font-mono"
-               [style.color]="getRiskHex(selectedAlert()!.severity)">
-            {{ selectedAlert()!.toxicity_score.toFixed(2) }}
-          </div>
+          @if (selectedAlert()!.llm_triggered && selectedAlert()!.decision !== 'ALLOW' && selectedAlert()!.toxicity_score < 0.50) {
+            <div class="flex items-center gap-2">
+              <span class="text-lg line-through text-[var(--text-muted)]">{{ selectedAlert()!.toxicity_score.toFixed(2) }}</span>
+              <span class="text-xl font-bold font-mono text-purple-400">LLM <i class="pi pi-sparkles text-sm"></i></span>
+            </div>
+          } @else {
+            <div class="text-2xl font-bold font-mono"
+                 [style.color]="getRiskHex(selectedAlert()!.severity)">
+              {{ selectedAlert()!.toxicity_score.toFixed(2) }}
+            </div>
+          }
         </div>
         <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
           <div class="text-xs text-[var(--text-muted)] mb-1">Confidence</div>
@@ -351,6 +395,10 @@
 
       <!-- Meta -->
       <div class="flex flex-col gap-2">
+        <div class="flex justify-between text-sm">
+          <span class="text-[var(--text-muted)]">Contact</span>
+          <span class="font-mono text-[var(--text-primary)]">{{ selectedAlert()!.contact_number || 'Unknown' }}</span>
+        </div>
         <div class="flex justify-between text-sm">
           <span class="text-[var(--text-muted)]">Category</span>
           <span class="text-[var(--text-primary)] font-medium capitalize">{{ selectedAlert()!.category }}</span>

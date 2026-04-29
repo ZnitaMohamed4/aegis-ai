@@ -1,5 +1,5 @@
 export type ReportStatus = 'ready' | 'generating' | 'pending' | 'failed';
-export type ReportType = 'summary' | 'full' | 'legal' | 'intelligence';
+export type ReportType = 'summary' | 'full';
 export type DeliveryChannel = 'email' | 'whatsapp' | 'both' | 'dashboard';
 
 export interface Report {

@@ -35,7 +35,7 @@ class ModerationConfig(AppConfig):
         stub_mode = getattr(settings, 'AEGIS_STUB_MODE', False)
         
         if stub_mode:
-            logger.warning("[AEGIS] ⚠️ STUB MODE ACTIVE: Using keyword heuristics instead of real XLM-RoBERTa models.")
+            logger.warning("[AEGIS] STUB MODE ACTIVE: Using keyword heuristics instead of real XLM-RoBERTa models.")
             return  # Stop here, don't try to load the heavy models from the hard drive!
 
         # 2. If Real Mode: get the paths to the M1/M2 models from settings.py
@@ -46,7 +46,7 @@ class ModerationConfig(AppConfig):
         # 3. Load them into RAM
         try:
             AEGISPipeline.initialize(m1_path, m2_path, threshold)
-            logger.info("[AEGIS] ✅ Real ML pipeline models loaded into memory successfully.")
+            logger.info("[AEGIS] Real ML pipeline models loaded into memory successfully.")
         except Exception as e:
-            logger.error(f"[AEGIS] ❌ Failed to load models from {m1_path} or {m2_path}. Error: {e}")
+            logger.error(f"[AEGIS] Failed to load models from {m1_path} or {m2_path}. Error: {e}")
 

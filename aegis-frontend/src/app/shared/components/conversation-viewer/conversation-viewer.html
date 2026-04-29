@@ -432,8 +432,13 @@
                   </div>
                   <div class="flex flex-col">
                     <span class="text-[var(--text-muted)]">Toxicity</span>
-                    <span class="font-semibold font-mono" [style.color]="getDecisionColor(msg.decision || 'ALLOW')">
-                      {{ msg.toxicity_score !== null && msg.toxicity_score !== undefined ? (msg.toxicity_score | percent:'1.0-0') : '—' }}
+                    <span class="font-semibold font-mono flex items-center gap-1" [style.color]="getDecisionColor(msg.decision || 'ALLOW')">
+                      @if (msg.llm_triggered && msg.decision !== 'ALLOW' && msg.toxicity_score !== null && msg.toxicity_score < 0.50) {
+                        <span class="line-through text-[var(--text-muted)] opacity-70">{{ msg.toxicity_score !== null && msg.toxicity_score !== undefined ? (msg.toxicity_score | percent:'1.0-0') : '—' }}</span>
+                        <span class="text-purple-400" title="Agent 3 Overrode Score">LLM</span>
+                      } @else {
+                        {{ msg.toxicity_score !== null && msg.toxicity_score !== undefined ? (msg.toxicity_score | percent:'1.0-0') : '—' }}
+                      }
                     </span>
                   </div>
                   <div class="flex flex-col">

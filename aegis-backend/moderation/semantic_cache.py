@@ -32,7 +32,7 @@ def initialize_semantic_cache():
         
     from django.conf import settings
     if getattr(settings, 'AEGIS_STUB_MODE', False):
-        logger.warning("[SEMANTIC CACHE] ⚠️ STUB MODE: Skipping embeddings model load to save memory.")
+        logger.warning("[SEMANTIC CACHE] STUB MODE: Skipping embeddings model load to save memory.")
         _is_initialized = True
         return
 

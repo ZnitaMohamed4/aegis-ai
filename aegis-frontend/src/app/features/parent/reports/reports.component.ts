@@ -7,6 +7,8 @@ import { ReportStatus, ReportType, Report, DeliveryChannel } from '@core/models'
 import { ReportService } from '@core/services/report.service';
 import { AuthService } from '@core/services/auth.service';
 import { ApiService } from '@core/services/api.service';
+import { AlertService } from '@core/services/alert.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-reports',
@@ -19,10 +21,11 @@ export class ParentReportsComponent implements OnInit, OnDestroy {
   private reportService = inject(ReportService);
   private authService = inject(AuthService);
   private apiService = inject(ApiService);
+  private alertService = inject(AlertService);
+  private wsSub?: Subscription;
 
   requestDrawerVisible = signal(false);
   isGenerating = signal(false);
-  private pollInterval: any;
 
   // Dynamic user data
   profileLoading = signal(true);
@@ -54,7 +57,7 @@ export class ParentReportsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.authService.fetchCurrentUser();
     this.loadReports();
-    this.startPolling();
+    this.subscribeToWS();
     this.authService.currentUser$.subscribe(user => {
       if (user) {
         this.parentName.set(`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username);
@@ -75,17 +78,17 @@ export class ParentReportsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    if (this.pollInterval) clearInterval(this.pollInterval);
+    this.wsSub?.unsubscribe();
   }
 
-  startPolling() {
-    this.pollInterval = setInterval(() => {
-      if (this.reports().some(r => r.status === 'generating')) {
-        this.reportService.getParentReports().subscribe({
-          next: (data) => this.reports.set(data)
-        });
+  /** Listen for REPORT_READY via WebSocket instead of polling */
+  subscribeToWS() {
+    this.wsSub = this.alertService.alerts$.subscribe((event: any) => {
+      if (event.event === 'REPORT_READY' || event.type === 'REPORT_READY') {
+        console.log('[AEGIS] Report ready via WebSocket, refreshing list.');
+        this.loadReports();
       }
-    }, 4000);
+    });
   }
 
   loadReports() {

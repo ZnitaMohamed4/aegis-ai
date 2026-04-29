@@ -33,6 +33,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   pushNotificationsCount: number = 0;
   recentAlerts: any[] | null = null;
   atRiskChildren: any[] | null = null;
+  // adding an evol api property
+  isEvolutionOnline: boolean = false; // Will be set by API
   
   harassmentChartData: any = null;
   harassmentChartOptions = HARASSMENT_CHART_OPTIONS;
@@ -118,6 +120,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       // Update Live Stat Cards dynamically!
       if (this.stats) {
+
+        // 0. Increment 'Total Messages Today'
+        this.stats[0].value = Number(this.stats[0].value) + 1;
         // 1. Always increment 'Total Alerts Today' and 'Push Notifications'
         this.stats[1].value = Number(this.stats[1].value) + 1;
         this.pushNotificationsCount++;
@@ -354,19 +359,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
         
         this.latencies = data.stats.latencies;
         this.pushNotificationsCount = data.stats.total_alerts_today;
+        this.isEvolutionOnline = data.stats.evolution_api_online;
         
         this.stats = [
           {
-            label: 'Avg Latency',
-            value: data.stats.avg_latency_ms + 'ms',
-            icon: 'pi-gauge',
-            trend: 'stable',
+            label: 'Messages Today',
+            value: data.stats.total_messages_today || 0,
+            icon: 'pi-envelope',
+            trend: 'Live from DB',
             trendUp: true,
             color: 'info'
           },
           {
             label: 'Total Alerts Today',
-            value: data.stats.total_alerts_today,
+            value: data.stats.total_alerts_today || 0,
             icon: 'pi-bell',
             trend: 'Live from DB',
             trendUp: true,
@@ -374,7 +380,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           },
           {
             label: 'Messages Blocked',
-            value: data.stats.total_blocked_today,
+            value: data.stats.total_blocked_today || 0,
             icon: 'pi-ban',
             trend: 'Live from DB',
             trendUp: true,
@@ -382,7 +388,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           },
           {
             label: 'AGENT 3 - LLM',
-            value: data.stats.llm_interventions,
+            value: data.stats.llm_interventions || 0,
             icon: 'pi-bolt',
             trend: 'LLM',
             trendUp: true,

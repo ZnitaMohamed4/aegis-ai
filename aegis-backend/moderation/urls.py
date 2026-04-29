@@ -8,12 +8,14 @@ urlpatterns = [
     
     # 2. REST API - Angular fetches history from here
     path('alerts/', views.alert_list, name='alert-list'),
+    path('alerts/<str:alert_id>/resolve/', views.resolve_alert, name='resolve-alert'),
 
     # 3. REST API - Dashboard live stats
     path('stats/dashboard/', views.dashboard_stats, name='dashboard-stats'),
 
     # 4. Review Queue (Agent 3 Audits + Admin flagged messages) 
     path('review/', views.review_queue_list, name='review-queue-list'),
+    path('review/stats/', views.review_queue_stats, name='review-queue-stats'),
     path('review/<str:moderation_id>/override/', views.human_override, name='human-override'),
     path('review/<str:moderation_id>/flag/', views.flag_for_review, name='flag-for-review'),
 
@@ -36,6 +38,9 @@ urlpatterns = [
 
     # Admin Settings (Platform Config)
     path('admin/settings/', views.admin_settings, name='admin-settings'),
+    
+    # Admin Children (for report generation dropdown)
+    path('admin/children/', views.admin_children, name='admin-children'),
 
     # 7. Auth Endpoints
     path('auth/register/', views.register_parent, name='auth-register'),

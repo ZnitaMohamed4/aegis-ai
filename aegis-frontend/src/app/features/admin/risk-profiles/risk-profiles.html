@@ -1,118 +1,148 @@
-<div class="p-4 sm:p-6 w-full">
-  <div class="mb-6">
-    <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-1">Risk Profiles</h1>
-    <p class="text-sm text-[var(--text-muted)]">
-      Behavioral intelligence over time. Agent 4 snapshots show trend direction, not just isolated incidents.
-    </p>
+<div class="p-4 sm:p-6 w-full animate-in fade-in duration-500">
+  <!-- Header with Intelligence Summary -->
+  <div class="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
+    <header>
+      <h1 class="text-2xl font-bold text-[var(--text-primary)] tracking-tight mb-2">Behavioral Risk Profiles</h1>
+      <p class="text-sm text-[var(--text-muted)] max-w-2xl">
+        Advanced behavioral intelligence powered by Agent 4. This module tracks trajectories over time, identifying patterns like grooming or bullying through Bayesian modeling.
+      </p>
+    </header>
+
+    <div class="flex gap-4">
+      <div class="bg-[var(--bg-surface-2)] border border-[var(--border)] rounded-xl px-4 py-3 min-w-[140px]">
+        <div class="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">High Risk</div>
+        <div class="text-2xl font-bold text-[var(--critical)] flex items-center gap-2">
+          <i class="pi pi-shield text-lg"></i>
+          {{ children().length }}
+        </div>
+      </div>
+      <div class="bg-[var(--bg-surface-2)] border border-[var(--border)] rounded-xl px-4 py-3 min-w-[140px]">
+        <div class="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">Threats</div>
+        <div class="text-2xl font-bold text-[var(--high)] flex items-center gap-2">
+          <i class="pi pi-exclamation-circle text-lg"></i>
+          {{ contacts().length }}
+        </div>
+      </div>
+    </div>
   </div>
 
-  <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-1 w-fit mb-6">
+  <!-- Tab Navigation -->
+  <div class="flex items-center gap-1 bg-[var(--bg-surface-2)] border border-[var(--border)] rounded-2xl p-1 w-fit mb-8 shadow-sm">
     <button
-      class="px-5 py-2 rounded-lg text-sm font-semibold transition-all"
-      [class]="activeTab() === 'children' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'"
+      class="px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2"
+      [class]="activeTab() === 'children' ? 'bg-[var(--accent)] text-white shadow-lg' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'"
       (click)="activeTab.set('children')"
     >
-      <i class="pi pi-shield mr-2"></i>
+      <i class="pi pi-users"></i>
       Monitored Children
-      <span class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-white/20">{{ children().length }}</span>
     </button>
 
     <button
-      class="px-5 py-2 rounded-lg text-sm font-semibold transition-all"
-      [class]="activeTab() === 'contacts' ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'"
+      class="px-6 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2"
+      [class]="activeTab() === 'contacts' ? 'bg-[var(--accent)] text-white shadow-lg' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-surface)]'"
       (click)="activeTab.set('contacts')"
     >
-      <i class="pi pi-exclamation-triangle mr-2"></i>
+      <i class="pi pi-eye"></i>
       Suspicious Contacts
-      <span class="ml-2 text-xs px-1.5 py-0.5 rounded-full bg-white/20">{{ contacts().length }}</span>
     </button>
   </div>
 
   @if (activeTab() === 'children') {
-    <div class="hidden sm:block bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-x-auto">
+    <div class="hidden sm:block bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm">
       <table class="w-full min-w-[1280px]">
         <thead>
-          <tr class="border-b border-[var(--border)]">
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Child</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Personal Info</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Risk</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Blocked (Incoming)</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Blocked (Sent)</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Night Activity</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Dominant Category</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Links</th>
-            <th></th>
+          <tr class="bg-[var(--bg-surface-2)] border-b border-[var(--border)]">
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Target Identity</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Context</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Risk Trajectory</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Exposure</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Behavior</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Category</th>
+            <th class="text-right px-6 py-4"></th>
           </tr>
         </thead>
 
         <tbody>
           @for (child of children(); track child.id) {
-            <tr class="border-b border-[var(--border)] hover:bg-[var(--bg-surface-2)] transition-colors">
-              <td class="px-5 py-4">
+            <tr class="border-b border-[var(--border)] hover:bg-[var(--bg-surface-2)] transition-all duration-200 group">
+              <td class="px-6 py-4">
                 <div class="flex items-center gap-3">
-                  <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold" [style.background]="getRiskHex(child.victim_risk_level)">
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold" [style.background]="getRiskHex(child.victim_risk_level)">
                     {{ child.identifier.slice(-2) }}
                   </div>
                   <div>
-                    <div class="text-sm font-semibold text-[var(--text-primary)]">{{ child.identifier }}</div>
-                    <div class="text-xs font-mono text-[var(--text-muted)]">{{ child.whatsapp_number }}</div>
+                    <div class="text-sm font-bold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">{{ child.identifier }}</div>
+                    <div class="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                      <i class="pi pi-whatsapp" style="font-size: 0.6rem"></i>
+                      {{ child.whatsapp_number }}
+                    </div>
                   </div>
                 </div>
               </td>
 
-              <td class="px-5 py-4">
-                <div class="text-xs text-[var(--text-primary)]">Age {{ ageFromBirthDate(child.date_naissance) }} · {{ child.niveau_scolaire }}</div>
-                <div class="text-xs text-[var(--text-muted)]">{{ child.nom_ecole }}</div>
-              </td>
-
-              <td class="px-5 py-4">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs font-bold capitalize px-2.5 py-1 rounded-full" [style.color]="getRiskHex(child.victim_risk_level)" [style.background]="getRiskHex(child.victim_risk_level) + '22'">
-                    {{ child.victim_risk_level }}
-                  </span>
-                  <span class="text-sm font-bold font-mono" [style.color]="getRiskHex(child.victim_risk_level)">{{ child.victim_risk_score.toFixed(2) }}</span>
-                  <span class="text-xs font-mono flex items-center gap-1"
-                        [style.color]="getRiskTrendDirection(child.risk_trend) === 'up' ? 'var(--critical)' : (getRiskTrendDirection(child.risk_trend) === 'down' ? 'var(--low)' : 'var(--text-muted)')">
-                    <i class="pi"
-                       [class.pi-arrow-up]="getRiskTrendDirection(child.risk_trend) === 'up'"
-                       [class.pi-arrow-down]="getRiskTrendDirection(child.risk_trend) === 'down'"
-                       [class.pi-minus]="getRiskTrendDirection(child.risk_trend) === 'flat'"
-                       style="font-size: 0.62rem"></i>
-                    {{ getRiskTrendDelta(getRiskTrendChange(child.risk_trend)) }}
+              <td class="px-6 py-5">
+                <div class="flex flex-col">
+                  <span class="text-xs font-semibold text-[var(--text-primary)]">Age {{ ageFromBirthDate(child.date_naissance) }}</span>
+                  <span class="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+                    <i class="pi pi-building" style="font-size: 0.6rem"></i>
+                    {{ child.nom_ecole }}
                   </span>
                 </div>
               </td>
 
-              <td class="px-5 py-4">
-                <span class="text-sm font-mono font-bold text-[var(--critical)]">{{ child.total_blocked }}</span>
-                <span class="text-xs text-[var(--text-muted)]"> / {{ child.total_incoming }}</span>
-              </td>
-
-              <td class="px-5 py-4">
-                <span class="text-sm font-mono font-bold" [style.color]="child.total_messages_bloques_envoyes > 0 ? 'var(--high)' : 'var(--text-primary)'">
-                  {{ child.total_messages_bloques_envoyes }}
-                </span>
-              </td>
-
-              <td class="px-5 py-4">
-                <span class="text-sm font-mono" [style.color]="child.activite_nocturne > 0.4 ? 'var(--high)' : 'var(--text-muted)'">
-                  {{ pct(child.activite_nocturne) }}
-                </span>
-              </td>
-
-              <td class="px-5 py-4">
-                <span class="text-xs text-[var(--text-muted)]">{{ child.most_common_category }}</span>
-              </td>
-
-              <td class="px-5 py-4">
-                <div class="flex gap-2">
-                  <button class="table-link-btn" (click)="goToChildConversations(child)">Conversations</button>
-                  <button class="table-link-btn" (click)="goToParentUser(child)">Parent</button>
+              <td class="px-6 py-4">
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-2">
+                     <span class="text-sm font-bold font-mono" [style.color]="getRiskHex(child.victim_risk_level)">{{ child.victim_risk_score.toFixed(2) }}</span>
+                     <span class="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+                      <i class="pi"
+                         [class.pi-arrow-up]="getRiskTrendDirection(child.risk_trend) === 'up'"
+                         [class.pi-arrow-down]="getRiskTrendDirection(child.risk_trend) === 'down'"
+                         [class.pi-minus]="getRiskTrendDirection(child.risk_trend) === 'flat'"
+                         style="font-size: 0.6rem"></i>
+                      {{ getRiskTrendDelta(getRiskTrendChange(child.risk_trend)) }}
+                    </span>
+                  </div>
+                  <span class="text-[10px] font-bold uppercase tracking-wider" [style.color]="getRiskHex(child.victim_risk_level)">
+                    {{ child.victim_risk_level }} Danger
+                  </span>
                 </div>
               </td>
 
-              <td class="px-5 py-4 text-right">
-                <button class="text-xs font-semibold text-[var(--accent)] hover:underline" (click)="openChild(child)">View →</button>
+              <td class="px-6 py-5">
+                <div class="flex flex-col">
+                  <div class="text-sm font-bold text-[var(--critical)]">{{ child.total_blocked }} <span class="text-[10px] text-[var(--text-muted)] font-normal">blocked</span></div>
+                  <div class="text-[10px] text-[var(--text-muted)]">From {{ child.unique_harassers }} unique harassers</div>
+                </div>
+              </td>
+
+              <td class="px-6 py-5">
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center justify-between text-[9px] font-bold text-[var(--text-muted)] uppercase tracking-tighter">
+                    <span>Night Activity</span>
+                    <span [style.color]="child.activite_nocturne > 0.4 ? 'var(--high)' : 'inherit'">{{ pct(child.activite_nocturne) }}</span>
+                  </div>
+                  <div class="w-24 h-1.5 bg-[var(--bg-surface-2)] rounded-full overflow-hidden border border-[var(--border)]">
+                    <div class="h-full bg-[var(--accent)] rounded-full transition-all duration-500" [style.width.%]="child.activite_nocturne * 100"></div>
+                  </div>
+                </div>
+              </td>
+
+              <td class="px-6 py-5">
+                <span class="text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-surface-2)] px-2 py-1 rounded-md border border-[var(--border)]">
+                  {{ child.most_common_category.replace('_', ' ') }}
+                </span>
+              </td>
+
+              <td class="px-6 py-4 text-right">
+                <div class="flex items-center justify-end gap-2">
+                  <button class="p-2 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-surface-2)] rounded-lg transition-colors" (click)="goToChildConversations(child)" pTooltip="Conversations">
+                    <i class="pi pi-comments"></i>
+                  </button>
+                  <button class="text-sm font-bold bg-[var(--accent)] text-white hover:bg-[var(--accent)]/90 px-4 py-2 rounded-lg transition-colors" (click)="openChild(child)">
+                    View Profile
+                  </button>
+                </div>
               </td>
             </tr>
           }
@@ -120,98 +150,122 @@
       </table>
     </div>
 
-    <div class="sm:hidden flex flex-col gap-3">
+    <!-- Mobile view -->
+    <div class="sm:hidden flex flex-col gap-4">
       @for (child of children(); track child.id) {
-        <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
-          <div class="flex items-center justify-between mb-3">
-            <div>
-              <div class="text-sm font-semibold text-[var(--text-primary)]">{{ child.identifier }}</div>
-              <div class="text-xs text-[var(--text-muted)]">{{ child.nom_ecole }} · {{ child.niveau_scolaire }}</div>
+        <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 shadow-md active:scale-[0.98] transition-transform" (click)="openChild(child)">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-black shadow-md" [style.background]="getRiskHex(child.victim_risk_level)">
+                {{ child.identifier.slice(-2) }}
+              </div>
+              <div>
+                <div class="text-sm font-bold text-[var(--text-primary)]">{{ child.identifier }}</div>
+                <div class="text-[10px] text-[var(--text-muted)] font-mono">{{ child.whatsapp_number }}</div>
+              </div>
             </div>
-            <span class="text-xs font-bold capitalize px-2 py-0.5 rounded-full" [style.color]="getRiskHex(child.victim_risk_level)" [style.background]="getRiskHex(child.victim_risk_level) + '22'">
-              {{ child.victim_risk_level }}
-            </span>
+            <div class="flex flex-col items-end">
+              <span class="text-xs font-black" [style.color]="getRiskHex(child.victim_risk_level)">{{ child.victim_risk_score.toFixed(2) }}</span>
+              <span class="text-[8px] font-bold uppercase tracking-widest" [style.color]="getRiskHex(child.victim_risk_level)">{{ child.victim_risk_level }}</span>
+            </div>
           </div>
-          <div class="grid grid-cols-3 gap-2 text-xs mb-3">
-            <div><span class="text-[var(--text-muted)]">Risk</span><div class="font-mono font-bold mt-0.5" [style.color]="getRiskHex(child.victim_risk_level)">{{ child.victim_risk_score.toFixed(2) }}</div></div>
-            <div><span class="text-[var(--text-muted)]">Sent blocked</span><div class="font-mono font-bold mt-0.5">{{ child.total_messages_bloques_envoyes }}</div></div>
-            <div><span class="text-[var(--text-muted)]">Night</span><div class="font-mono font-bold mt-0.5">{{ pct(child.activite_nocturne) }}</div></div>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="bg-[var(--bg-surface-2)] p-2 rounded-lg border border-[var(--border)]">
+              <div class="text-[9px] text-[var(--text-muted)] uppercase font-bold mb-1">Exposure</div>
+              <div class="text-xs font-bold text-[var(--critical)]">{{ child.total_blocked }} blocked</div>
+            </div>
+            <div class="bg-[var(--bg-surface-2)] p-2 rounded-lg border border-[var(--border)]">
+              <div class="text-[9px] text-[var(--text-muted)] uppercase font-bold mb-1">Night Pattern</div>
+              <div class="text-xs font-bold">{{ pct(child.activite_nocturne) }}</div>
+            </div>
           </div>
-          <button class="text-xs font-semibold text-[var(--accent)] hover:underline" (click)="openChild(child)">View details →</button>
         </div>
       }
     </div>
   }
 
   @if (activeTab() === 'contacts') {
-    <div class="hidden sm:block bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-x-auto">
+    <div class="hidden sm:block bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm">
       <table class="w-full min-w-[1180px]">
         <thead>
-          <tr class="border-b border-[var(--border)]">
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Contact</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Threat</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Targets</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Night Activity</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Cross-Child Signal</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Dominant Category</th>
-            <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Links</th>
-            <th></th>
+          <tr class="bg-[var(--bg-surface-2)] border-b border-[var(--border)]">
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Source Contact</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Threat Assessment</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Targeting Pattern</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Intelligence Signal</th>
+            <th class="text-left px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)]">Dominant Category</th>
+            <th class="text-right px-6 py-4"></th>
           </tr>
         </thead>
 
         <tbody>
           @for (contact of contacts(); track contact.id) {
-            <tr class="border-b border-[var(--border)] hover:bg-[var(--bg-surface-2)] transition-colors">
-              <td class="px-5 py-4">
-                <div class="text-xs font-mono text-[var(--text-primary)]">{{ contact.whatsapp_number }}</div>
-                <div class="text-xs text-[var(--text-muted)]">{{ contact.total_sent }} sent · {{ contact.total_blocked }} blocked</div>
-              </td>
-
-              <td class="px-5 py-4">
-                <div class="flex items-center gap-2">
-                  <span class="text-xs font-bold capitalize px-2.5 py-1 rounded-full" [style.color]="getRiskHex(contact.threat_level)" [style.background]="getRiskHex(contact.threat_level) + '22'">
-                    {{ contact.threat_level }}
-                  </span>
-                  <span class="text-sm font-mono font-bold" [style.color]="getRiskHex(contact.threat_level)">{{ contact.threat_score.toFixed(2) }}</span>
+            <tr class="border-b border-[var(--border)] hover:bg-[var(--bg-surface-2)] transition-all duration-200 group">
+              <td class="px-6 py-5">
+                <div class="flex items-center gap-3">
+                   <div class="w-10 h-10 rounded-full bg-[var(--bg-surface-2)] border border-[var(--border)] flex items-center justify-center text-[var(--text-muted)] group-hover:border-[var(--accent)] group-hover:text-[var(--accent)] transition-all">
+                     <i class="pi pi-user text-sm"></i>
+                   </div>
+                   <div>
+                     <div class="text-sm font-bold font-mono text-[var(--text-primary)] flex items-center gap-2">
+                       {{ contact.whatsapp_number }}
+                       @if (contact.is_stranger) {
+                         <span class="text-[9px] font-bold bg-[var(--critical)]/10 text-[var(--critical)] border border-[var(--critical)]/20 px-1.5 py-0.5 rounded uppercase tracking-wider">Stranger</span>
+                       }
+                     </div>
+                     <div class="text-[10px] text-[var(--text-muted)]">{{ contact.total_sent }} sent · {{ contact.total_blocked }} blocked</div>
+                   </div>
                 </div>
               </td>
 
-              <td class="px-5 py-4">
-                <span class="text-sm font-mono font-bold" [style.color]="contact.nombre_cibles_differentes >= 3 ? 'var(--critical)' : 'var(--text-primary)'">
-                  {{ contact.nombre_cibles_differentes }}
-                </span>
-                <span class="text-xs text-[var(--text-muted)]">different children</span>
-              </td>
-
-              <td class="px-5 py-4">
-                <span class="text-sm font-mono" [style.color]="contact.activite_nocturne > 0.4 ? 'var(--high)' : 'var(--text-muted)'">
-                  {{ pct(contact.activite_nocturne) }}
-                </span>
-              </td>
-
-              <td class="px-5 py-4">
-                @if (contact.other_monitored_children_count > 0) {
-                  <span class="text-xs font-bold text-[var(--critical)] bg-red-500/10 px-2 py-1 rounded">
-                    Also messaging {{ contact.other_monitored_children_count }} other monitored child{{ contact.other_monitored_children_count > 1 ? 'ren' : '' }}
-                  </span>
-                } @else {
-                  <span class="text-xs text-[var(--text-muted)]">Single monitored child</span>
-                }
-              </td>
-
-              <td class="px-5 py-4">
-                <span class="text-xs text-[var(--text-muted)]">{{ contact.dominant_category }}</span>
-              </td>
-
-              <td class="px-5 py-4">
-                <div class="flex gap-2">
-                  <button class="table-link-btn" (click)="goToAlertsByContact(contact)">Alerts</button>
-                  <button class="table-link-btn" (click)="goToConversationsForContact(contact)">Conversations</button>
+              <td class="px-6 py-4">
+                <div class="flex flex-col gap-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold font-mono" [style.color]="getRiskHex(contact.threat_level)">{{ contact.threat_score.toFixed(2) }}</span>
+                    <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full" [style.color]="getRiskHex(contact.threat_level)" [style.background]="getRiskHex(contact.threat_level) + '1A'">
+                      {{ contact.threat_level }}
+                    </span>
+                  </div>
+                  <div class="w-24 h-1 bg-[var(--bg-surface-2)] rounded-full overflow-hidden border border-[var(--border)]">
+                    <div class="h-full bg-[var(--accent)] rounded-full transition-all duration-700" [style.background]="getRiskHex(contact.threat_level)" [style.width.%]="contact.threat_score * 100"></div>
+                  </div>
                 </div>
               </td>
 
-              <td class="px-5 py-4 text-right">
-                <button class="text-xs font-semibold text-[var(--accent)] hover:underline" (click)="openContact(contact)">View →</button>
+              <td class="px-6 py-5">
+                <div class="flex flex-col">
+                  <span class="text-sm font-bold" [style.color]="contact.nombre_cibles_differentes >= 3 ? 'var(--critical)' : 'var(--text-primary)'">
+                    {{ contact.nombre_cibles_differentes }} <span class="text-[10px] text-[var(--text-muted)] font-normal">monitored children</span>
+                  </span>
+                  <div class="flex items-center gap-1 mt-1">
+                    @for (i of [].constructor(contact.nombre_cibles_differentes); track $index) {
+                      <div class="w-1.5 h-1.5 rounded-full" [style.background]="contact.nombre_cibles_differentes >= 3 ? 'var(--critical)' : 'var(--accent)'"></div>
+                    }
+                  </div>
+                </div>
+              </td>
+
+              <td class="px-6 py-5">
+                <div class="flex flex-col gap-1.5">
+                  <div class="flex items-center gap-2" [ngClass]="contact.child_initiated ? 'text-[var(--low)]' : 'text-[var(--critical)]'">
+                    <i class="pi" [ngClass]="contact.child_initiated ? 'pi-arrow-up-right' : 'pi-arrow-down-left'" style="font-size: 0.65rem"></i>
+                    <span class="text-[10px] font-bold uppercase tracking-wider">{{ contact.child_initiated ? 'Child Initiated' : 'Contact Reached Out' }}</span>
+                  </div>
+                  <div class="flex items-center gap-2" [ngClass]="contact.activite_nocturne > 0 ? 'text-indigo-400' : 'text-[var(--text-muted)]'">
+                    <i class="pi pi-moon" style="font-size: 0.65rem"></i>
+                    <span class="text-[10px] font-bold uppercase tracking-wider">{{ pct(contact.activite_nocturne) }} Night Act.</span>
+                  </div>
+                </div>
+              </td>
+
+              <td class="px-6 py-5">
+                <span class="text-[10px] font-bold text-[var(--text-muted)] bg-[var(--bg-surface-2)] px-2 py-1 rounded-md border border-[var(--border)]">
+                  {{ contact.dominant_category.replace('_', ' ') }}
+                </span>
+              </td>
+
+              <td class="px-6 py-4 text-right">
+                <button class="text-sm font-bold text-[var(--accent)] hover:text-[var(--accent)]/80 hover:underline transition-all" (click)="openContact(contact)">View Profile</button>
               </td>
             </tr>
           }
@@ -221,172 +275,227 @@
 
     <div class="sm:hidden flex flex-col gap-3">
       @for (contact of contacts(); track contact.id) {
-        <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-4">
-          <div class="text-xs font-mono text-[var(--text-primary)] mb-1">{{ contact.whatsapp_number }}</div>
-          <div class="text-xs text-[var(--text-muted)] mb-2">Targets: {{ contact.nombre_cibles_differentes }} · Night: {{ pct(contact.activite_nocturne) }}</div>
-          @if (contact.other_monitored_children_count > 0) {
-            <div class="text-xs text-[var(--critical)] mb-2">Also messaging {{ contact.other_monitored_children_count }} other monitored child{{ contact.other_monitored_children_count > 1 ? 'ren' : '' }}</div>
-          }
-          <button class="text-xs font-semibold text-[var(--accent)] hover:underline" (click)="openContact(contact)">View details →</button>
+        <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 shadow-md active:scale-[0.98] transition-transform" (click)="openContact(contact)">
+          <div class="text-xs font-mono text-[var(--text-primary)] mb-1 font-bold">{{ contact.whatsapp_number }}</div>
+          <div class="text-[10px] text-[var(--text-muted)] mb-3">Targets: {{ contact.nombre_cibles_differentes }} · Night: {{ pct(contact.activite_nocturne) }}</div>
+          <div class="flex items-center justify-between">
+            <span class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full" [style.color]="getRiskHex(contact.threat_level)" [style.background]="getRiskHex(contact.threat_level) + '1A'">
+              {{ contact.threat_level }}
+            </span>
+            <span class="text-sm font-black font-mono" [style.color]="getRiskHex(contact.threat_level)">{{ contact.threat_score.toFixed(2) }}</span>
+          </div>
         </div>
       }
     </div>
   }
 </div>
 
+<!-- Child Intelligence Dialog -->
 <p-dialog
   [(visible)]="childDialogVisible"
   [modal]="true"
   [dismissableMask]="true"
   [draggable]="false"
   [resizable]="false"
-  [style]="{ width: 'min(760px, 96vw)' }"
-  header="Child Behavioral Profile"
+  [style]="{ width: 'min(800px, 96vw)', 'max-height': '92vh' }"
+  header="Forensic Intelligence — Child Profile"
 >
   @if (selectedChild()) {
     <div class="flex flex-col gap-5 p-1">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-3">
-          <i class="pi pi-shield text-[var(--accent)]"></i>
-          <span class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Child Behavioral Profile</span>
+
+      <!-- Hero: Risk Gauge + Identity -->
+      <div class="flex flex-col sm:flex-row gap-4">
+        <!-- Risk Gauge -->
+        <div class="flex flex-col items-center justify-center p-6 bg-[var(--bg-surface-2)] rounded-2xl border border-[var(--border)] min-w-[160px]">
+          <div class="text-4xl font-bold font-mono" [style.color]="getRiskHex(selectedChild()!.victim_risk_level)">
+            {{ selectedChild()!.victim_risk_score.toFixed(2) }}
+          </div>
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mt-3 bg-[var(--bg-surface)] border border-[var(--border)]">
+            <i class="pi pi-shield text-[10px]" [style.color]="getRiskHex(selectedChild()!.victim_risk_level)"></i>
+            <span class="text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]">{{ selectedChild()!.victim_risk_level }}</span>
+          </div>
+          <div class="flex items-center gap-1 mt-3 text-[10px] font-mono text-[var(--text-muted)]">
+            <i class="pi" style="font-size: 0.5rem"
+               [class.pi-arrow-up]="getRiskTrendDirection(selectedChild()!.risk_trend) === 'up'"
+               [class.pi-arrow-down]="getRiskTrendDirection(selectedChild()!.risk_trend) === 'down'"
+               [class.pi-minus]="getRiskTrendDirection(selectedChild()!.risk_trend) === 'flat'"
+               [style.color]="getRiskTrendDirection(selectedChild()!.risk_trend) === 'up' ? 'var(--critical)' : (getRiskTrendDirection(selectedChild()!.risk_trend) === 'down' ? 'var(--low)' : 'var(--text-muted)')"></i>
+            {{ getRiskTrendDelta(getRiskTrendChange(selectedChild()!.risk_trend)) }} trend
+          </div>
         </div>
-        <button class="drawer-action-btn" (click)="goToReports(selectedChild()!.id)">Generate Report</button>
+
+        <!-- Identity Card -->
+        <div class="flex-1 flex flex-col gap-2">
+          <div class="bg-[var(--bg-surface-2)] rounded-2xl p-4 border border-[var(--border)] flex-1">
+            <div class="flex items-center justify-between mb-3">
+              <div class="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest">Target Identity</div>
+              <button class="primary-btn-sm" (click)="goToReports(selectedChild()!.id)">
+                <i class="pi pi-file-pdf mr-1" style="font-size: 0.65rem"></i> PDF Report
+              </button>
+            </div>
+            <div class="text-base font-bold text-[var(--text-primary)] mb-1">{{ selectedChild()!.identifier }}</div>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
+              <span class="flex items-center gap-1"><i class="pi pi-whatsapp" style="font-size: 0.65rem; color: #25D366"></i> {{ selectedChild()!.whatsapp_number || 'Not registered' }}</span>
+              @if (selectedChild()!.date_naissance) {
+                <span class="flex items-center gap-1"><i class="pi pi-calendar" style="font-size: 0.6rem"></i> Age {{ ageFromBirthDate(selectedChild()!.date_naissance) }}</span>
+              }
+              @if (selectedChild()!.nom_ecole) {
+                <span class="flex items-center gap-1"><i class="pi pi-building" style="font-size: 0.6rem"></i> {{ selectedChild()!.nom_ecole }}</span>
+              }
+            </div>
+            <div class="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-[var(--text-muted)] mt-2 pt-2 border-t border-[var(--border)]">
+              <span>Monitored since <strong class="text-[var(--text-primary)]">{{ formatDate(selectedChild()!.monitored_since) }}</strong></span>
+              <span>Last activity <strong class="text-[var(--text-primary)]">{{ timeAgo(selectedChild()!.last_activity) }}</strong></span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-3">
-        <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
-          <div class="text-xs text-[var(--text-muted)] mb-1">Child</div>
-          <div class="text-sm font-semibold text-[var(--text-primary)]">{{ selectedChild()!.identifier }}</div>
-          <div class="text-xs text-[var(--text-muted)]">{{ selectedChild()!.whatsapp_number }}</div>
-        </div>
-        <div class="bg-[var(--bg-surface-2)] rounded-lg p-3">
-          <div class="text-xs text-[var(--text-muted)] mb-1">Personal Info</div>
-          <div class="text-sm text-[var(--text-primary)]">Age {{ ageFromBirthDate(selectedChild()!.date_naissance) }}</div>
-          <div class="text-xs text-[var(--text-muted)]">{{ selectedChild()!.nom_ecole }} · {{ selectedChild()!.niveau_scolaire }}</div>
-        </div>
-      </div>
-
+      <!-- Cluster Alert -->
       @if (getClusterSignal(selectedChild()!).severity !== 'none') {
-        <button
-          class="cluster-alert cluster-clickable"
-          [ngClass]="{
+        <button class="cluster-alert cluster-clickable shadow-lg" [ngClass]="{
             'cluster-amber': getClusterSignal(selectedChild()!).severity === 'amber',
             'cluster-red': getClusterSignal(selectedChild()!).severity === 'red',
             'cluster-banner': getClusterSignal(selectedChild()!).severity === 'banner'
-          }"
-          (click)="toggleClusterDetails()"
-        >
+          }" (click)="toggleClusterDetails()">
           <i class="pi pi-exclamation-triangle"></i>
           <span>
-            @if (getClusterSignal(selectedChild()!).severity === 'amber') {
-              {{ getClusterSignal(selectedChild()!).sameSchoolCount }} monitored children are from {{ selectedChild()!.nom_ecole }}.
-            }
-            @if (getClusterSignal(selectedChild()!).severity === 'red') {
-              Possible coordinated attack: same school + shared suspicious contact.
-            }
-            @if (getClusterSignal(selectedChild()!).severity === 'banner') {
-              Coordinated attack signal: 3+ children in same school share suspicious contact(s).
-            }
-            <strong class="ml-1">(click to see affected children)</strong>
+            @if (getClusterSignal(selectedChild()!).severity === 'amber') { {{ getClusterSignal(selectedChild()!).sameSchoolCount }} monitored children from {{ selectedChild()!.nom_ecole }} are linked. }
+            @if (getClusterSignal(selectedChild()!).severity === 'red') { Critical coordinated attack: same school + shared suspicious contact. }
+            @if (getClusterSignal(selectedChild()!).severity === 'banner') { Major coordinated signal: 3+ children share multiple suspicious contacts. }
+            <strong class="ml-1 font-black underline">(Expose Network)</strong>
           </span>
         </button>
-
         @if (showClusterDetails()) {
-          <div class="cluster-details">
+          <div class="cluster-details animate-in slide-in-from-top-2 duration-300">
             @for (item of getAffectedSchoolChildren(selectedChild()!); track item.child.id) {
               <div class="cluster-child-row">
                 <div>
-                  <div class="text-sm font-semibold text-[var(--text-primary)]">{{ item.child.identifier }}</div>
-                  <div class="text-xs text-[var(--text-muted)]">{{ item.child.whatsapp_number }}</div>
+                  <div class="text-sm font-bold text-[var(--text-primary)]">{{ item.child.identifier }}</div>
+                  <div class="text-[10px] font-mono text-[var(--text-muted)]">{{ item.child.whatsapp_number }}</div>
                 </div>
-                <div class="text-xs text-[var(--critical)] text-right">
-                  Shared contact{{ item.sharedContacts.length > 1 ? 's' : '' }}:
+                <div class="text-[10px] text-[var(--critical)] text-right">
+                  Shared:
                   @for (contact of item.sharedContacts; track contact.id) {
                     <span class="shared-contact-tag">{{ contact.whatsapp_number }}</span>
                   }
                 </div>
               </div>
             }
-            @if (getAffectedSchoolChildren(selectedChild()!).length === 0) {
-              <div class="text-xs text-[var(--text-muted)]">No shared suspicious contact found across same-school children yet.</div>
-            }
           </div>
         }
       }
 
-      <div class="bg-[var(--bg-surface-2)] rounded-xl p-4 text-center">
-        <div class="text-xs text-[var(--text-muted)] mb-1">Current Risk Score</div>
-        <div class="text-5xl font-bold font-mono mb-2" [style.color]="getRiskHex(selectedChild()!.victim_risk_level)">
-          {{ selectedChild()!.victim_risk_score.toFixed(2) }}
+      <!-- Exposure Strip: 6 KPIs -->
+      <div class="grid grid-cols-3 sm:grid-cols-6 gap-3">
+        <div class="bg-[var(--bg-surface-2)] rounded-xl p-3 border border-[var(--border)] flex flex-col items-center">
+          <div class="text-xs text-[var(--critical)] mb-1"><i class="pi pi-ban"></i></div>
+          <div class="text-lg font-bold font-mono text-[var(--critical)]">{{ selectedChild()!.total_blocked }}</div>
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Blocked</div>
         </div>
-        <span class="text-xs font-bold capitalize px-3 py-1 rounded-full" [style.color]="getRiskHex(selectedChild()!.victim_risk_level)" [style.background]="getRiskHex(selectedChild()!.victim_risk_level) + '22'">
-          {{ selectedChild()!.victim_risk_level }} danger
-        </span>
+        <div class="bg-[var(--bg-surface-2)] rounded-xl p-3 border border-[var(--border)] flex flex-col items-center">
+          <div class="text-xs text-[var(--accent)] mb-1"><i class="pi pi-inbox"></i></div>
+          <div class="text-lg font-bold font-mono text-[var(--text-primary)]">{{ selectedChild()!.total_incoming }}</div>
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Total In</div>
+        </div>
+        <div class="bg-[var(--bg-surface-2)] rounded-xl p-3 border border-[var(--border)] flex flex-col items-center">
+          <div class="text-xs mb-1" [style.color]="selectedChild()!.activite_nocturne > 0.4 ? 'var(--high)' : 'var(--text-muted)'"><i class="pi pi-moon"></i></div>
+          <div class="text-lg font-bold font-mono" [style.color]="selectedChild()!.activite_nocturne > 0.4 ? 'var(--high)' : 'var(--text-primary)'">{{ pct(selectedChild()!.activite_nocturne) }}</div>
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Night</div>
+        </div>
+        <div class="bg-[var(--bg-surface-2)] rounded-xl p-3 border border-[var(--border)] flex flex-col items-center">
+          <div class="text-xs text-[var(--high)] mb-1"><i class="pi pi-users"></i></div>
+          <div class="text-lg font-bold font-mono text-[var(--text-primary)]">{{ selectedChild()!.unique_harassers }}</div>
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Threats</div>
+        </div>
+        <div class="bg-[var(--bg-surface-2)] rounded-xl p-3 border border-[var(--border)] flex flex-col items-center">
+          <div class="text-xs text-[var(--critical)] mb-1"><i class="pi pi-arrow-up-right"></i></div>
+          <div class="text-lg font-bold font-mono text-[var(--critical)]">{{ selectedChild()!.escalation_count }}</div>
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Escalated</div>
+        </div>
+        <div class="bg-[var(--bg-surface-2)] rounded-xl p-3 border border-[var(--border)] flex flex-col items-center">
+          <div class="text-xs text-[var(--medium)] mb-1"><i class="pi pi-send"></i></div>
+          <div class="text-lg font-bold font-mono text-[var(--text-primary)]">{{ selectedChild()!.total_messages_bloques_envoyes }}</div>
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-semibold mt-1">Out Block</div>
+        </div>
       </div>
 
+      <!-- Behavioral Trajectory -->
       <div>
-        <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">Risk Score Timeline (SnapshotComportemental)</div>
-        <div class="bg-[var(--bg-surface-2)] rounded-xl p-3" style="height: 165px">
-          <p-chart
-            type="line"
+        <div class="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="pi pi-chart-line" style="font-size: 0.65rem"></i> Behavioral Trajectory (Agent 4)
+        </div>
+        <div class="bg-[var(--bg-surface-2)] rounded-2xl p-4 border border-[var(--border)]" style="height: 180px">
+          <p-chart type="line"
             [data]="getTrendChart(selectedChild()!.risk_trend, selectedChild()!.victim_risk_level)"
-            [options]="trendOptions"
-            height="145px"
-          />
+            [options]="trendOptions" height="160px" />
         </div>
       </div>
 
-      @if (getRiskSpikes(selectedChild()!.snapshots).length > 0) {
+      <!-- Top Threat Actors -->
+      @if (getChildThreats(selectedChild()!).length > 0) {
         <div>
-          <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Risk Spikes Linked To Alerts</div>
+          <div class="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-3 flex items-center gap-2">
+            <i class="pi pi-eye" style="font-size: 0.65rem"></i> Top Threat Actors Targeting This Child
+          </div>
           <div class="flex flex-col gap-2">
-            @for (spike of getRiskSpikes(selectedChild()!.snapshots); track spike.date_snapshot) {
-              <button class="spike-row" (click)="goToAlert(spike.alert_id!)">
-                <span>{{ spike.date_snapshot }} · score {{ spike.score_risque_snapshot.toFixed(2) }}</span>
-                <span class="text-[var(--critical)]">Open alert {{ spike.alert_id }}</span>
-              </button>
+            @for (threat of getChildThreats(selectedChild()!); track threat.id) {
+              <div class="flex items-center gap-3 p-3 bg-[var(--bg-surface-2)] border border-[var(--border)] rounded-xl cursor-pointer hover:border-[var(--accent)] transition-colors" (click)="openContact(threat)">
+                <div class="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--bg-surface)] text-[10px] font-bold flex-shrink-0"
+                     [style.background]="getRiskHex(threat.threat_level)">
+                  <i class="pi" [ngClass]="getArchetypeIcon(threat.archetype || 'Normal User')" style="font-size: 0.7rem"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-bold text-[var(--text-primary)] truncate">{{ threat.whatsapp_number }}</div>
+                  <div class="text-[10px] text-[var(--text-muted)] truncate flex items-center gap-1">
+                    <span [style.color]="getRiskHex(threat.threat_level)">{{ threat.threat_level | uppercase }}</span>
+                    <span>·</span>
+                    <i class="pi pi-tags" style="font-size: 0.55rem"></i> {{ threat.dominant_category.replace('_', ' ') }}
+                  </div>
+                </div>
+                <i class="pi pi-chevron-right text-[var(--text-muted)] text-[10px]"></i>
+              </div>
             }
           </div>
         </div>
       }
 
-      <div class="grid grid-cols-2 gap-3">
-        <div class="metric-box">
-          <div class="metric-label">Blocked Incoming</div>
-          <div class="metric-value text-[var(--critical)]">{{ selectedChild()!.total_blocked }}</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-label">Blocked Sent</div>
-          <div class="metric-value text-[var(--high)]">{{ selectedChild()!.total_messages_bloques_envoyes }}</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-label">Night Activity</div>
-          <div class="metric-value">{{ pct(selectedChild()!.activite_nocturne) }}</div>
-        </div>
-        <div class="metric-box">
-          <div class="metric-label">Unique Harassers</div>
-          <div class="metric-value">{{ selectedChild()!.unique_harassers }}</div>
-        </div>
-      </div>
-
+      <!-- Category Breakdown as Bars -->
       <div>
-        <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Harassment Category Breakdown</div>
+        <div class="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-3 flex items-center gap-2">
+          <i class="pi pi-tag" style="font-size: 0.65rem"></i> Category Breakdown
+        </div>
         <div class="flex flex-col gap-2">
-          <div class="cat-row"><span>Verbal</span><strong>{{ pct(selectedChild()!.category_breakdown.verbal) }}</strong></div>
-          <div class="cat-row"><span>Threat</span><strong>{{ pct(selectedChild()!.category_breakdown.threat) }}</strong></div>
-          <div class="cat-row"><span>Sexual</span><strong>{{ pct(selectedChild()!.category_breakdown.sexual) }}</strong></div>
-          <div class="cat-row"><span>Discrimination</span><strong>{{ pct(selectedChild()!.category_breakdown.discrimination) }}</strong></div>
+          @for (entry of getCategoryEntries(selectedChild()!.category_breakdown); track entry.key) {
+            <div class="flex items-center gap-3">
+              <span class="text-[10px] font-bold text-[var(--text-muted)] w-28 truncate capitalize">{{ formatCategoryLabel(entry.key) }}</span>
+              <div class="flex-1 h-2.5 bg-[var(--bg-surface)] rounded-full overflow-hidden border border-[var(--border)]">
+                <div class="h-full rounded-full bg-gradient-to-r from-[var(--accent)] to-[var(--accent-light,var(--accent))] transition-all duration-700"
+                     [style.width.%]="(entry.count / getMaxCategoryCount(selectedChild()!.category_breakdown)) * 100"></div>
+              </div>
+              <span class="text-xs font-mono font-black text-[var(--text-primary)] w-8 text-right">{{ entry.count }}</span>
+            </div>
+          }
         </div>
       </div>
 
-      <div class="flex gap-2">
-        <button class="drawer-link-btn" (click)="goToChildConversations(selectedChild()!)">Open Conversations</button>
-        <button class="drawer-link-btn" (click)="goToParentUser(selectedChild()!)">Open Parent (Users)</button>
+      <!-- Action Buttons -->
+      <div class="flex gap-2 pt-2">
+        <button class="drawer-link-btn" (click)="goToChildConversations(selectedChild()!)">
+          <i class="pi pi-comments mr-2"></i> Message Intel
+        </button>
+        <button class="drawer-link-btn" (click)="goToParentUser(selectedChild()!)">
+          <i class="pi pi-user mr-2"></i> Parent Account
+        </button>
+        <button class="drawer-link-btn" (click)="goToReports(selectedChild()!.id)">
+          <i class="pi pi-file mr-2"></i> Reports
+        </button>
       </div>
     </div>
   }
 </p-dialog>
 
+<!-- Contact Threat Dialog -->
 <p-dialog
   [(visible)]="contactDialogVisible"
   [modal]="true"
@@ -397,109 +506,108 @@
   header="Contact Threat Profile"
 >
   @if (selectedContact()) {
-    <div class="flex flex-col gap-5 p-1">
+    <div class="flex flex-col gap-6 p-1">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
           <i class="pi pi-exclamation-triangle text-[var(--high)]"></i>
-          <span class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Contact Threat Profile</span>
+          <span class="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Source Intelligence</span>
         </div>
-        <button class="drawer-action-btn" (click)="goToAlertsByContact(selectedContact()!)">Open Alerts</button>
+        <button class="primary-btn-sm" (click)="goToAlertsByContact(selectedContact()!)">View Correlated Alerts</button>
       </div>
 
-      <div class="bg-[var(--bg-surface-2)] rounded-xl p-4 text-center">
-        <div class="text-xs text-[var(--text-muted)] mb-1">Threat Score</div>
-        <div class="text-5xl font-bold font-mono mb-2" [style.color]="getRiskHex(selectedContact()!.threat_level)">
+      <div class="bg-[var(--bg-surface-2)] rounded-3xl p-6 text-center border-2 shadow-inner" [style.border-color]="getRiskHex(selectedContact()!.threat_level) + '44'">
+        <div class="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2">Source Threat Score</div>
+        <div class="text-4xl font-black font-mono mb-2" [style.color]="getRiskHex(selectedContact()!.threat_level)">
           {{ selectedContact()!.threat_score.toFixed(2) }}
         </div>
-        <span class="text-xs font-bold capitalize px-3 py-1 rounded-full" [style.color]="getRiskHex(selectedContact()!.threat_level)" [style.background]="getRiskHex(selectedContact()!.threat_level) + '22'">
-          {{ selectedContact()!.threat_level }} threat
-        </span>
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full shadow-md" [style.background]="getRiskHex(selectedContact()!.threat_level)">
+          <i class="pi pi-user-minus text-white text-xs"></i>
+          <span class="text-xs font-black uppercase tracking-widest text-white">
+            {{ selectedContact()!.threat_level }} Assessment
+          </span>
+        </div>
       </div>
 
-      <!-- Behavioral Archetype -->
+      <!-- Bayesian Archetype -->
       @if (selectedContact()!.archetype && selectedContact()!.archetype !== 'Normal User') {
-        <div class="flex items-center gap-2 p-3 rounded-lg border"
+        <div class="flex items-center gap-4 p-5 rounded-2xl border-2 shadow-sm"
              [style.border-color]="getArchetypeColor(selectedContact()!.archetype!) + '44'"
-             [style.background]="getArchetypeColor(selectedContact()!.archetype!) + '0A'">
-          <i class="pi pi-brain text-lg" [style.color]="getArchetypeColor(selectedContact()!.archetype!)"></i>
+             [style.background]="'linear-gradient(135deg, ' + getArchetypeColor(selectedContact()!.archetype!) + '11, transparent)'">
+          <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" [style.background]="getArchetypeColor(selectedContact()!.archetype!)">
+            <i class="pi pi-brain text-xl"></i>
+          </div>
           <div>
-            <div class="text-sm font-bold" [style.color]="getArchetypeColor(selectedContact()!.archetype!)">{{ selectedContact()!.archetype }}</div>
-            <div class="text-[10px] text-[var(--text-muted)]">Bayesian Network classification based on behavioral signals</div>
+            <div class="text-lg font-black" [style.color]="getArchetypeColor(selectedContact()!.archetype!)">{{ selectedContact()!.archetype }}</div>
+            <div class="text-xs text-[var(--text-muted)] max-w-sm">
+              Bayesian classification identifies this entity as showing {{ selectedContact()!.archetype!.toLowerCase() }} behavioral markers.
+            </div>
           </div>
         </div>
       }
 
       <!-- BN Pathway Decomposition -->
       @if (selectedContact()!.grooming_prob !== undefined) {
-        <div class="bg-[var(--bg-surface-2)] rounded-xl p-4">
-          <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">Risk Pathway Decomposition</div>
-          <div class="flex flex-col gap-3">
-            <div class="flex items-center gap-3">
-              <span class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] w-24">Grooming</span>
-              <div class="flex-1 h-2 bg-[var(--bg-base)] rounded-full overflow-hidden">
-                <div class="h-full rounded-full bg-[#f43f5e] transition-all" [style.width.%]="(selectedContact()!.grooming_prob || 0) * 100"></div>
+        <div class="bg-[var(--bg-surface-2)] rounded-2xl p-5 border border-[var(--border)]">
+          <div class="text-[10px] font-bold uppercase tracking-widest text-[var(--text-muted)] mb-5">Risk Pathway Decomposition</div>
+          <div class="flex flex-col gap-4">
+            <div class="flex items-center gap-4">
+              <span class="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] w-24">Grooming</span>
+              <div class="flex-1 h-3 bg-[var(--bg-base)] rounded-full overflow-hidden border border-[var(--border)]">
+                <div class="h-full rounded-full bg-gradient-to-r from-rose-600 to-rose-400 transition-all duration-1000" [style.width.%]="(selectedContact()!.grooming_prob || 0) * 100"></div>
               </div>
-              <span class="text-xs font-mono font-bold w-10 text-right" [style.color]="(selectedContact()!.grooming_prob || 0) > 0.5 ? '#f43f5e' : 'var(--text-muted)'">{{ ((selectedContact()!.grooming_prob || 0) * 100).toFixed(0) }}%</span>
+              <span class="text-xs font-mono font-black w-12 text-right" [style.color]="(selectedContact()!.grooming_prob || 0) > 0.5 ? '#f43f5e' : 'var(--text-muted)'">{{ ((selectedContact()!.grooming_prob || 0) * 100).toFixed(0) }}%</span>
             </div>
-            <div class="flex items-center gap-3">
-              <span class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] w-24">Bully</span>
-              <div class="flex-1 h-2 bg-[var(--bg-base)] rounded-full overflow-hidden">
-                <div class="h-full rounded-full bg-[#f59e0b] transition-all" [style.width.%]="(selectedContact()!.bully_prob || 0) * 100"></div>
+            <div class="flex items-center gap-4">
+              <span class="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] w-24">Bully</span>
+              <div class="flex-1 h-3 bg-[var(--bg-base)] rounded-full overflow-hidden border border-[var(--border)]">
+                <div class="h-full rounded-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-1000" [style.width.%]="(selectedContact()!.bully_prob || 0) * 100"></div>
               </div>
-              <span class="text-xs font-mono font-bold w-10 text-right" [style.color]="(selectedContact()!.bully_prob || 0) > 0.5 ? '#f59e0b' : 'var(--text-muted)'">{{ ((selectedContact()!.bully_prob || 0) * 100).toFixed(0) }}%</span>
+              <span class="text-xs font-mono font-black w-12 text-right" [style.color]="(selectedContact()!.bully_prob || 0) > 0.5 ? '#f59e0b' : 'var(--text-muted)'">{{ ((selectedContact()!.bully_prob || 0) * 100).toFixed(0) }}%</span>
             </div>
-            <div class="flex items-center gap-3">
-              <span class="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] w-24">Troll</span>
-              <div class="flex-1 h-2 bg-[var(--bg-base)] rounded-full overflow-hidden">
-                <div class="h-full rounded-full bg-[#8b5cf6] transition-all" [style.width.%]="(selectedContact()!.troll_prob || 0) * 100"></div>
+            <div class="flex items-center gap-4">
+              <span class="text-[10px] font-black uppercase tracking-wider text-[var(--text-muted)] w-24">Troll</span>
+              <div class="flex-1 h-3 bg-[var(--bg-base)] rounded-full overflow-hidden border border-[var(--border)]">
+                <div class="h-full rounded-full bg-gradient-to-r from-violet-600 to-violet-400 transition-all duration-1000" [style.width.%]="(selectedContact()!.troll_prob || 0) * 100"></div>
               </div>
-              <span class="text-xs font-mono font-bold w-10 text-right" [style.color]="(selectedContact()!.troll_prob || 0) > 0.5 ? '#8b5cf6' : 'var(--text-muted)'">{{ ((selectedContact()!.troll_prob || 0) * 100).toFixed(0) }}%</span>
+              <span class="text-xs font-mono font-black w-12 text-right" [style.color]="(selectedContact()!.troll_prob || 0) > 0.5 ? '#8b5cf6' : 'var(--text-muted)'">{{ ((selectedContact()!.troll_prob || 0) * 100).toFixed(0) }}%</span>
             </div>
           </div>
         </div>
       }
 
-      <div class="metric-box">
-        <div class="metric-label">nombre_cibles_differentes</div>
-        <div class="metric-value" [style.color]="selectedContact()!.nombre_cibles_differentes >= 3 ? 'var(--critical)' : 'var(--text-primary)'">
-          {{ selectedContact()!.nombre_cibles_differentes }}
+      <div class="grid grid-cols-3 gap-3">
+        <div class="metric-box bg-[var(--bg-surface-2)] p-3 rounded-xl border border-[var(--border)] flex flex-col items-center">
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-bold mb-1">Initiator</div>
+          <div class="text-sm font-black flex items-center gap-1" [style.color]="selectedContact()!.child_initiated ? 'var(--low)' : 'var(--critical)'">
+            <i class="pi" [ngClass]="selectedContact()!.child_initiated ? 'pi-arrow-up-right' : 'pi-arrow-down-left'"></i>
+            {{ selectedContact()!.child_initiated ? 'Child' : 'Contact' }}
+          </div>
+        </div>
+        <div class="metric-box bg-[var(--bg-surface-2)] p-3 rounded-xl border border-[var(--border)] flex flex-col items-center">
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-bold mb-1">Identity</div>
+          <div class="text-sm font-black flex items-center gap-1" [style.color]="selectedContact()!.is_stranger ? 'var(--critical)' : 'var(--text-primary)'">
+            <i class="pi" [ngClass]="selectedContact()!.is_stranger ? 'pi-question-circle' : 'pi-address-book'"></i>
+            {{ selectedContact()!.is_stranger ? 'Stranger' : 'Known' }}
+          </div>
+        </div>
+        <div class="metric-box bg-[var(--bg-surface-2)] p-3 rounded-xl border border-[var(--border)] flex flex-col items-center">
+          <div class="text-[9px] uppercase tracking-wider text-[var(--text-muted)] font-bold mb-1">Night Activity</div>
+          <div class="text-sm font-black flex items-center gap-1" [style.color]="selectedContact()!.activite_nocturne > 0.4 ? 'var(--high)' : 'var(--text-primary)'">
+            <i class="pi pi-moon"></i>
+            {{ pct(selectedContact()!.activite_nocturne) }}
+          </div>
         </div>
       </div>
 
-      <div class="metric-box">
-        <div class="metric-label">activite_nocturne</div>
-        <div class="metric-value">{{ pct(selectedContact()!.activite_nocturne) }}</div>
-      </div>
-
-      @if (selectedContact()!.other_monitored_children_count > 0) {
-        <div class="cluster-alert">
-          <i class="pi pi-exclamation-triangle"></i>
-          <span>This contact is also messaging {{ selectedContact()!.other_monitored_children_count }} other monitored child{{ selectedContact()!.other_monitored_children_count > 1 ? 'ren' : '' }}.</span>
-        </div>
-      }
-
-      <div>
-        <div class="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-3">Toxicity Trend</div>
-        <div class="bg-[var(--bg-surface-2)] rounded-xl p-3" style="height: 165px">
-          <p-chart
-            type="line"
-            [data]="getTrendChart(selectedContact()!.toxicity_trend, selectedContact()!.threat_level)"
-            [options]="trendOptions"
-            height="145px"
-          />
-        </div>
-      </div>
-
-      <div class="grid grid-cols-2 gap-3">
-        <div class="metric-box"><div class="metric-label">Block Ratio</div><div class="metric-value">{{ pct(selectedContact()!.block_ratio) }}</div></div>
-        <div class="metric-box"><div class="metric-label">Avg Toxicity</div><div class="metric-value">{{ selectedContact()!.avg_toxicity.toFixed(2) }}</div></div>
-        <div class="metric-box"><div class="metric-label">Escalations</div><div class="metric-value">{{ selectedContact()!.escalation_count }}</div></div>
-        <div class="metric-box"><div class="metric-label">Dominant Category</div><div class="metric-value text-sm">{{ selectedContact()!.dominant_category }}</div></div>
-      </div>
-
-      <div class="flex gap-2">
-        <button class="drawer-link-btn" (click)="goToAlertsByContact(selectedContact()!)">Cross-Reference Alerts</button>
-        <button class="drawer-link-btn" (click)="goToConversationsForContact(selectedContact()!)">Open Conversations</button>
+      <div class="flex gap-2 pt-2">
+        <button class="drawer-link-btn" (click)="goToAlertsByContact(selectedContact()!)">
+          <i class="pi pi-search mr-2"></i>
+          Network Forensics
+        </button>
+        <button class="drawer-link-btn" (click)="goToConversationsForContact(selectedContact()!)">
+          <i class="pi pi-comments mr-2"></i>
+          Full Transcript
+        </button>
       </div>
     </div>
   }

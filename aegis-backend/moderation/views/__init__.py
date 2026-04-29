@@ -14,7 +14,9 @@ from moderation.views.webhook import webhook_messages
 # Admin endpoints
 from moderation.views.admin_views import (
     alert_list,
+    resolve_alert,
     review_queue_list,
+    review_queue_stats,
     human_override,
     admin_user_detail,
     admin_user_list,
@@ -26,6 +28,7 @@ from moderation.views.admin_views import (
     activity_feed,
     admin_risk_profiles,
     admin_settings,
+    admin_children,
 )
 
 # Auth + WhatsApp setup

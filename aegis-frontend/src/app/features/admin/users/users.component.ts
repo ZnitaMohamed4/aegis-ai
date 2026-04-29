@@ -6,7 +6,7 @@ import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 import { RouterLink } from '@angular/router';
 import { getRiskHex } from '@shared/utils/severity.utils';
-import { AccountStatus, ParentUser, MOCK_USERS } from './users.data';
+import { AccountStatus, ParentUser } from './users.data';
 import { ApiService } from '@core/services/api.service';
 
 @Component({
@@ -51,19 +51,22 @@ export class UsersComponent implements OnInit {
   };
 
   users = signal<ParentUser[]>([]);
+  loadError = signal(false);
 
   ngOnInit() {
+    this.loadError.set(false);
     this.apiService.getAdminUsers().subscribe({
       next: (data) => {
         this.users.set(data);
       },
       error: (err) => {
-        console.error('Failed to load admin users from backend, falling back to mock data.', err);
-        this.users.set(MOCK_USERS);
+        console.error('Failed to load admin users from backend.', err);
+        this.loadError.set(true);
+        this.users.set([]);
         this.messageService.add({
-          severity: 'warn',
-          summary: 'Offline Mode',
-          detail: 'Showing mock users because backend connection failed.'
+          severity: 'error',
+          summary: 'Connection Failed',
+          detail: 'Could not load users from the backend. Please check your connection.'
         });
       }
     });
@@ -197,24 +200,21 @@ export class UsersComponent implements OnInit {
   }
 
   toggleMonitoring(user: ParentUser) {
-    this.users.update(list =>
-      list.map(u => u.id === user.id
-        ? { ...u, monitoring_active: !u.monitoring_active }
-        : u
-      )
-    );
-    if (this.selectedUser()?.id === user.id) {
-      this.selectedUser.update(u => u ? { ...u, monitoring_active: !u.monitoring_active } : u);
-    }
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Not Available Yet',
+      detail: 'Monitoring toggle requires a backend endpoint that is under development.',
+      life: 3000
+    });
   }
 
   toggleStatus(user: ParentUser) {
-    this.users.update(list =>
-      list.map(u => u.id === user.id
-        ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' }
-        : u
-      )
-    );
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Not Available Yet',
+      detail: 'Account status toggle requires a backend endpoint that is under development.',
+      life: 3000
+    });
   }
 
   getStatusClass(status: AccountStatus): string {

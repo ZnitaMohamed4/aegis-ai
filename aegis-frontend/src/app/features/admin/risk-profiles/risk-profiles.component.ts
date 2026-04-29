@@ -7,6 +7,11 @@ import { getRiskHex } from '@shared/utils/severity.utils';
 import { RiskLevel, ChildProfile, ContactProfile, RiskSnapshot } from '@core/models';
 import { ApiService } from '@core/services/api.service';
 
+interface CategoryEntry {
+  key: string;
+  count: number;
+}
+
 @Component({
   selector: 'app-risk-profiles',
   standalone: true,
@@ -92,19 +97,37 @@ export class RiskProfilesComponent implements OnInit {
     return map[archetype] || '#94A3B8';
   }
 
+  getArchetypeIcon(archetype: string): string {
+    const map: Record<string, string> = {
+      'Normal User': 'pi-check-circle',
+      'Troll Pattern': 'pi-comment',
+      'Bully Pattern': 'pi-bolt',
+      'Groomer Pattern': 'pi-eye'
+    };
+    return map[archetype] || 'pi-question-circle';
+  }
+
   getTrendChart(trend: number[], level: RiskLevel) {
     const color = this.getChartColor(level);
+    const labels = trend.map((_, i) => {
+      const offset = trend.length - 1 - i;
+      return offset === 0 ? 'Today' : `D-${offset}`;
+    });
+
     return {
-      labels: ['D-6', 'D-5', 'D-4', 'D-3', 'D-2', 'D-1', 'Today'],
+      labels: labels,
       datasets: [{
         data: trend,
         borderColor: color,
         backgroundColor: color + '22',
         fill: true,
-        tension: 0.35,
-        pointRadius: 3,
-        pointHoverRadius: 5,
-        borderWidth: 2
+        tension: 0.4,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 3,
+        pointBackgroundColor: color,
+        pointBorderColor: '#fff',
+        pointBorderWidth: 2
       }]
     };
   }
@@ -112,10 +135,32 @@ export class RiskProfilesComponent implements OnInit {
   trendOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
+    plugins: { 
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+        titleFont: { size: 11, weight: 'bold' },
+        bodyFont: { size: 12 },
+        padding: 10,
+        cornerRadius: 8,
+        displayColors: false
+      }
+    },
     scales: {
-      x: { ticks: { color: '#94A3B8', font: { size: 10 } }, grid: { color: '#47556922' } },
-      y: { min: 0, max: 1, ticks: { color: '#94A3B8', font: { size: 10 } }, grid: { color: '#47556922' } }
+      x: { 
+        ticks: { color: '#94A3B8', font: { size: 9, weight: '600' } }, 
+        grid: { display: false } 
+      },
+      y: { 
+        min: 0, 
+        max: 1, 
+        ticks: { 
+          color: '#94A3B8', 
+          font: { size: 9 },
+          callback: (value: any) => (value * 100).toFixed(0) + '%'
+        }, 
+        grid: { color: 'rgba(148, 163, 184, 0.1)', borderDash: [4, 4] } 
+      }
     }
   };
 
@@ -197,8 +242,10 @@ export class RiskProfilesComponent implements OnInit {
     return trend[trend.length - 1] - trend[trend.length - 2];
   }
 
-  ageFromBirthDate(date: string): number {
+  ageFromBirthDate(date: string): number | string {
+    if (!date) return 'N/A';
     const dob = new Date(date);
+    if (isNaN(dob.getTime())) return 'N/A';
     const now = new Date();
     let age = now.getFullYear() - dob.getFullYear();
     const m = now.getMonth() - dob.getMonth();
@@ -206,6 +253,28 @@ export class RiskProfilesComponent implements OnInit {
       age--;
     }
     return age;
+  }
+
+  formatDate(isoDate: string): string {
+    if (!isoDate) return 'N/A';
+    const d = new Date(isoDate);
+    if (isNaN(d.getTime())) return isoDate; // Already formatted
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  timeAgo(isoDate: string): string {
+    if (!isoDate) return 'N/A';
+    const d = new Date(isoDate);
+    if (isNaN(d.getTime())) return isoDate;
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days}d ago`;
   }
 
   getRiskSpikes(snapshots: RiskSnapshot[]): RiskSnapshot[] {
@@ -217,6 +286,20 @@ export class RiskProfilesComponent implements OnInit {
       }
     }
     return spikes;
+  }
+
+  /** Get threat contacts that target a specific child */
+  getChildThreats(child: ChildProfile): ContactProfile[] {
+    return this.contacts()
+      .filter(c => c.related_child_ids.includes(child.id))
+      .sort((a, b) => b.threat_score - a.threat_score)
+      .slice(0, 5);
+  }
+
+  /** Get the max count in a category breakdown for proportional bar widths */
+  getMaxCategoryCount(breakdown: Record<string, number>): number {
+    const values = Object.values(breakdown || {});
+    return values.length > 0 ? Math.max(...values) : 1;
   }
 
   getSharedSuspiciousContacts(childA: ChildProfile, childB: ChildProfile): ContactProfile[] {
@@ -265,5 +348,17 @@ export class RiskProfilesComponent implements OnInit {
 
   schoolClusterCount(school: string): number {
     return this.children().filter(c => c.nom_ecole === school).length;
+  }
+
+  getCategoryEntries(breakdown: Record<string, number>): CategoryEntry[] {
+    if (!breakdown) return [];
+    return Object.entries(breakdown)
+      .map(([key, count]) => ({ key, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  /** Format category key for display: 'verbal_harassment' -> 'Verbal Harassment' */
+  formatCategoryLabel(key: string): string {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 }

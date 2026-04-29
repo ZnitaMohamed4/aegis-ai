@@ -18,6 +18,7 @@ export interface DashboardStatsResponse {
       agent_4: number;
       agent_5: number;
     };
+    evolution_api_online: boolean;
   };
   category_breakdown: Record<string, number>;
   weekly_activity: { day: string; blocked: number; warned: number; safe: number }[];
@@ -87,8 +88,17 @@ export class ApiService {
   }
 
   /** Fetches the recent alerts history (admin — all data). */
-  getAlerts(): Observable<any[]> {
-    return this.http.get<any[]>(`${this.BASE_URL}/alerts/`);
+  getAlerts(senderJid?: string): Observable<any[]> {
+    let url = `${this.BASE_URL}/alerts/`;
+    if (senderJid) {
+      url += `?sender_jid=${encodeURIComponent(senderJid)}`;
+    }
+    return this.http.get<any[]>(url);
+  }
+
+  /** Resolves an alert */
+  resolveAlert(id: string): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/alerts/${id}/resolve/`, {});
   }
 
   /** Fetches the queue of items awaiting human review. */
@@ -99,6 +109,10 @@ export class ApiService {
   /** Submits a human override decision and class label. */
   humanOverride(id: string, decision: string, label: string, note: string = ''): Observable<any> {
     return this.http.post<any>(`${this.BASE_URL}/review/${id}/override/`, { decision, label, note });
+  }
+
+  getReviewStats(): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/review/stats/`);
   }
 
   /** Flags an existing message for human review. */
@@ -134,6 +148,11 @@ export class ApiService {
   /** Fetches all risk profiles (children and contacts) across the platform. */
   getAdminRiskProfiles(): Observable<{children: any[], contacts: any[]}> {
     return this.http.get<{children: any[], contacts: any[]}>(`${this.BASE_URL}/admin/risk-profiles/`);
+  }
+
+  /** Fetches all monitored children with real IDs for report generation. */
+  getAdminChildren(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.BASE_URL}/admin/children/`);
   }
 
   /** Updates the currently authenticated user's account details. */

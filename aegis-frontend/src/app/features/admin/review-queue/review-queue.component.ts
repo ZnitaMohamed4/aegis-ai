@@ -90,6 +90,8 @@ export class ReviewQueueComponent implements OnInit, OnDestroy {
     });
   }
 
+  // Removed loadStats() as the stats are session-only and start at 0
+
   private syncOverrides(data: any[]) {
     const overrides: any = {};
     for (const item of data) {

@@ -7,6 +7,14 @@
       <p class="page-subtitle">System overview — real-time monitoring</p>
     </div>
     <div class="header-meta">
+      <div class="api-status" [class.status-online]="isEvolutionOnline" [class.status-offline]="!isEvolutionOnline">
+        <i class="pi pi-whatsapp"></i>
+        <span>WhatsApp Bridge</span>
+        <span class="status-badge" [style.color]="isEvolutionOnline ? 'var(--low)' : 'var(--critical)'">
+          {{ isEvolutionOnline ? 'ONLINE' : 'OFFLINE' }}
+        </span>
+      </div>
+
       <span class="live-indicator">
         <span class="live-dot"></span>
         Live
@@ -175,15 +183,15 @@
     </div>
   </div>
 
-  <!-- Top At-Risk Children -->
+  <!-- Top Threat Contacts -->
   <div class="panel panel-wide">
     <div class="panel-header">
-      <span class="panel-title">Top At-Risk Children</span>
+      <span class="panel-title">Top Threat Contacts</span>
       <a class="panel-link" routerLink="/admin/risk-profiles">View all →</a>
     </div>
     <div class="risk-table">
       <div class="risk-table-header">
-        <span>Child</span>
+        <span>Contact</span>
         <span>Risk Score</span>
         <span>Blocked Today</span>
         <span>Last Incident</span>

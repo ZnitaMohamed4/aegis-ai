@@ -458,13 +458,28 @@ def parent_risk_profile(request):
         for p in risky:
             if p.risk_score > 0:
                 max_actor_risk = max(max_actor_risk, p.risk_score)
+                
+                # Fetch recent name to determine if stranger
+                contact_results = all_results.filter(sender_jid=p.user_jid)
+                recent_name_result = contact_results.exclude(sender_name__isnull=True).exclude(sender_name='').order_by('-created_at').first()
+                push_name = recent_name_result.sender_name if recent_name_result else ""
+                
+                raw_num = p.user_jid.split('@')[0]
+                formatted_number = f"+{raw_num[:3]} {raw_num[3:]}" if len(raw_num) > 4 else f"+{raw_num}"
+                days_known = (timezone.now() - p.first_seen_at).days if p.first_seen_at else 0
+                is_stranger = days_known < 14
+                display_name = push_name if not is_stranger else "Unknown Contact"
+
                 threat_actors.append({
                     "id": str(p.id),
-                    "name": p.user_jid,
-                    "number": p.user_jid,
+                    "name": display_name,
+                    "number": formatted_number,
                     "score": p.risk_score,
                     "level": p.risk_level.lower(),
-                    "patterns": ["Frequent violations" if p.total_blocked_messages_sent > 3 else "Policy violation"]
+                    "child_initiated": p.child_initiated,
+                    "night_activity": p.night_activity_ratio,
+                    "is_stranger": is_stranger,
+                    "archetype": "Suspicious Activity" # Generic for parents
                 })
                 
     # Recalculate robust risk level based on actual messages matching parent_q (even if child object is missing)

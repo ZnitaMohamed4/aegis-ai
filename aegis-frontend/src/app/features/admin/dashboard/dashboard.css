@@ -54,6 +54,45 @@
   50% { opacity: 0.5; transform: scale(0.8); }
 }
 
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.api-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.api-status i {
+  font-size: 0.9rem;
+  color: #25D366;
+}
+
+.api-status.status-offline i {
+  color: var(--critical);
+}
+
+.status-badge {
+  background: var(--bg-base);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  border: 1px solid var(--border);
+}
+
 /* Stats Grid */
 .stats-grid {
   display: grid;

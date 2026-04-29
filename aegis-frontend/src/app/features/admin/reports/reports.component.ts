@@ -6,6 +6,8 @@ import { ReportCardComponent } from '@shared/index';
 import { ReportStatus, ReportType, Report, DeliveryChannel } from '@core/models';
 import { ReportService } from '@core/services/report.service';
 import { ApiService } from '@core/services/api.service';
+import { AlertService } from '@core/services/alert.service';
+import { Subscription } from 'rxjs';
 
 interface ChildOption {
   id: string;
@@ -22,7 +24,8 @@ interface ChildOption {
 export class AdminReportsComponent implements OnInit, OnDestroy {
   private reportService = inject(ReportService);
   private apiService = inject(ApiService);
-  private pollInterval: any;
+  private alertService = inject(AlertService);
+  private wsSub?: Subscription;
 
   requestDrawerVisible = signal(false);
   isGenerating = signal(false);
@@ -32,7 +35,7 @@ export class AdminReportsComponent implements OnInit, OnDestroy {
     child_id: '',
     period_start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     period_end: new Date().toISOString().split('T')[0],
-    report_type: 'intelligence' as ReportType,
+    report_type: 'summary' as ReportType,
     delivery_channel: 'dashboard' as DeliveryChannel
   });
 
@@ -45,7 +48,7 @@ export class AdminReportsComponent implements OnInit, OnDestroy {
   totalCount = computed(() => this.reports().length);
   readyCount = computed(() => this.reports().filter(r => r.status === 'ready').length);
   generatingCount = computed(() => this.reports().filter(r => r.status === 'generating').length);
-  legalCount = computed(() => this.reports().filter(r => r.flagged_legal).length);
+  failedCount = computed(() => this.reports().filter(r => r.status === 'failed').length);
 
   filteredReports = computed(() =>
     this.reports().filter(r => {
@@ -58,21 +61,21 @@ export class AdminReportsComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.loadReports();
     this.loadChildren();
-    this.startPolling();
+    this.subscribeToWS();
   }
 
   ngOnDestroy() {
-    if (this.pollInterval) clearInterval(this.pollInterval);
+    this.wsSub?.unsubscribe();
   }
 
-  startPolling() {
-    this.pollInterval = setInterval(() => {
-      if (this.reports().some(r => r.status === 'generating')) {
-        this.reportService.getAdminReports().subscribe({
-          next: (data) => this.reports.set(data)
-        });
+  /** Subscribe to WebSocket for REPORT_READY events instead of polling */
+  subscribeToWS() {
+    this.wsSub = this.alertService.alerts$.subscribe((event: any) => {
+      if (event.event === 'REPORT_READY' || event.type === 'REPORT_READY') {
+        console.log('[AEGIS] Report ready via WebSocket, refreshing list.');
+        this.loadReports();
       }
-    }, 4000);
+    });
   }
 
   loadReports() {
@@ -83,18 +86,13 @@ export class AdminReportsComponent implements OnInit, OnDestroy {
   }
 
   loadChildren() {
-    // Fetch children list from admin users endpoint for the dropdown
-    this.apiService.getAdminUsers().subscribe({
-      next: (users: any[]) => {
-        const childList: ChildOption[] = [];
-        for (const user of users) {
-          if (user.linked_child) {
-            childList.push({
-              id: user.id,
-              name: `${user.linked_child.identifier} (${user.full_name})`
-            });
-          }
-        }
+    // Use the dedicated admin/children/ endpoint for real MonitoredChild.id values
+    this.apiService.getAdminChildren().subscribe({
+      next: (children: any[]) => {
+        const childList: ChildOption[] = children.map(c => ({
+          id: c.id,
+          name: `${c.full_name}${c.parent_name ? ' (' + c.parent_name + ')' : ''}`
+        }));
         this.children.set(childList);
       },
       error: () => {} // Non-critical, dropdown will just show "All Children"

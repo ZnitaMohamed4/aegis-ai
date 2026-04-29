@@ -27,4 +27,5 @@ export interface MockAlert {
   is_resolved: boolean;
   sent_at: string;
   language: string;
+  contact_number?: string;
 }

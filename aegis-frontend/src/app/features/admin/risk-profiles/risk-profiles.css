@@ -1,167 +1,284 @@
-.table-link-btn {
-  font-size: 0.7rem;
-  font-weight: 600;
+.risk-summary-card {
+  padding: 0.75rem 1.25rem;
+  border-radius: 1rem;
+  min-width: 140px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface-2);
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   color: var(--text-muted);
-  background: transparent;
-  border-radius: 0.4rem;
-  padding: 0.2rem 0.45rem;
+  background: var(--bg-surface);
   cursor: pointer;
+  transition: all 0.2s;
 }
 
-.table-link-btn:hover {
-  color: var(--accent);
+.icon-btn:hover {
   border-color: var(--accent);
+  color: var(--accent);
+  transform: translateY(-2px);
 }
 
-.drawer-action-btn {
+.primary-btn-sm {
   font-size: 0.72rem;
-  font-weight: 700;
-  border: 1px solid var(--accent);
-  color: var(--accent);
-  background: var(--accent-subtle);
-  border-radius: 0.45rem;
-  padding: 0.35rem 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  background: var(--accent);
+  color: white;
+  border: none;
   cursor: pointer;
+  box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.25);
+  transition: all 0.2s;
+}
+
+.primary-btn-sm:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.35);
+}
+
+.cat-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.75rem;
+  border-radius: 2rem;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+}
+
+.cat-pill span:first-child {
+  font-weight: 600;
+}
+
+.cat-pill span:last-child {
+  background: var(--bg-surface);
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
 }
 
 .cluster-alert {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.08);
+  gap: 0.75rem;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
   color: var(--critical);
-  border-radius: 0.6rem;
-  padding: 0.6rem 0.75rem;
-  font-size: 0.78rem;
+  border-radius: 1rem;
+  padding: 0.85rem 1.25rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .cluster-clickable {
   width: 100%;
   cursor: pointer;
   text-align: left;
+  transition: transform 0.2s;
+}
+
+.cluster-clickable:hover {
+  transform: translateY(-2px);
 }
 
 .cluster-amber {
-  border-color: rgba(255, 176, 32, 0.4);
-  background: rgba(255, 176, 32, 0.12);
+  border-color: rgba(255, 176, 32, 0.5);
+  background: linear-gradient(135deg, rgba(255, 176, 32, 0.2), rgba(255, 176, 32, 0.05));
   color: #ffb020;
 }
 
 .cluster-red {
-  border-color: rgba(239, 68, 68, 0.42);
-  background: rgba(239, 68, 68, 0.10);
+  border-color: rgba(239, 68, 68, 0.6);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.05));
   color: var(--critical);
-}
-
-.cluster-banner {
-  border-color: rgba(239, 68, 68, 0.55);
-  background: rgba(239, 68, 68, 0.18);
-  color: #ffe2e2;
-  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.45);
 }
 
 .cluster-details {
   border: 1px solid var(--border);
-  border-radius: 0.6rem;
+  border-radius: 1rem;
   background: var(--bg-surface-2);
-  padding: 0.5rem;
+  padding: 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.5rem;
 }
 
 .cluster-child-row {
   display: flex;
   justify-content: space-between;
-  gap: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.45rem 0.55rem;
-  background: var(--bg-surface);
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 0.25rem;
+}
+
+.cluster-child-row:last-child {
+  border-bottom: none;
 }
 
 .shared-contact-tag {
   display: inline-block;
   margin-left: 0.35rem;
-  margin-top: 0.2rem;
-  padding: 0.1rem 0.3rem;
-  border-radius: 0.3rem;
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.12);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.4rem;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.15);
   font-family: 'JetBrains Mono', monospace;
-}
-
-.spike-row {
-  width: 100%;
-  border: 1px solid rgba(255, 176, 32, 0.35);
-  background: rgba(255, 176, 32, 0.10);
-  color: var(--text-primary);
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.65rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.76rem;
-  cursor: pointer;
-}
-
-.spike-row:hover {
-  border-color: rgba(255, 176, 32, 0.5);
+  font-weight: 700;
 }
 
 .metric-box {
   border: 1px solid var(--border);
-  border-radius: 0.6rem;
-  padding: 0.65rem 0.75rem;
-  background: var(--bg-surface-2);
+  border-radius: 1.25rem;
+  padding: 1rem;
+  box-shadow: inset 0 0 12px rgba(0,0,0,0.05);
 }
 
 .metric-label {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
+  font-weight: 800;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.02em;
-  margin-bottom: 0.15rem;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.35rem;
 }
 
 .metric-value {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 1.05rem;
-  font-weight: 700;
+  font-size: 1.4rem;
+  font-weight: 800;
   color: var(--text-primary);
-}
-
-.cat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border: 1px solid var(--border);
-  background: var(--bg-surface-2);
-  border-radius: 0.45rem;
-  padding: 0.4rem 0.55rem;
-  font-size: 0.78rem;
-  color: var(--text-primary);
-}
-
-.cat-row strong {
-  font-family: 'JetBrains Mono', monospace;
 }
 
 .drawer-link-btn {
   flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border);
   color: var(--text-primary);
-  background: transparent;
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.6rem;
-  font-size: 0.76rem;
-  font-weight: 600;
+  background: var(--bg-surface-2);
+  border-radius: 1rem;
+  padding: 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 700;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .drawer-link-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-subtle);
+  transform: translateY(-2px);
 }
+
+::ng-deep .p-dialog {
+  border-radius: 1.5rem !important;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0,0,0,0.3) !important;
+}
+
+::ng-deep .p-dialog-header {
+  background: var(--bg-surface-2) !important;
+  border-bottom: 1px solid var(--border) !important;
+  padding: 1.25rem 1.5rem !important;
+}
+
+::ng-deep .p-dialog-content {
+  background: var(--bg-surface) !important;
+  padding: 1.5rem !important;
+  overflow-y: auto !important;
+}
+
+/* ── Risk Gauge Hero ─────────────────── */
+.risk-gauge-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid;
+  border-radius: 1.5rem;
+  padding: 1.5rem 2rem;
+  min-width: 160px;
+  text-align: center;
+}
+
+/* ── KPI Exposure Strip ──────────────── */
+.kpi-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 0.6rem 0.25rem;
+  transition: transform 0.2s, border-color 0.2s;
+}
+
+.kpi-pill:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+}
+
+.kpi-icon {
+  font-size: 0.75rem;
+  opacity: 0.85;
+}
+
+.kpi-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+}
+
+.kpi-lbl {
+  font-size: 0.55rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+/* ── Threat Actor Rows ───────────────── */
+.threat-actor-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.threat-actor-row:hover {
+  border-color: var(--accent);
+  transform: translateX(4px);
+  background: color-mix(in srgb, var(--bg-surface-2) 90%, var(--accent) 10%);
+}
+

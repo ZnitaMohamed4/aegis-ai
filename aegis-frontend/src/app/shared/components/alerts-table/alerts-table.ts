@@ -25,6 +25,7 @@ export class AlertsTableComponent implements OnInit {
   selectedSeverity = signal<string>('all');
   selectedDecision = signal<string>('all');
   selectedCategory = signal<string>('all');
+  selectedStatus = signal<string>('open'); // Default to open
   selectedAlert = signal<MockAlert | null>(null);
   drawerVisible = signal(false);
   visibleCount = signal(PAGE_SIZE);
@@ -41,21 +42,24 @@ export class AlertsTableComponent implements OnInit {
     { label: 'Discrimination', value: 'discrimination' },
     { label: 'Verbal', value: 'verbal_harassment' },
   ];
+  statusFilters = ['all', 'open', 'resolved'];
 
   filteredAlerts = computed(() => {
     const q = this.searchQuery().toLowerCase();
     const sev = this.selectedSeverity();
     const dec = this.selectedDecision();
     const cat = this.selectedCategory();
+    const stat = this.selectedStatus();
 
     return this.alerts().filter(alert => {
       const matchesSeverity = sev === 'all' || alert.severity === sev;
       const matchesDecision = dec === 'all' || alert.decision === dec;
       const matchesCategory = cat === 'all' || (alert.category || '').replace(/ /g, '_') === cat;
+      const matchesStatus = stat === 'all' || (stat === 'open' && !alert.is_resolved) || (stat === 'resolved' && alert.is_resolved);
       const matchesSearch = !q
         || alert.preview.toLowerCase().includes(q)
         || (alert.category || '').toLowerCase().includes(q);
-      return matchesSeverity && matchesDecision && matchesCategory && matchesSearch;
+      return matchesSeverity && matchesDecision && matchesCategory && matchesStatus && matchesSearch;
     });
   });
 

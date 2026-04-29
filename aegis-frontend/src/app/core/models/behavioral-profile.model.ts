@@ -27,12 +27,7 @@ export interface RiskSnapshot {
   alert_id: string | null;
 }
 
-export interface CategoryBreakdown {
-  verbal: number;
-  threat: number;
-  sexual: number;
-  discrimination: number;
-}
+export type CategoryBreakdown = Record<string, number>;
 
 export interface ChildProfile {
   id: string;
@@ -74,6 +69,8 @@ export interface ContactProfile {
   avg_toxicity: number;
   repeated_targeting: boolean;
   targets_count: number;
+  is_stranger?: boolean;
+  child_initiated?: boolean;
   nombre_cibles_differentes: number;
   other_monitored_children_count: number;
   dominant_category: string;
