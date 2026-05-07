@@ -14,7 +14,8 @@ import { CommonModule } from '@angular/common';
   styleUrl: './shell.css'
 })
 export class ShellComponent {
-  sidebarCollapsed = false;
+  sidebarCollapsed = true;   // Always start collapsed
+  sidebarHovered = false;    // Tracks mouse hover on sidebar
   mobileSidebarOpen = false;
   isMobile = window.innerWidth <= 640;
 
@@ -38,11 +39,30 @@ export class ShellComponent {
     });
   }
 
+  /** Sidebar is visually collapsed only when not hovered */
+  get effectiveCollapsed(): boolean {
+    return this.sidebarCollapsed && !this.sidebarHovered;
+  }
+
+  onSidebarEnter() {
+    if (!this.isMobile) {
+      this.sidebarHovered = true;
+    }
+  }
+
+  onSidebarLeave() {
+    if (!this.isMobile) {
+      this.sidebarHovered = false;
+    }
+  }
+
   toggleSidebar() {
     if (window.innerWidth <= 640) {
       this.mobileSidebarOpen = !this.mobileSidebarOpen;
     } else {
+      // On desktop: toggle pins the sidebar open/closed
       this.sidebarCollapsed = !this.sidebarCollapsed;
+      this.sidebarHovered = false;
     }
     // Trigger resize after sidebar transition so charts recalculate
     setTimeout(() => window.dispatchEvent(new Event('resize')), 320);

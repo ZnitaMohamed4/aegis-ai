@@ -86,7 +86,7 @@
           <!-- Top Row: Time & Reason -->
           <div class="flex justify-between items-center mb-3">
             <div class="text-xs text-[var(--text-muted)] font-mono">
-              From: <span class="font-bold text-[var(--text-primary)]">{{ item.contact_number }}</span> · {{ formatTime(item.submitted_at) }}
+              From: <span class="font-bold text-[var(--text-primary)]">{{ item.contact_number | whatsappJid }}</span> · {{ formatTime(item.submitted_at) }}
             </div>
             <div class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider font-mono border"
                  [ngClass]="{

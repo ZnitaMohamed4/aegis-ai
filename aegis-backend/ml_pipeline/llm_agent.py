@@ -4,7 +4,7 @@ import logging
 from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import create_react_agent
-from .agent_tools import fetch_recent_history, search_similar_cases
+from .agent_tools import fetch_recent_history, search_similar_cases, fetch_risk_profile
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +61,12 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     Classify the MESSAGE in context. A message that seems harmless alone can be a grooming step in a sequence.
 
     --- TOOL USAGE ---
+    - Call `fetch_risk_profile` FIRST if the message is ambiguous, the sender is unknown, or ANY grooming signal exists. This gives you the sender's Digital Twin: risk level, archetype (Groomer/Bully/Troll), and Bayesian evidence.
     - Call `fetch_recent_history` if the message is ambiguous OR if ANY prior grooming signal exists.
     - Call `search_similar_cases` only if uncertainty remains after history.
     - Skip tools for obvious cases (clear threats, clear greetings).
-    - GROOMING EXCEPTION: If this message contains ANY grooming indicator (Rule 1), ALWAYS call fetch_recent_history regardless of confidence — grooming operates across multiple messages.
+    - GROOMING EXCEPTION: If this message contains ANY grooming indicator (Rule 1), ALWAYS call fetch_risk_profile AND fetch_recent_history — grooming operates across multiple messages.
+    - RISK-AWARE JUDGMENT: If fetch_risk_profile returns a CRITICAL or HIGH risk sender, treat ambiguous messages with maximum suspicion. A low-toxicity message from a CRITICAL Groomer Pattern sender is NOT safe.
 
     --- PRIORITY RULES (top → bottom, stop at first match) ---
 
@@ -120,7 +122,7 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     --- OUTPUT (STRICT JSON ONLY, no preamble) ---
     {{"decision": "BLOCK|WARN|ALLOW|HUMAN_REVIEW", "category": "<category>", "explanation": "<12 words max>"}}"""
 
-    tools = [fetch_recent_history, search_similar_cases]
+    tools = [fetch_risk_profile, fetch_recent_history, search_similar_cases]
     agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))
 
     try:

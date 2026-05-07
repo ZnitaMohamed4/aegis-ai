@@ -145,6 +145,11 @@ export class ApiService {
     return this.http.get<{contacts: any[], messages: Record<string, any[]>}>(`${this.BASE_URL}/admin/conversations/`);
   }
 
+  /** Fetches historical analytics aggregated for the dashboard. */
+  getAdminAnalytics(range: '7D' | '30D'): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/admin/analytics/?range=${range}`);
+  }
+
   /** Fetches all risk profiles (children and contacts) across the platform. */
   getAdminRiskProfiles(): Observable<{children: any[], contacts: any[]}> {
     return this.http.get<{children: any[], contacts: any[]}>(`${this.BASE_URL}/admin/risk-profiles/`);
@@ -153,6 +158,16 @@ export class ApiService {
   /** Fetches all monitored children with real IDs for report generation. */
   getAdminChildren(): Observable<any[]> {
     return this.http.get<any[]>(`${this.BASE_URL}/admin/children/`);
+  }
+
+  /** Fetches all channels/instances currently connected (monitoring dashboard). */
+  getAdminChannels(): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/admin/channels/`);
+  }
+
+  /** Force-disconnects/deletes a channel instance (emergency admin override). */
+  deleteAdminChannel(instanceId: string): Observable<any> {
+    return this.http.delete<any>(`${this.BASE_URL}/admin/channels/${instanceId}/`);
   }
 
   /** Updates the currently authenticated user's account details. */
@@ -168,6 +183,21 @@ export class ApiService {
   /** Updates global platform settings. */
   updateSystemSettings(payload: any): Observable<any> {
     return this.http.put<any>(`${this.BASE_URL}/admin/settings/`, payload);
+  }
+
+  /** Tests the LLM connection by pinging the configured provider. */
+  testLlmConnection(): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/admin/test-llm/`, {});
+  }
+
+  /** Runs a message through the real AI pipeline without persisting. */
+  simulateMessage(text: string, language: string): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/admin/simulate/`, { text, language });
+  }
+
+  /** Fetches live agent latencies from Redis. */
+  getAgentLatencies(): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/admin/agent-latencies/`);
   }
 
   // ════════════════════════════════════════════════════════════════

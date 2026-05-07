@@ -106,6 +106,16 @@ export class AiConfigComponent implements OnInit {
       },
       error: () => console.error("Could not fetch PlatformSettings")
     });
+
+    // Load live agent latencies from Redis
+    this.apiService.getAgentLatencies().subscribe({
+      next: (lat) => {
+        this.agents.update(list => list.map(a => ({
+          ...a,
+          latencyMs: lat[`agent_${a.id}`] ?? a.latencyMs
+        })));
+      }
+    });
   }
 
   private saveSettingsToBackend(): void {
@@ -165,32 +175,28 @@ export class AiConfigComponent implements OnInit {
   }
 
   testConnection(): void {
-    const key = this.apiKey().trim();
-    if (key.length > 10 && key.includes('-')) {
-      this.connectionResult.set({ ok: true, message: 'Connected - response time 340ms' });
-      return;
-    }
-    this.connectionResult.set({ ok: false, message: 'Failed - invalid API key' });
+    this.connectionResult.set(null);
+    this.apiService.testLlmConnection().subscribe({
+      next: (res) => this.connectionResult.set({ ok: res.ok, message: res.message }),
+      error: () => this.connectionResult.set({ ok: false, message: 'Network error — backend unreachable' })
+    });
   }
 
   runSimulation(): void {
-    const text = this.simulationMessage().trim().toLowerCase();
+    const text = this.simulationMessage().trim();
     if (!text) return;
-    const sample = SIMULATION_SAMPLES.find((s) => text.includes(s.text));
-    const detected = this.simulationLanguage() === 'auto' ? this.detectLanguage(text) : this.simulationLanguage();
-    const toxicity = sample?.toxicity ?? (text.includes('kill') || text.includes('hate') ? 0.86 : 0.31);
-    const behavioral = sample?.behavioral ?? this.clamp(toxicity - 0.05, 0.05, 0.98);
-    const llmTriggered = toxicity >= this.boundaries().review;
-    const finalScore = this.clamp(toxicity * 0.65 + behavioral * 0.35 + (llmTriggered ? 0.03 : 0), 0, 1);
-    const decision = this.decisionByScore(finalScore);
-    this.simulationResult.set({
-      detectedLanguage: detected,
-      toxicityScore: toxicity,
-      llmTriggered,
-      behavioralScore: behavioral,
-      finalScore,
-      decision,
-      explanation: sample?.explanation ?? 'Signal blend generated from toxicity and behavioral models.',
+    this.simulationResult.set(null);
+    this.apiService.simulateMessage(text, this.simulationLanguage()).subscribe({
+      next: (res) => this.simulationResult.set({
+        detectedLanguage: res.language || 'en',
+        toxicityScore: res.toxicity_score,
+        llmTriggered: res.llm_triggered,
+        behavioralScore: res.behavioral_risk_score || 0,
+        finalScore: res.final_score,
+        decision: res.decision?.toLowerCase(),
+        explanation: res.llm_explanation || res.explanation || 'Pipeline analysis complete.',
+      }),
+      error: () => this.messageService.add({ severity: 'error', summary: 'Simulation Failed', detail: 'Could not reach the pipeline' })
     });
   }
 

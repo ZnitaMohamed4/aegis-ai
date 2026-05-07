@@ -17,11 +17,12 @@ import { AlertService, WebSocketAlertPayload } from '@core/services/alert.servic
 import { Subscription } from 'rxjs';
 import { ChangeDetectorRef } from '@angular/core';
 import { MessageService } from 'primeng/api';
+import { WhatsappJidPipe } from '@shared/pipes/whatsapp-jid.pipe';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, ChartModule, SkeletonModule, DialogModule],
+  imports: [CommonModule, RouterLink, ChartModule, SkeletonModule, DialogModule, WhatsappJidPipe],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })

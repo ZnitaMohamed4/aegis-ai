@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ThemeService } from '../../../core/services/theme.service';
 import { THEME_PRESETS, type ThemePreset } from '../../admin/settings/settings.data';
 import { AuthService } from '../../../core/services/auth.service';
+import { ApiService } from '../../../core/services/api.service';
 import { OnInit } from '@angular/core';
 
 // Reusable components
@@ -32,6 +33,7 @@ export class SettingsComponent implements OnInit {
   private themeService = inject(ThemeService);
   private messageService = inject(MessageService);
   private authService = inject(AuthService);
+  private apiService = inject(ApiService);
 
   // Theme State
   themePresets = THEME_PRESETS;
@@ -120,18 +122,47 @@ export class SettingsComponent implements OnInit {
       this.messageService.add({ severity: 'error', summary: 'Error', detail: 'New passwords do not match.' });
       return;
     }
-    
-    this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Password updated successfully.' });
-    this.togglePasswordForm();
+
+    this.apiService.updateCurrentUser({
+      password: this.passwordForm().newPassword,
+      current_password: this.passwordForm().currentPassword,
+    }).subscribe({
+      next: () => {
+        this.messageService.add({ severity: 'success', summary: 'Success', detail: 'Password updated successfully.' });
+        this.togglePasswordForm();
+      },
+      error: (err) => {
+        const detail = err?.error?.error || 'Failed to update password. Check your current password.';
+        this.messageService.add({ severity: 'error', summary: 'Error', detail, life: 4000 });
+      }
+    });
   }
 
-  // Save everything else
   saveSettings() {
-    // In a real app, you'd dispatch an update to a backend here
-    this.messageService.add({ 
-      severity: 'success', 
-      summary: 'Settings Saved', 
-      detail: 'Your preferences have been updated successfully.' 
+    const a = this.parentAccount();
+    const nameParts = a.displayName.split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    this.apiService.updateCurrentUser({
+      first_name: firstName,
+      last_name: lastName,
+      notification_email: a.email,
+    }).subscribe({
+      next: () => {
+        this.messageService.add({ 
+          severity: 'success', 
+          summary: 'Settings Saved', 
+          detail: 'Your preferences have been updated successfully.' 
+        });
+      },
+      error: () => {
+        this.messageService.add({ 
+          severity: 'error', 
+          summary: 'Save Failed', 
+          detail: 'Could not update your account settings.' 
+        });
+      }
     });
   }
 }

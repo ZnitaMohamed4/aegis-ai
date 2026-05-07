@@ -1,8 +1,12 @@
-<div class="shell" [class.sidebar-collapsed]="sidebarCollapsed" [class.sidebar-mobile-open]="mobileSidebarOpen">
+<div class="shell" [class.sidebar-collapsed]="effectiveCollapsed" [class.sidebar-mobile-open]="mobileSidebarOpen">
   @if (mobileSidebarOpen) {
     <div class="sidebar-overlay" (click)="mobileSidebarOpen = false"></div>
   }
-  <app-sidebar [collapsed]="sidebarCollapsed && !isMobile" />
+  <div class="sidebar-hover-zone"
+       (mouseenter)="onSidebarEnter()"
+       (mouseleave)="onSidebarLeave()">
+    <app-sidebar [collapsed]="effectiveCollapsed && !isMobile" />
+  </div>
   <div class="shell-main">
     <app-topbar (toggleSidebar)="toggleSidebar()" />
     <main class="shell-content">

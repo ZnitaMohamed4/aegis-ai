@@ -1,40 +1,102 @@
+<p-toast></p-toast>
 <div class="login-wrapper">
-  <div class="login-card">
-    <div class="login-header">
-      <div class="logo-mark">
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- LEFT PANEL — 60% -->
+  <div class="login-hero">
+    <div class="hero-brand">
+      <div class="hero-brand-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
       </div>
-      <h1 class="login-title">AegisAI</h1>
-      <p class="login-subtitle">Sign in to your account</p>
+      <div class="hero-brand-name">Aegis</div>
     </div>
-
-    <form (ngSubmit)="onSubmit()" class="login-form">
-      <div class="form-group">
-        <label for="username">Username</label>
-        <div class="input-wrapper">
-          <i class="pi pi-user input-icon"></i>
-          <input type="text" id="username" [(ngModel)]="username" name="username" class="form-control" placeholder="Enter your username" required>
+    
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    
+    <div class="hero-content">
+      
+      <h2 class="hero-title">Intelligent <span>Digital Safety</span></h2>
+      <p class="hero-subtitle">
+        Proactive AI moderation and behavioral threat detection for secure digital environments.
+      </p>
+      
+      <div class="hero-features">
+        <div class="feature-item">
+          <div class="feature-item-icon"><i class="pi pi-shield"></i></div>
+          <span>Multi-agent AI moderation</span>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-icon"><i class="pi pi-chart-line"></i></div>
+          <span>Bayesian behavioral profiling</span>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-icon"><i class="pi pi-bell"></i></div>
+          <span>Real-time threat alerts</span>
         </div>
       </div>
-
-      <div class="form-group">
-        <label for="password">Password</label>
-        <div class="input-wrapper">
-          <i class="pi pi-lock input-icon"></i>
-          <input type="password" id="password" [(ngModel)]="password" name="password" class="form-control" placeholder="Enter your password" required>
+    </div>
+  </div>
+  
+  <!-- RIGHT PANEL — 40% -->
+  <div class="login-panel">
+    <div class="login-card">
+      <div class="login-header">
+        <div class="login-logo-wrap">
+          <div class="logo-mark">
+            <div class="logo-ring"></div>
+            <div class="logo-ring-2"></div>
+            <div class="logo-core">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+          </div>
         </div>
+        <h1 class="login-title">Welcome back</h1>
+        <p class="login-subtitle">Secure access to Aegis</p>
       </div>
 
-      <div class="error-message" *ngIf="errorMessage">
-        <i class="pi pi-exclamation-circle"></i> {{ errorMessage }}
-      </div>
+      <form (ngSubmit)="onSubmit()" class="login-form">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <div class="input-wrapper">
+            <i class="pi pi-user input-icon"></i>
+            <input type="text" id="username" [(ngModel)]="username" name="username" class="form-control" placeholder="Enter your username" required>
+          </div>
+        </div>
 
-      <button type="submit" class="primary-btn" [disabled]="isLoading || !username || !password">
-        <i class="pi pi-spin pi-spinner" *ngIf="isLoading" style="margin-right: 0.5rem"></i>
-        {{ isLoading ? 'Authenticating...' : 'Sign In' }}
-      </button>
-    </form>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-wrapper">
+            <i class="pi pi-lock input-icon"></i>
+            <input type="password" id="password" [(ngModel)]="password" name="password" class="form-control" placeholder="Enter your password" required>
+          </div>
+        </div>
+
+        <div class="form-options">
+          <label class="remember-me">
+            <input type="checkbox" [(ngModel)]="rememberMe" name="rememberMe"> Remember me
+          </label>
+          <a href="#" (click)="forgotPassword($event)" class="forgot-password">Forgot password?</a>
+        </div>
+
+        <div class="error-message" *ngIf="errorMessage">
+          <i class="pi pi-exclamation-circle"></i> {{ errorMessage }}
+        </div>
+
+        <button type="submit" class="primary-btn" [disabled]="isLoading || !username || !password">
+          <i class="pi pi-spin pi-spinner" *ngIf="isLoading" style="margin-right: 0.5rem"></i>
+          {{ isLoading ? 'Authenticating...' : 'Sign In' }}
+        </button>
+      </form>
+      
+      <div class="login-divider"></div>
+      
+      <p class="security-note">
+        <i class="pi pi-lock"></i> Your data is encrypted and protected
+      </p>
+    </div>
   </div>
 </div>

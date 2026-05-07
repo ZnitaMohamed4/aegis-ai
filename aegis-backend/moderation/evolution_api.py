@@ -448,6 +448,35 @@ def get_qr_code(instance_name):
         logger.error(f"Failed to get QR: {e}")
         return None
 
+def set_webhook_for_instance(instance_name, webhook_url):
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    url = f"{api_url}/webhook/set/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    payload = {
+        "webhook": {
+            "enabled": True,
+            "url": webhook_url,
+            "byEvents": False,
+            "base64": False,
+            "events": ["MESSAGES_UPSERT", "CONNECTION_UPDATE"]
+        }
+    }
+    try:
+        requests.post(url, json=payload, headers=headers)
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+
+def delete_whatsapp_instance(instance_name):
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    url = f"{api_url}/instance/delete/{instance_name}"
+    headers = {"apikey": api_key}
+    try:
+        requests.delete(url, headers=headers)
+    except Exception as e:
+        logger.error(f"Failed to delete instance: {e}")
+
 def check_connection_status(instance_name):
     """
     Checks if the instance is currently 'open' (connected) or still 'close'.
@@ -481,6 +510,24 @@ def get_instance_details(instance_name):
         logger.error(f"Failed to get instance details: {e}")
         return None
 
+
+def get_all_instances():
+    """
+    Fetches all instances from the Evolution API server.
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    headers = {"apikey": api_key}
+    
+    try:
+        url = f"{api_url}/instance/fetchInstances"
+        response = requests.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.json()
+        return []
+    except Exception as e:
+        logger.error(f"Failed to get instances: {e}")
+        return []
 
 def fetch_relationship_start(instance_name, remote_jid):
     """

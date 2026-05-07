@@ -9,7 +9,7 @@
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  transition: width 0.3s ease;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
   flex-shrink: 0;
 }
@@ -145,9 +145,18 @@
   animation: nav-pulse 1.8s ease-in-out infinite;
 }
 
+/* ── Collapsed state ────────────────── */
 .sidebar.collapsed .sidebar-logo {
   justify-content: center;
   padding: 0;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+}
+
+.sidebar.collapsed .nav-icon {
+  width: auto;
 }
 
 @media (max-width: 640px) {

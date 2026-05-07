@@ -105,7 +105,7 @@
                 <div class="flex flex-col gap-1.5">
                   <div class="text-[11px] font-mono text-[var(--text-muted)] flex items-center gap-1.5">
                     <i class="pi pi-whatsapp text-[12px] text-green-500"></i>
-                    {{ user.linked_child.whatsapp_number }}
+                    {{ user.linked_child.whatsapp_number | whatsappJid }}
                   </div>
                   
                   @if (!user.linked_child.whatsapp_connected) {
@@ -246,7 +246,7 @@
               </span>
             </div>
             <div class="text-xs font-mono text-[var(--text-muted)]">
-              {{ selectedUser()!.linked_child!.whatsapp_number }}
+              {{ selectedUser()!.linked_child!.whatsapp_number | whatsappJid }}
             </div>
             <div class="flex items-center gap-2 text-xs"
                  [class]="selectedUser()!.linked_child!.whatsapp_connected ? 'text-[var(--low)]' : 'text-[var(--medium)]'">

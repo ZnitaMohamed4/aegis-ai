@@ -29,6 +29,12 @@ from moderation.views.admin_views import (
     admin_risk_profiles,
     admin_settings,
     admin_children,
+    admin_analytics,
+    admin_channels,
+    admin_channels_disconnect,
+    test_llm_connection,
+    simulate_message,
+    agent_latencies,
 )
 
 # Auth + WhatsApp setup

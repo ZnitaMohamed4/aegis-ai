@@ -74,7 +74,7 @@
                     <div class="text-sm font-bold text-[var(--text-primary)] group-hover:text-[var(--accent)] transition-colors">{{ child.identifier }}</div>
                     <div class="text-xs text-[var(--text-muted)] flex items-center gap-1">
                       <i class="pi pi-whatsapp" style="font-size: 0.6rem"></i>
-                      {{ child.whatsapp_number }}
+                      {{ child.whatsapp_number | whatsappJid }}
                     </div>
                   </div>
                 </div>
@@ -161,7 +161,7 @@
               </div>
               <div>
                 <div class="text-sm font-bold text-[var(--text-primary)]">{{ child.identifier }}</div>
-                <div class="text-[10px] text-[var(--text-muted)] font-mono">{{ child.whatsapp_number }}</div>
+                <div class="text-[10px] text-[var(--text-muted)] font-mono">{{ child.whatsapp_number | whatsappJid }}</div>
               </div>
             </div>
             <div class="flex flex-col items-end">
@@ -208,7 +208,7 @@
                    </div>
                    <div>
                      <div class="text-sm font-bold font-mono text-[var(--text-primary)] flex items-center gap-2">
-                       {{ contact.whatsapp_number }}
+                       {{ contact.whatsapp_number | whatsappJid }}
                        @if (contact.is_stranger) {
                          <span class="text-[9px] font-bold bg-[var(--critical)]/10 text-[var(--critical)] border border-[var(--critical)]/20 px-1.5 py-0.5 rounded uppercase tracking-wider">Stranger</span>
                        }
@@ -276,7 +276,7 @@
     <div class="sm:hidden flex flex-col gap-3">
       @for (contact of contacts(); track contact.id) {
         <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl p-5 shadow-md active:scale-[0.98] transition-transform" (click)="openContact(contact)">
-          <div class="text-xs font-mono text-[var(--text-primary)] mb-1 font-bold">{{ contact.whatsapp_number }}</div>
+          <div class="text-xs font-mono text-[var(--text-primary)] mb-1 font-bold">{{ contact.whatsapp_number | whatsappJid }}</div>
           <div class="text-[10px] text-[var(--text-muted)] mb-3">Targets: {{ contact.nombre_cibles_differentes }} · Night: {{ pct(contact.activite_nocturne) }}</div>
           <div class="flex items-center justify-between">
             <span class="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full" [style.color]="getRiskHex(contact.threat_level)" [style.background]="getRiskHex(contact.threat_level) + '1A'">
@@ -335,7 +335,7 @@
             </div>
             <div class="text-base font-bold text-[var(--text-primary)] mb-1">{{ selectedChild()!.identifier }}</div>
             <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--text-muted)]">
-              <span class="flex items-center gap-1"><i class="pi pi-whatsapp" style="font-size: 0.65rem; color: #25D366"></i> {{ selectedChild()!.whatsapp_number || 'Not registered' }}</span>
+              <span class="flex items-center gap-1"><i class="pi pi-whatsapp" style="font-size: 0.65rem; color: #25D366"></i> {{ (selectedChild()!.whatsapp_number | whatsappJid) || 'Not registered' }}</span>
               @if (selectedChild()!.date_naissance) {
                 <span class="flex items-center gap-1"><i class="pi pi-calendar" style="font-size: 0.6rem"></i> Age {{ ageFromBirthDate(selectedChild()!.date_naissance) }}</span>
               }
@@ -372,12 +372,12 @@
               <div class="cluster-child-row">
                 <div>
                   <div class="text-sm font-bold text-[var(--text-primary)]">{{ item.child.identifier }}</div>
-                  <div class="text-[10px] font-mono text-[var(--text-muted)]">{{ item.child.whatsapp_number }}</div>
+                  <div class="text-[10px] font-mono text-[var(--text-muted)]">{{ item.child.whatsapp_number | whatsappJid }}</div>
                 </div>
                 <div class="text-[10px] text-[var(--critical)] text-right">
                   Shared:
                   @for (contact of item.sharedContacts; track contact.id) {
-                    <span class="shared-contact-tag">{{ contact.whatsapp_number }}</span>
+                    <span class="shared-contact-tag">{{ contact.whatsapp_number | whatsappJid }}</span>
                   }
                 </div>
               </div>
@@ -446,7 +446,7 @@
                   <i class="pi" [ngClass]="getArchetypeIcon(threat.archetype || 'Normal User')" style="font-size: 0.7rem"></i>
                 </div>
                 <div class="flex-1 min-w-0">
-                  <div class="text-sm font-bold text-[var(--text-primary)] truncate">{{ threat.whatsapp_number }}</div>
+                  <div class="text-sm font-bold text-[var(--text-primary)] truncate">{{ threat.whatsapp_number | whatsappJid }}</div>
                   <div class="text-[10px] text-[var(--text-muted)] truncate flex items-center gap-1">
                     <span [style.color]="getRiskHex(threat.threat_level)">{{ threat.threat_level | uppercase }}</span>
                     <span>·</span>
@@ -515,35 +515,54 @@
         <button class="primary-btn-sm" (click)="goToAlertsByContact(selectedContact()!)">View Correlated Alerts</button>
       </div>
 
-      <div class="bg-[var(--bg-surface-2)] rounded-3xl p-6 text-center border-2 shadow-inner" [style.border-color]="getRiskHex(selectedContact()!.threat_level) + '44'">
-        <div class="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2">Source Threat Score</div>
-        <div class="text-4xl font-black font-mono mb-2" [style.color]="getRiskHex(selectedContact()!.threat_level)">
-          {{ selectedContact()!.threat_score.toFixed(2) }}
+      <!-- Hero: Threat Gauge + Archetype -->
+      <div class="flex flex-col sm:flex-row gap-4">
+        <!-- Threat Gauge -->
+        <div class="flex flex-col items-center justify-center p-6 bg-[var(--bg-surface-2)] rounded-2xl border border-[var(--border)] min-w-[160px]">
+          <div class="text-4xl font-bold font-mono" [style.color]="getRiskHex(selectedContact()!.threat_level)">
+            {{ selectedContact()!.threat_score.toFixed(2) }}
+          </div>
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full mt-3 bg-[var(--bg-surface)] border border-[var(--border)]">
+            <i class="pi pi-user-minus text-[10px]" [style.color]="getRiskHex(selectedContact()!.threat_level)"></i>
+            <span class="text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]">{{ selectedContact()!.threat_level }}</span>
+          </div>
         </div>
-        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full shadow-md" [style.background]="getRiskHex(selectedContact()!.threat_level)">
-          <i class="pi pi-user-minus text-white text-xs"></i>
-          <span class="text-xs font-black uppercase tracking-widest text-white">
-            {{ selectedContact()!.threat_level }} Assessment
-          </span>
+
+        <!-- Bayesian Archetype Card -->
+        <div class="flex-1 flex flex-col gap-2">
+          <div class="bg-[var(--bg-surface-2)] rounded-2xl p-4 border border-[var(--border)] flex-1">
+            <div class="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-3 flex items-center gap-2">
+              <i class="pi pi-brain" style="font-size: 0.65rem"></i> Behavioral Archetype
+            </div>
+            
+            @if (selectedContact()!.archetype && selectedContact()!.archetype !== 'Normal User') {
+              <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-sm" [style.background]="getArchetypeColor(selectedContact()!.archetype!)">
+                  <i class="pi pi-brain text-lg"></i>
+                </div>
+                <div>
+                  <div class="text-base font-bold text-[var(--text-primary)] mb-1" [style.color]="getArchetypeColor(selectedContact()!.archetype!)">{{ selectedContact()!.archetype }}</div>
+                  <div class="text-xs text-[var(--text-muted)]">
+                    Bayesian classification identifies this entity as showing {{ selectedContact()!.archetype!.toLowerCase() }} behavioral markers.
+                  </div>
+                </div>
+              </div>
+            } @else {
+              <div class="flex items-center gap-4 opacity-70">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-[var(--text-muted)] bg-[var(--bg-surface)] border border-[var(--border)]">
+                  <i class="pi pi-user text-lg"></i>
+                </div>
+                <div>
+                  <div class="text-base font-bold text-[var(--text-primary)] mb-1">Normal User</div>
+                  <div class="text-xs text-[var(--text-muted)]">
+                    No distinct threat archetype detected. Behavior falls within normal parameters.
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
         </div>
       </div>
-
-      <!-- Bayesian Archetype -->
-      @if (selectedContact()!.archetype && selectedContact()!.archetype !== 'Normal User') {
-        <div class="flex items-center gap-4 p-5 rounded-2xl border-2 shadow-sm"
-             [style.border-color]="getArchetypeColor(selectedContact()!.archetype!) + '44'"
-             [style.background]="'linear-gradient(135deg, ' + getArchetypeColor(selectedContact()!.archetype!) + '11, transparent)'">
-          <div class="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg" [style.background]="getArchetypeColor(selectedContact()!.archetype!)">
-            <i class="pi pi-brain text-xl"></i>
-          </div>
-          <div>
-            <div class="text-lg font-black" [style.color]="getArchetypeColor(selectedContact()!.archetype!)">{{ selectedContact()!.archetype }}</div>
-            <div class="text-xs text-[var(--text-muted)] max-w-sm">
-              Bayesian classification identifies this entity as showing {{ selectedContact()!.archetype!.toLowerCase() }} behavioral markers.
-            </div>
-          </div>
-        </div>
-      }
 
       <!-- BN Pathway Decomposition -->
       @if (selectedContact()!.grooming_prob !== undefined) {

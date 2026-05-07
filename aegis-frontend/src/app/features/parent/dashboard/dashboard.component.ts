@@ -18,11 +18,12 @@ import { AlertService, WebSocketAlertPayload } from '@core/services/alert.servic
 import { AuthService } from '@core/services/auth.service';
 import { Subscription } from 'rxjs';
 import { MessageService } from 'primeng/api';
+import { WhatsappJidPipe } from '@shared/pipes/whatsapp-jid.pipe';
 
 @Component({
   selector: 'app-parent-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, ChartModule, SkeletonModule, DialogModule, ToastModule],
+  imports: [CommonModule, RouterLink, ChartModule, SkeletonModule, DialogModule, ToastModule, WhatsappJidPipe],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.css'
 })

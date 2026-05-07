@@ -4,6 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { DialogModule } from 'primeng/dialog';
 import { ChartModule } from 'primeng/chart';
 import { getRiskHex } from '@shared/utils/severity.utils';
+import { WhatsappJidPipe } from '@shared/pipes/whatsapp-jid.pipe';
 import { RiskLevel, ChildProfile, ContactProfile, RiskSnapshot } from '@core/models';
 import { ApiService } from '@core/services/api.service';
 
@@ -15,7 +16,7 @@ interface CategoryEntry {
 @Component({
   selector: 'app-risk-profiles',
   standalone: true,
-  imports: [CommonModule, DialogModule, ChartModule],
+  imports: [CommonModule, DialogModule, ChartModule, WhatsappJidPipe],
   templateUrl: './risk-profiles.html',
   styleUrl: './risk-profiles.css'
 })

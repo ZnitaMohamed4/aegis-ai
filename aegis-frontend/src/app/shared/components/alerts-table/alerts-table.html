@@ -129,7 +129,7 @@
 
           <!-- Contact -->
           <td class="px-4 py-3">
-            <span class="text-xs font-mono text-[var(--text-primary)]">{{ alert.contact_number || 'Unknown' }}</span>
+            <span class="text-xs font-mono text-[var(--text-primary)]">{{ (alert.contact_number | whatsappJid) || 'Unknown' }}</span>
           </td>
 
           <!-- Preview -->
@@ -289,7 +289,7 @@
       </div>
       <p class="text-sm text-[var(--text-primary)] mb-2 line-clamp-2">{{ alert.preview }}</p>
       <div class="mb-2">
-        <span class="text-xs font-mono text-[var(--text-muted)] bg-[var(--bg-surface-2)] px-2 py-0.5 rounded">{{ alert.contact_number || 'Unknown' }}</span>
+        <span class="text-xs font-mono text-[var(--text-muted)] bg-[var(--bg-surface-2)] px-2 py-0.5 rounded">{{ (alert.contact_number | whatsappJid) || 'Unknown' }}</span>
       </div>
       @if (alert.llm_explanation) {
         <p class="text-xs text-[var(--text-muted)] mb-2 italic line-clamp-1">{{ truncateExplanation(alert.llm_explanation, 60) }}</p>
@@ -397,7 +397,7 @@
       <div class="flex flex-col gap-2">
         <div class="flex justify-between text-sm">
           <span class="text-[var(--text-muted)]">Contact</span>
-          <span class="font-mono text-[var(--text-primary)]">{{ selectedAlert()!.contact_number || 'Unknown' }}</span>
+          <span class="font-mono text-[var(--text-primary)]">{{ (selectedAlert()!.contact_number | whatsappJid) || 'Unknown' }}</span>
         </div>
         <div class="flex justify-between text-sm">
           <span class="text-[var(--text-muted)]">Category</span>

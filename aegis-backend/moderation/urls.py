@@ -41,6 +41,18 @@ urlpatterns = [
     
     # Admin Children (for report generation dropdown)
     path('admin/children/', views.admin_children, name='admin-children'),
+    
+    # Admin Channels (Evolution API instance monitoring + emergency force-logout)
+    path('admin/channels/', views.admin_channels, name='admin-channels'),
+    path('admin/channels/<str:instance_id>/', views.admin_channels_disconnect, name='admin-channels-disconnect'),
+    
+    # Admin Analytics (Historical Dashboard Data)
+    path('admin/analytics/', views.admin_analytics, name='admin-analytics'),
+
+    # Admin AI Config Operational Endpoints
+    path('admin/test-llm/', views.test_llm_connection, name='admin-test-llm'),
+    path('admin/simulate/', views.simulate_message, name='admin-simulate'),
+    path('admin/agent-latencies/', views.agent_latencies, name='admin-agent-latencies'),
 
     # 7. Auth Endpoints
     path('auth/register/', views.register_parent, name='auth-register'),

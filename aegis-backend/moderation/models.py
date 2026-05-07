@@ -776,7 +776,25 @@ class PlatformSettings(models.Model):
     strictness_level = models.CharField(max_length=20, default='balanced')
     auto_escalate = models.BooleanField(default=True)
     block_unknown = models.BooleanField(default=False)
-    
+
+    # 6. Notification Defaults (admin sets platform-wide defaults)
+    notify_email_enabled = models.BooleanField(default=True)
+    notify_inapp_enabled = models.BooleanField(default=True)
+    notify_on_block = models.BooleanField(default=True)
+    notify_on_escalate = models.BooleanField(default=True)
+    notify_on_warn = models.BooleanField(default=False)
+    quiet_hours_start = models.CharField(max_length=5, default='23:00')
+    quiet_hours_end = models.CharField(max_length=5, default='07:00')
+
+    # 7. Extended Moderation Defaults
+    default_language = models.CharField(max_length=10, default='auto')
+    auto_resolve_allow = models.BooleanField(default=True)
+    rate_limit_threshold = models.IntegerField(default=50)
+    parent_portal_access = models.BooleanField(default=True)
+
+    # 8. Risk profile history retention
+    risk_profile_retention_days = models.IntegerField(default=60)
+
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:

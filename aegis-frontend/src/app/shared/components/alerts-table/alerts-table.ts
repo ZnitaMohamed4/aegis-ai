@@ -5,6 +5,7 @@ import { DrawerModule } from 'primeng/drawer';
 import { getRiskHex, getDecisionClass } from '@shared/utils/severity.utils';
 import { MockAlert } from '@core/models';
 import { SkeletonModule } from 'primeng/skeleton';
+import { WhatsappJidPipe } from '../../pipes/whatsapp-jid.pipe';
 import { OnInit } from '@angular/core';
 
 const PAGE_SIZE = 20;
@@ -12,7 +13,7 @@ const PAGE_SIZE = 20;
 @Component({
   selector: 'app-alerts-table',
   standalone: true,
-  imports: [CommonModule, FormsModule, DrawerModule, SkeletonModule],
+  imports: [CommonModule, FormsModule, DrawerModule, SkeletonModule, WhatsappJidPipe],
   templateUrl: './alerts-table.html',
   styleUrl: './alerts-table.css'
 })

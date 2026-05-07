@@ -1,180 +1,133 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, OnDestroy, signal } from '@angular/core';
+import { Component, computed, OnInit, signal, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DrawerModule } from 'primeng/drawer';
 import { PageHeaderComponent } from '@shared/index';
+import { ApiService } from '@core/services/api.service';
 import {
-  CHANNEL_INSTANCES,
   CHANNEL_TABS,
   ChannelInstance,
   ChannelType,
-  EVOLUTION_SERVER_STATUS
+  EvolutionServerStatus
 } from './channels.data';
 
 @Component({
   selector: 'app-channels',
-  imports: [CommonModule, FormsModule, DrawerModule, PageHeaderComponent],
+  imports: [CommonModule, FormsModule, PageHeaderComponent],
   templateUrl: './channels.html',
   styleUrl: './channels.css',
 })
-export class ChannelsComponent implements OnDestroy {
+export class ChannelsComponent implements OnInit {
 
-  readonly serverStatus = EVOLUTION_SERVER_STATUS;
+  serverStatus = signal<EvolutionServerStatus>({
+    serverUrl: 'Connecting...',
+    status: 'Offline',
+    version: 'Unknown',
+    activeInstances: 0,
+    totalInstances: 0,
+    maxInstances: 5,
+    webhook: 'Disconnected',
+    warning: 'Checking connection...'
+  });
+
   readonly channelTabs = CHANNEL_TABS;
+  private apiService = inject(ApiService);
 
-  activeTab = signal<ChannelType>('whatsapp-baileys');
-  instances = signal<ChannelInstance[]>([...CHANNEL_INSTANCES]);
+  activeTab = signal<ChannelType>('whatsapp');
+  instances = signal<ChannelInstance[]>([]);
+  isLoading = signal(true);
 
-  drawerVisible = signal(false);
-  wizardStep = signal<1 | 2 | 3>(1);
-  countdownSeconds = signal(60);
-
-  instanceName = signal('');
-  childIdentifier = signal('');
-  phoneNumber = signal('');
-  formError = signal('');
-
-  private countdownHandle?: ReturnType<typeof setInterval>;
+  /** Confirmation dialog for force-logout */
+  confirmDeleteId = signal<string | null>(null);
+  confirmDeleteName = signal('');
 
   filteredInstances = computed(() => {
     const active = this.activeTab();
     return this.instances().filter(instance => instance.channelType === active);
   });
 
-  qrProgress = computed(() => `${Math.round((this.countdownSeconds() / 60) * 100)}%`);
+  connectedCount = computed(() =>
+    this.filteredInstances().filter(i => i.status === 'Connected').length
+  );
+
+  disconnectedCount = computed(() =>
+    this.filteredInstances().filter(i => i.status === 'Disconnected').length
+  );
+
+  totalIntercepted = computed(() =>
+    this.filteredInstances().reduce((sum, i) => sum + i.interceptedMessages, 0)
+  );
 
   selectedTabMeta = computed(() => {
     const current = this.channelTabs.find(tab => tab.key === this.activeTab());
     return current ?? this.channelTabs[0];
   });
 
-  ngOnDestroy() {
-    this.stopCountdown();
+  ngOnInit() {
+    this.loadChannels();
+  }
+
+  loadChannels() {
+    this.isLoading.set(true);
+    this.apiService.getAdminChannels().subscribe({
+      next: (data) => {
+        this.serverStatus.set(data.serverStatus);
+        this.instances.set(data.instances);
+        this.isLoading.set(false);
+      },
+      error: (err) => {
+        console.error('Failed to load channels:', err);
+        this.isLoading.set(false);
+      }
+    });
   }
 
   selectTab(tab: ChannelType) {
     this.activeTab.set(tab);
   }
 
-  openConnectDrawer() {
-    this.drawerVisible.set(true);
-    this.wizardStep.set(1);
-    this.formError.set('');
-    this.stopCountdown();
-    this.countdownSeconds.set(60);
+  refreshData() {
+    this.loadChannels();
   }
 
-  closeDrawer() {
-    this.drawerVisible.set(false);
-    this.stopCountdown();
+  /** Opens a confirmation dialog before force-deleting */
+  promptDelete(instance: ChannelInstance) {
+    this.confirmDeleteId.set(instance.id);
+    this.confirmDeleteName.set(instance.instanceName);
   }
 
-  nextStepFromForm() {
-    if (!this.instanceName().trim() || !this.childIdentifier().trim() || !this.phoneNumber().trim()) {
-      this.formError.set('Please fill in all fields before continuing.');
-      return;
-    }
-
-    this.formError.set('');
-    this.wizardStep.set(2);
-    this.startCountdown();
+  cancelDelete() {
+    this.confirmDeleteId.set(null);
+    this.confirmDeleteName.set('');
   }
 
-  completeScan() {
-    this.stopCountdown();
+  confirmDelete() {
+    const instanceId = this.confirmDeleteId();
+    if (!instanceId) return;
 
-    const name = this.instanceName().trim();
-    const childIdentifier = this.childIdentifier().trim();
-    const phoneNumber = this.phoneNumber().trim();
-    const id = `inst-${Date.now()}`;
-
-    this.instances.update(existing => [
-      {
-        id,
-        channelType: 'whatsapp-baileys',
-        instanceName: name,
-        childIdentifier,
-        phoneNumber,
-        connectionType: 'Baileys',
-        status: 'Connected',
-        lastActive: 'Just now',
-        interceptedMessages: 0
+    this.apiService.deleteAdminChannel(instanceId).subscribe({
+      next: () => {
+        this.instances.update(list => list.filter(i => i.id !== instanceId));
+        this.cancelDelete();
       },
-      ...existing
-    ]);
-
-    this.wizardStep.set(3);
-  }
-
-  finishWizard() {
-    this.closeDrawer();
-    this.instanceName.set('');
-    this.childIdentifier.set('');
-    this.phoneNumber.set('');
-    this.wizardStep.set(1);
-    this.countdownSeconds.set(60);
-  }
-
-  refreshQr() {
-    this.countdownSeconds.set(60);
-    this.startCountdown();
-  }
-
-  reconnectInstance(instanceId: string) {
-    this.instances.update(list =>
-      list.map(instance =>
-        instance.id === instanceId
-          ? { ...instance, status: 'Connected', lastActive: 'Just now' }
-          : instance
-      )
-    );
-  }
-
-  disconnectInstance(instanceId: string) {
-    this.instances.update(list =>
-      list.map(instance =>
-        instance.id === instanceId
-          ? { ...instance, status: 'Disconnected', lastActive: 'Just now' }
-          : instance
-      )
-    );
-  }
-
-  deleteInstance(instanceId: string) {
-    this.instances.update(list => list.filter(instance => instance.id !== instanceId));
+      error: (err) => {
+        console.error('Failed to delete instance', err);
+        this.cancelDelete();
+      }
+    });
   }
 
   getStatusDotClass(status: ChannelInstance['status']) {
     if (status === 'Connected') {
       return 'status-dot status-dot-connected';
     }
-
     if (status === 'Pending QR Scan') {
       return 'status-dot status-dot-pending';
     }
-
     return 'status-dot status-dot-disconnected';
   }
 
-  private startCountdown() {
-    this.stopCountdown();
-
-    this.countdownHandle = setInterval(() => {
-      const current = this.countdownSeconds();
-      if (current <= 1) {
-        this.countdownSeconds.set(0);
-        this.stopCountdown();
-        return;
-      }
-
-      this.countdownSeconds.set(current - 1);
-    }, 1000);
-  }
-
-  private stopCountdown() {
-    if (this.countdownHandle) {
-      clearInterval(this.countdownHandle);
-      this.countdownHandle = undefined;
-    }
+  formatNumber(num: string): string {
+    if (!num || num.length < 5) return num || 'Unknown';
+    return `+${num.slice(0, 3)} ${num.slice(3)}`;
   }
 }

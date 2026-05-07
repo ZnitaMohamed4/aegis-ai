@@ -6,4 +6,4 @@ export type { RiskLevel, Decision } from './utils/severity.utils';
 export { AlertsTableComponent } from './components/alerts-table/alerts-table';
 export { ConversationViewerComponent } from './components/conversation-viewer/conversation-viewer';
 export { ReportCardComponent } from './components/report-card/report-card';
-
+export { WhatsappJidPipe } from './pipes/whatsapp-jid.pipe';

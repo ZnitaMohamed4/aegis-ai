@@ -45,7 +45,31 @@ def current_user(request):
         serializer = AegisUserSerializer(request.user)
         return Response(serializer.data)
     elif request.method == 'PUT':
-        serializer = AegisUserSerializer(request.user, data=request.data, partial=True)
+        # If a password change is requested, validate current_password first
+        if 'password' in request.data:
+            current_password = request.data.get('current_password', '')
+            if not current_password:
+                return Response(
+                    {"error": "current_password is required to change your password."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if not request.user.check_password(current_password):
+                return Response(
+                    {"error": "Current password is incorrect."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            # Set the new password properly (hashed)
+            request.user.set_password(request.data['password'])
+            request.user.save(update_fields=['password'])
+            # Remove password from data so the serializer doesn't try to set it again
+            mutable_data = request.data.copy()
+            mutable_data.pop('password', None)
+            mutable_data.pop('current_password', None)
+            if not mutable_data:
+                return Response(AegisUserSerializer(request.user).data)
+            serializer = AegisUserSerializer(request.user, data=mutable_data, partial=True)
+        else:
+            serializer = AegisUserSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)

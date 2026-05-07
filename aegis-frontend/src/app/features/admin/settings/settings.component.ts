@@ -64,14 +64,23 @@ export class SettingsComponent implements OnInit {
           messagesLogDays: settings.log_retention_days,
           blockedMessagesDays: settings.message_retention_days,
           alertHistoryDays: settings.alert_retention_days,
-          riskProfileHistoryDays: 60 // Unused in backend
+          riskProfileHistoryDays: settings.risk_profile_retention_days ?? 60
+        });
+        this.notifications.set({
+          emailNotifications: settings.notify_email_enabled ?? true,
+          inAppNotifications: settings.notify_inapp_enabled ?? true,
+          notifyOnBlock: settings.notify_on_block ?? true,
+          notifyOnEscalate: settings.notify_on_escalate ?? true,
+          notifyOnWarn: settings.notify_on_warn ?? false,
+          quietHoursStart: settings.quiet_hours_start || '23:00',
+          quietHoursEnd: settings.quiet_hours_end || '07:00',
         });
         this.moderation.set({
           ...this.moderation(),
-          defaultLanguage: 'auto',
-          autoResolveAllow: true,
-          rateLimitThreshold: 50,
-          parentPortalAccess: true,
+          defaultLanguage: settings.default_language || 'auto',
+          autoResolveAllow: settings.auto_resolve_allow ?? true,
+          rateLimitThreshold: settings.rate_limit_threshold ?? 50,
+          parentPortalAccess: settings.parent_portal_access ?? true,
           strictnessLevel: settings.strictness_level as any,
           autoEscalate: settings.auto_escalate,
           blockUnknown: settings.block_unknown
@@ -162,14 +171,30 @@ export class SettingsComponent implements OnInit {
       return;
     }
 
-    this.messageService.add({
-      severity: 'success',
-      summary: 'Password Updated',
-      detail: 'Your password has been changed successfully.',
-      life: 3000,
+    this.apiService.updateCurrentUser({
+      password: newPassword,
+      current_password: currentPassword,
+    }).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Password Updated',
+          detail: 'Your password has been changed successfully.',
+          life: 3000,
+        });
+        this.passwordForm.set({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        this.showPasswordForm.set(false);
+      },
+      error: (err) => {
+        const detail = err?.error?.error || 'Failed to update password. Check your current password.';
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Password Change Failed',
+          detail,
+          life: 4000,
+        });
+      }
     });
-    this.passwordForm.set({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    this.showPasswordForm.set(false);
   }
 
   requestPurgeData(): void {
@@ -193,16 +218,31 @@ export class SettingsComponent implements OnInit {
   saveSettings(): void {
     const r = this.retention();
     const m = this.moderation();
+    const n = this.notifications();
     const a = this.adminAccount();
 
-    // 1. Save Platform Settings
-    const platformPayload = {
+    // 1. Save Platform Settings (retention + notifications + moderation + risk retention)
+    const platformPayload: any = {
       log_retention_days: r.messagesLogDays,
       message_retention_days: r.blockedMessagesDays,
       alert_retention_days: r.alertHistoryDays,
+      risk_profile_retention_days: r.riskProfileHistoryDays,
       strictness_level: (m as any).strictnessLevel || 'balanced',
-      auto_escalate: (m as any).autoEscalate || true,
-      block_unknown: (m as any).blockUnknown || false
+      auto_escalate: (m as any).autoEscalate ?? true,
+      block_unknown: (m as any).blockUnknown ?? false,
+      // Notification defaults
+      notify_email_enabled: n.emailNotifications,
+      notify_inapp_enabled: n.inAppNotifications,
+      notify_on_block: n.notifyOnBlock,
+      notify_on_escalate: n.notifyOnEscalate,
+      notify_on_warn: n.notifyOnWarn,
+      quiet_hours_start: n.quietHoursStart,
+      quiet_hours_end: n.quietHoursEnd,
+      // Extended moderation defaults
+      default_language: (m as any).defaultLanguage || 'auto',
+      auto_resolve_allow: (m as any).autoResolveAllow ?? true,
+      rate_limit_threshold: (m as any).rateLimitThreshold ?? 50,
+      parent_portal_access: (m as any).parentPortalAccess ?? true,
     };
     
     this.apiService.updateSystemSettings(platformPayload).subscribe({

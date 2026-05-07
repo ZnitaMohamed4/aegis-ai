@@ -20,6 +20,7 @@ threading.Timer or a Celery task instead.
 """
 import hashlib
 import logging
+import time
 
 from .state import ModerationState
 
@@ -101,6 +102,7 @@ def enforcer_node(state: ModerationState) -> dict:
         ml_corrected=ml_corrected,
         ml_original_decision=ml_original_decision,
         ml_original_class=ml_original_class,
+        processing_time_ms=int(time.time() * 1000) - state.get("start_time_ms", int(time.time() * 1000)),
     )
     enforcement_actions.append("persist")
 

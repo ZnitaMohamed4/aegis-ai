@@ -940,7 +940,14 @@ def admin_risk_profiles(request):
         cat_counts = results.exclude(primary_class='safe').exclude(primary_class__isnull=True).values('primary_class').annotate(count=Count('id')).order_by('-count')
         dominant_cat = cat_counts.first()['primary_class'] if cat_counts else "N/A"
         
-        related_child_ids = [f"c_{inst}" for inst in instances_talked_to]
+        # Map instance_names to REAL registered MonitoredChild records
+        real_children = MonitoredChild.objects.filter(
+            parent__evolution_instance_name__in=instances_talked_to
+        )
+        related_child_ids = [f"c_{c.parent.evolution_instance_name}" for c in real_children if c.parent and c.parent.evolution_instance_name]
+        # Fallback: if no registered children, use instances but cap at 5
+        if not related_child_ids:
+            related_child_ids = [f"c_{inst}" for inst in instances_talked_to[:5]]
         
         # Build real toxicity_trend from BehavioralSnapshot
         snapshots = BehavioralSnapshot.objects.filter(
@@ -1067,3 +1074,515 @@ def admin_children(request):
     return Response(data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def admin_analytics(request):
+    """
+    GET /api/v1/admin/analytics/?range=30D
+    Returns historical aggregated metrics for the Analytics Dashboard.
+    Results are cached in Redis to prevent heavy DB loads.
+    """
+    from datetime import timedelta
+    from django.db.models import Avg, Case, When, IntegerField
+    from django.db.models.functions import TruncDay, ExtractHour, ExtractWeekDay
+    from django.core.cache import cache
+
+    range_param = request.query_params.get('range', '30D')
+    days = 30 if range_param == '30D' else 7
+    
+    # Check cache first
+    cache_key = f"admin_analytics_v1_{days}d"
+    cached_data = cache.get(cache_key)
+    if cached_data:
+        return Response(cached_data)
+
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=days)
+    
+    # Generate continuous list of dates for labels
+    date_labels = [(start_date + timedelta(days=i)).strftime('%b %d') for i in range(days)]
+    date_mapping = {label: i for i, label in enumerate(date_labels)}
+    
+    qs = ModerationResult.objects.filter(created_at__gte=start_date, created_at__lte=end_date)
+    
+    # 1. Risk Score Evolution (Avg Behavioral Risk per day)
+    risk_qs = qs.annotate(day=TruncDay('created_at')).values('day').annotate(
+        avg_risk=Avg('behavioral_risk_score')
+    ).order_by('day')
+    
+    risk_scores = [0.0] * days
+    for r in risk_qs:
+        label = r['day'].strftime('%b %d')
+        if label in date_mapping:
+            risk_scores[date_mapping[label]] = round(r['avg_risk'] or 0.0, 2)
+            
+    # 2. Decisions Trend
+    decisions_qs = qs.annotate(day=TruncDay('created_at')).values('day', 'decision').annotate(count=Count('id'))
+    decisions = {'blocked': [0]*days, 'warned': [0]*days, 'allowed': [0]*days}
+    for r in decisions_qs:
+        label = r['day'].strftime('%b %d')
+        if label in date_mapping:
+            idx = date_mapping[label]
+            if r['decision'] in ['BLOCK', 'ESCALATE']: decisions['blocked'][idx] += r['count']
+            elif r['decision'] in ['WARN', 'REVISE']: decisions['warned'][idx] += r['count']
+            elif r['decision'] == 'ALLOW': decisions['allowed'][idx] += r['count']
+
+    # 3. Categories Trend
+    categories_qs = qs.exclude(primary_class='safe').annotate(day=TruncDay('created_at')).values('day', 'primary_class').annotate(count=Count('id'))
+    categories = {'verbal': [0]*days, 'threat': [0]*days, 'sexual': [0]*days, 'discrimination': [0]*days}
+    for r in categories_qs:
+        label = r['day'].strftime('%b %d')
+        if label in date_mapping:
+            idx = date_mapping[label]
+            cat = r['primary_class'] or ''
+            if 'verbal' in cat or 'insult' in cat: categories['verbal'][idx] += r['count']
+            elif 'threat' in cat: categories['threat'][idx] += r['count']
+            elif 'sexual' in cat: categories['sexual'][idx] += r['count']
+            elif 'discrimination' in cat or 'hate' in cat: categories['discrimination'][idx] += r['count']
+
+    # 4. Pipeline Latency
+    latency_qs = qs.annotate(day=TruncDay('created_at')).values('day').annotate(
+        avg_lat=Avg('processing_time_ms')
+    ).order_by('day')
+    latency = [0] * days
+    for r in latency_qs:
+        label = r['day'].strftime('%b %d')
+        if label in date_mapping:
+            latency[date_mapping[label]] = int(r['avg_lat'] or 0)
+
+    # 5. Language Stats
+    lang_qs = qs.exclude(language__isnull=True).exclude(language='error').values('language').annotate(count=Count('id'))
+    lang_dist = [0, 0, 0] # FR, AR, EN
+    for r in lang_qs:
+        l = r['language'].lower() if r['language'] else ''
+        if 'fr' in l: lang_dist[0] += r['count']
+        elif 'ar' in l: lang_dist[1] += r['count']
+        elif 'en' in l: lang_dist[2] += r['count']
+
+    # 6. Notifications Stats
+    alert_qs = SecurityAlert.objects.filter(sent_at__gte=start_date, sent_at__lte=end_date).values('alert_type').annotate(count=Count('id'))
+    notif_dist = [0, 0, 0, 0] # SMS, Email, Push, Call
+    for r in alert_qs:
+        t = r['alert_type']
+        if t == 'sms': notif_dist[0] += r['count']
+        elif t == 'email': notif_dist[1] += r['count']
+        elif t == 'push': notif_dist[2] += r['count']
+        elif t == 'call': notif_dist[3] += r['count']
+
+    # 7. Confidence Score Distribution
+    conf_buckets = [0, 0, 0, 0, 0]
+    for r in qs.exclude(confidence_score__isnull=True).values('confidence_score'):
+        score = r['confidence_score']
+        if score < 0.4: conf_buckets[0] += 1
+        elif score < 0.6: conf_buckets[1] += 1
+        elif score < 0.75: conf_buckets[2] += 1
+        elif score < 0.9: conf_buckets[3] += 1
+        else: conf_buckets[4] += 1
+
+    # 8. Agent 3 Activation Rate
+    llm_qs = qs.annotate(day=TruncDay('created_at')).values('day').annotate(
+        total=Count('id'),
+        triggered=Count(Case(When(llm_triggered=True, then=1), output_field=IntegerField()))
+    )
+    agent3_act = [0.0] * days
+    for r in llm_qs:
+        label = r['day'].strftime('%b %d')
+        if label in date_mapping and r['total'] > 0:
+            agent3_act[date_mapping[label]] = round((r['triggered'] / r['total']) * 100, 1)
+
+    # 9. False Positives Trend
+    fp_qs = qs.filter(original_ai_decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'], human_decision='ALLOW').annotate(day=TruncDay('created_at')).values('day').annotate(count=Count('id'))
+    fp_trend = [0.0] * days
+    
+    total_qs = qs.annotate(day=TruncDay('created_at')).values('day').annotate(total=Count('id'))
+    total_map = {r['day'].strftime('%b %d'): r['total'] for r in total_qs}
+    
+    for r in fp_qs:
+        label = r['day'].strftime('%b %d')
+        if label in date_mapping:
+            total = total_map.get(label, 0)
+            if total > 0:
+                fp_trend[date_mapping[label]] = round((r['count'] / total) * 100, 2)
+
+    # 10. Review Queue Decisions
+    review_qs = qs.filter(human_reviewed=True).values('human_decision').annotate(count=Count('id'))
+    review_decisions = [0, 0] # Confirmed Block, Reversed to Allow
+    for r in review_qs:
+        if r['human_decision'] in ['BLOCK', 'ESCALATE']: review_decisions[0] += r['count']
+        elif r['human_decision'] == 'ALLOW': review_decisions[1] += r['count']
+
+    # 11. Heatmap (Day of Week vs Hour)
+    heatmap = [[0 for _ in range(24)] for _ in range(7)]
+    heat_qs = qs.annotate(
+        hour=ExtractHour('created_at'),
+        weekday=ExtractWeekDay('created_at')
+    ).values('hour', 'weekday').annotate(count=Count('id'))
+    
+    for r in heat_qs:
+        hour = r['hour']
+        dj_weekday = r['weekday'] 
+        if dj_weekday is not None and hour is not None:
+            # Map Sunday(1)->6, Monday(2)->0, ...
+            mapped_day = (dj_weekday + 5) % 7
+            heatmap[mapped_day][hour] += r['count']
+            
+    # Tables
+    top_harassers = UserBehaviorProfile.objects.order_by('-total_blocked_messages_sent')[:5]
+    top_harassers_data = []
+    for h in top_harassers:
+        top_harassers_data.append({
+            "contact": h.user_jid,
+            "name": h.user_jid.split('@')[0],
+            "threatLevel": "high" if h.risk_level in ['HIGH', 'CRITICAL'] else "medium",
+            "messagesBlocked": h.total_blocked_messages_sent,
+            "platforms": "WhatsApp",
+            "status": "Active"
+        })
+        
+    per_child_risk = []
+    children = MonitoredChild.objects.all()[:5]
+    score_map = {'CRITICAL': 0.95, 'HIGH': 0.75, 'MEDIUM': 0.45, 'LOW': 0.15}
+    for c in children:
+        risk_level = c.get_risk_level().upper()
+        per_child_risk.append({
+            "id": str(c.id),
+            "name": c.full_name,
+            "grade": c.school_level or "Primaire",
+            "currentScore": score_map.get(risk_level, 0.15),
+            "trend": "+2%", # Mocking trend
+            "alerts": SecurityAlert.objects.filter(moderation_result__sender_jid=c.whatsapp_jid).count()
+        })
+
+    # Summary stats for the top stat cards
+    total_messages_in_range = qs.count()
+    avg_risk_in_range = qs.aggregate(avg=Avg('behavioral_risk_score'))['avg'] or 0.0
+
+    # False positive rate: human overrides that reversed a block/warn to allow
+    total_reviewed = qs.filter(human_reviewed=True).count()
+    total_false_positives = qs.filter(
+        original_ai_decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
+        human_decision='ALLOW'
+    ).count()
+    false_positive_rate = round((total_false_positives / max(total_reviewed, 1)) * 100, 1)
+
+    avg_latency_in_range = qs.aggregate(avg=Avg('processing_time_ms'))['avg'] or 0
+
+    # Average review resolution time (from flagged_for_review to human_reviewed)
+    from django.db.models import F
+    reviewed_with_times = qs.filter(
+        human_reviewed=True, human_reviewed_at__isnull=False, created_at__isnull=False
+    ).annotate(resolution_secs=F('human_reviewed_at') - F('created_at'))
+    if reviewed_with_times.exists():
+        from datetime import timedelta as td
+        total_secs = sum(
+            (r.human_reviewed_at - r.created_at).total_seconds()
+            for r in reviewed_with_times[:100]
+            if r.human_reviewed_at and r.created_at
+        )
+        avg_secs = total_secs / reviewed_with_times.count()
+        if avg_secs < 60:
+            avg_resolution_str = f"{int(avg_secs)}s"
+        elif avg_secs < 3600:
+            avg_resolution_str = f"{int(avg_secs // 60)}m {int(avg_secs % 60)}s"
+        else:
+            avg_resolution_str = f"{int(avg_secs // 3600)}h {int((avg_secs % 3600) // 60)}m"
+    else:
+        avg_resolution_str = "N/A"
+
+    response_data = {
+        "labels": date_labels,
+        "summary": {
+            "totalMessages": total_messages_in_range,
+            "avgRisk": round(avg_risk_in_range, 2),
+            "falsePositiveRate": false_positive_rate,
+            "avgLatency": int(avg_latency_in_range),
+        },
+        "riskScores": risk_scores,
+        "decisions": decisions,
+        "categories": categories,
+        "latency": latency,
+        "languageDistribution": lang_dist,
+        "notificationStats": notif_dist,
+        "confidenceDistribution": {
+            "labels": ['0.0-0.4', '0.4-0.6', '0.6-0.75', '0.75-0.9', '0.9-1.0'],
+            "data": conf_buckets
+        },
+        "agent3Activation": agent3_act,
+        "falsePositives": fp_trend,
+        "reviewQueue": {
+            "avgResolutionTime": avg_resolution_str,
+            "decisions": review_decisions
+        },
+        "peakActivity": heatmap,
+        "topHarassers": top_harassers_data,
+        "perChildRisk": per_child_risk
+    }
+    
+    # Cache for 2 hours (7200 seconds)
+    cache.set(cache_key, response_data, 7200)
+
+    return Response(response_data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def admin_channels(request):
+    """
+    GET /api/v1/admin/channels/
+    Infrastructure monitoring dashboard: queries actual Evolution API instances
+    and maps them back to ParentProfile owners and their MonitoredChild records.
+    Admins observe and force-logout — they do NOT create instances here.
+    Instance creation happens via the Parent WhatsApp Setup page.
+    """
+    import datetime
+    
+    evo_status = "Online"
+    evo_version = "v2.1.2"
+    evo_instances_api = []
+    
+    try:
+        from moderation.evolution_api import get_all_instances
+        evo_instances_api = get_all_instances()
+        if not isinstance(evo_instances_api, list):
+            evo_instances_api = []
+    except Exception:
+        evo_status = "Offline"
+    
+    # Build a map of all ParentProfiles that have an Evolution API instance
+    parent_instance_map = {}
+    for p in ParentProfile.objects.exclude(
+        evolution_instance_name__isnull=True
+    ).exclude(
+        evolution_instance_name=''
+    ).select_related('user').prefetch_related('children'):
+        parent_instance_map[p.evolution_instance_name] = p
+    
+    instances = []
+    
+    for evo_raw in evo_instances_api:
+        evo_inst = evo_raw.get("instance", evo_raw)
+        instance_name = (
+            evo_inst.get("instanceName")
+            or evo_raw.get("instanceName")
+            or evo_raw.get("name")
+            or ""
+        )
+        if not instance_name:
+            continue
+        
+        # --- Connection status ---
+        conn_status = evo_inst.get("status", evo_inst.get("connectionStatus", "")).lower()
+        if conn_status == "open":
+            status = "Connected"
+        elif conn_status == "connecting":
+            status = "Pending QR Scan"
+        else:
+            status = "Disconnected"
+        
+        # --- Owner JID (the phone number linked to this session) ---
+        owner_jid = evo_inst.get("ownerJid", "")
+        owner_number = owner_jid.split("@")[0] if owner_jid else ""
+        
+        # --- Map to parent ---
+        parent_profile = parent_instance_map.get(instance_name)
+        parent_name = ""
+        parent_email = ""
+        children_info = []
+        
+        if parent_profile:
+            parent_name = parent_profile.user.get_full_name() or parent_profile.user.username
+            parent_email = parent_profile.user.email or parent_profile.user.notification_email or ""
+            
+            for child in parent_profile.children.filter(is_monitored=True):
+                children_info.append({
+                    "id": str(child.id),
+                    "name": child.full_name,
+                    "whatsappNumber": child.whatsapp_display_number or child.whatsapp_jid or "",
+                })
+        else:
+            # Instance exists in Evolution API but no ParentProfile owns it
+            # Could be an orphan or manually created instance
+            parent_name = "Unregistered"
+        
+        # --- Message count from this instance ---
+        intercepted = ModerationResult.objects.filter(instance_name=instance_name).count()
+        
+        # --- Last activity ---
+        last_result = ModerationResult.objects.filter(
+            instance_name=instance_name
+        ).order_by('-created_at').first()
+        
+        if last_result:
+            delta = timezone.now() - last_result.created_at
+            if delta.total_seconds() < 60:
+                last_active = "Just now"
+            elif delta.total_seconds() < 3600:
+                last_active = f"{int(delta.total_seconds() // 60)}m ago"
+            elif delta.total_seconds() < 86400:
+                last_active = f"{int(delta.total_seconds() // 3600)}h ago"
+            else:
+                last_active = f"{delta.days}d ago"
+        elif status == "Connected":
+            last_active = "Active (no messages yet)"
+        else:
+            last_active = "Never"
+        
+        instances.append({
+            "id": instance_name,
+            "channelType": "whatsapp",
+            "instanceName": instance_name,
+            "ownerNumber": owner_number,
+            "parentName": parent_name,
+            "parentEmail": parent_email,
+            "children": children_info,
+            "connectionType": "Evolution API",
+            "status": status,
+            "lastActive": last_active,
+            "interceptedMessages": intercepted,
+        })
+    
+    # Also surface parents whose instance is NOT in Evolution API (session died / was deleted)
+    active_instance_names = {inst["instanceName"] for inst in instances}
+    for inst_name, parent_profile in parent_instance_map.items():
+        if inst_name not in active_instance_names:
+            children_info = []
+            for child in parent_profile.children.filter(is_monitored=True):
+                children_info.append({
+                    "id": str(child.id),
+                    "name": child.full_name,
+                    "whatsappNumber": child.whatsapp_display_number or child.whatsapp_jid or "",
+                })
+            
+            intercepted = ModerationResult.objects.filter(instance_name=inst_name).count()
+            
+            instances.append({
+                "id": inst_name,
+                "channelType": "whatsapp",
+                "instanceName": inst_name,
+                "ownerNumber": "",
+                "parentName": parent_profile.user.get_full_name() or parent_profile.user.username,
+                "parentEmail": parent_profile.user.email or "",
+                "children": children_info,
+                "connectionType": "Evolution API",
+                "status": "Disconnected",
+                "lastActive": "Session lost",
+                "interceptedMessages": intercepted,
+            })
+    
+    server_status = {
+        "serverUrl": "Evolution API",
+        "status": evo_status,
+        "version": evo_version,
+        "activeInstances": len([i for i in instances if i["status"] == "Connected"]),
+        "totalInstances": len(instances),
+        "maxInstances": 10,
+        "webhook": "Connected" if evo_status == "Online" else "Disconnected",
+        "warning": "Uses WhatsApp Web protocol (Baileys). Parents pair their child's device from the Parent Dashboard."
+    }
+    
+    return Response({
+        "serverStatus": server_status,
+        "instances": instances
+    })
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def admin_channels_disconnect(request, instance_id):
+    """
+    DELETE /api/v1/admin/channels/<instance_id>/
+    Emergency force-logout: kills a WhatsApp session from the admin panel.
+    The instance_id here is the Evolution API instance name directly.
+    """
+    from moderation.evolution_api import delete_whatsapp_instance
+    
+    delete_whatsapp_instance(instance_id)
+    
+    return Response({"status": "deleted"})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def test_llm_connection(request):
+    """POST /api/v1/admin/test-llm/ — Verify LLM provider is reachable."""
+    import time, os
+    from moderation.models import PlatformSettings
+    settings = PlatformSettings.get_settings()
+    provider = settings.active_llm_provider
+    model = settings.active_llm_model
+
+    start = time.time()
+    try:
+        if provider == 'groq':
+            from groq import Groq
+            client = Groq(api_key=os.getenv('GROQ_API_KEY'))
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "Reply with OK"}],
+                max_tokens=5
+            )
+            latency_ms = int((time.time() - start) * 1000)
+            return Response({"ok": True, "message": f"Connected — {latency_ms}ms response time", "model": model})
+        else:
+            return Response({"ok": False, "message": f"Provider '{provider}' not configured on this server"})
+    except Exception as e:
+        return Response({"ok": False, "message": f"Connection failed: {str(e)[:100]}"})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def simulate_message(request):
+    """POST /api/v1/admin/simulate/ — Run a message through the AI pipeline without persisting."""
+    import time
+    text = request.data.get('text', '').strip()
+    language = request.data.get('language', 'auto')
+    if not text:
+        return Response({"error": "No text provided"}, status=400)
+
+    start = time.time()
+    try:
+        from ml_pipeline.graph import aegis_graph
+
+        initial_state = {
+            "raw_text": text,
+            "sender_jid": "simulation@test",
+            "sender_phone_jid": "simulation@test",
+            "instance_name": "__simulation__",
+            "message_key_id": None,
+            "push_name": "Simulation",
+            "is_from_me": False,
+            "start_time_ms": int(start * 1000),
+            "dry_run": True,
+        }
+
+        final_state = aegis_graph.invoke(initial_state)
+        latency_ms = int((time.time() - start) * 1000)
+
+        return Response({
+            "toxicity_score": round(final_state.get("m1_score", 0.0), 4),
+            "primary_class": final_state.get("primary_class", "safe"),
+            "confidence": final_state.get("m2_confidence"),
+            "llm_triggered": final_state.get("llm_triggered", False),
+            "llm_explanation": final_state.get("llm_explanation", ""),
+            "behavioral_risk_score": round(final_state.get("risk_score", 0.0), 4),
+            "final_score": round(final_state.get("m1_score", 0.0), 4),
+            "decision": final_state.get("decision", "ALLOW"),
+            "language": final_state.get("detected_language", language),
+            "explanation": final_state.get("llm_explanation", "Pipeline analysis complete."),
+            "latency_ms": latency_ms,
+        })
+    except Exception as e:
+        logger.error(f"Simulation failed: {e}")
+        return Response({"error": f"Pipeline error: {str(e)[:200]}"}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def agent_latencies(request):
+    """GET /api/v1/admin/agent-latencies/ — Live agent latencies from Redis."""
+    from moderation.views.webhook import get_avg_latency
+    latencies = {}
+    for i in range(1, 6):
+        val = get_avg_latency(f'agent_{i}', None)
+        latencies[f"agent_{i}"] = int(val) if val is not None else None
+    return Response(latencies)

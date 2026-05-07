@@ -165,7 +165,8 @@ def webhook_messages(request):
         "instance_name": instance,
         "message_key_id": message_key_id,
         "push_name": push_name,
-        "is_from_me": is_from_me
+        "is_from_me": is_from_me,
+        "start_time_ms": int(t_ml_start * 1000)
     }
     
     # 🚀 EXECUTE THE GRAPH

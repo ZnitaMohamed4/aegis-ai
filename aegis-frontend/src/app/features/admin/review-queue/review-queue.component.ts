@@ -5,12 +5,13 @@ import { ApiService } from '../../../core/services/api.service';
 import { AlertService, WebSocketAlertPayload } from '../../../core/services/alert.service';
 import { MessageService, ConfirmationService } from 'primeng/api';
 import { QueueReason, RiskLevel } from './review-queue.data';
+import { WhatsappJidPipe } from '../../../shared/pipes/whatsapp-jid.pipe';
 import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-review-queue',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, WhatsappJidPipe],
   templateUrl: './review-queue.html',
   styleUrl: './review-queue.css'
 })

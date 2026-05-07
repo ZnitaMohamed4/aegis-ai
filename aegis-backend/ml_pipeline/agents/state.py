@@ -35,6 +35,7 @@ class ModerationState(TypedDict):
     message_key_id: Optional[str]
     is_from_me: bool
     push_name: Optional[str]
+    start_time_ms: Optional[int]
 
     # OUTPUTS (Populated by Agents as the graph runs)
     normalized_text: Optional[str]

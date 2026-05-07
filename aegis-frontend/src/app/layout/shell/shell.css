@@ -5,6 +5,12 @@
   overflow: hidden;
 }
 
+.sidebar-hover-zone {
+  display: flex;
+  flex-shrink: 0;
+  height: 100vh;
+}
+
 .shell-main {
   display: flex;
   flex-direction: column;

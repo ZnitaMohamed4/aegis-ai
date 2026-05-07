@@ -6,13 +6,14 @@ import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
 import { RouterLink } from '@angular/router';
 import { getRiskHex } from '@shared/utils/severity.utils';
+import { WhatsappJidPipe } from '@shared/pipes/whatsapp-jid.pipe';
 import { AccountStatus, ParentUser } from './users.data';
 import { ApiService } from '@core/services/api.service';
 
 @Component({
   selector: 'app-users',
   standalone: true,
-  imports: [CommonModule, FormsModule, DrawerModule, ToastModule, RouterLink],
+  imports: [CommonModule, FormsModule, DrawerModule, ToastModule, RouterLink, WhatsappJidPipe],
   providers: [MessageService],
   templateUrl: './users.html',
   styleUrl: './users.css'

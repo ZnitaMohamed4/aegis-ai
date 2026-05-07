@@ -1,14 +1,13 @@
-import { Component, OnInit, signal, computed, effect } from '@angular/core';
+import { Component, OnInit, signal, computed, effect, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChartModule } from 'primeng/chart';
 import { SelectButtonModule } from 'primeng/selectbutton';
 import { TableModule } from 'primeng/table';
 
-import { PageHeaderComponent, StatCardComponent, SeverityBadgeComponent } from '@shared/index';
+import { PageHeaderComponent, StatCardComponent, SeverityBadgeComponent, WhatsappJidPipe } from '@shared/index';
 import { getRiskHex, getThreatHex } from '@shared/utils/severity.utils';
-
-import { ANALYTICS_DATA } from './analytics.data';
+import { ApiService } from '@core/services/api.service';
 
 type TimeRange = '7D' | '30D';
 
@@ -23,18 +22,23 @@ type TimeRange = '7D' | '30D';
     TableModule,
     PageHeaderComponent, 
     StatCardComponent, 
-    SeverityBadgeComponent
+    SeverityBadgeComponent,
+    WhatsappJidPipe
   ],
   templateUrl: './analytics.html',
   styleUrl: './analytics.css',
 })
 export class AnalyticsComponent implements OnInit {
+  private api = inject(ApiService);
+  
   // Time Range
   timeRangeOptions = [
     { label: 'Last 7 Days', value: '7D' },
     { label: 'Last 30 Days', value: '30D' }
   ];
   selectedRange = signal<TimeRange>('30D');
+
+  isLoading = signal<boolean>(true);
 
   // Charts data
   riskOptions: any;
@@ -74,24 +78,43 @@ export class AnalyticsComponent implements OnInit {
   heatmapData = signal<{ val: number, color: string }[][]>([]);
   heatmapMax = 0;
 
-  reviewAvgTime = signal(ANALYTICS_DATA.reviewQueue.avgResolutionTime);
+  reviewAvgTime = signal('15 mins');
+
+  // Summary stat cards
+  totalMessages = signal('—');
+  avgRisk = signal('—');
+  falsePositiveRate = signal('—');
+  avgLatency = signal('—');
 
   // Tables
-  topHarassers = signal(ANALYTICS_DATA.topHarassers);
-  perChildRisk = signal(ANALYTICS_DATA.perChildRisk);
+  topHarassers = signal<any[]>([]);
+  perChildRisk = signal<any[]>([]);
 
   // Stats
   getStatColor = getThreatHex;
 
   constructor() {
     effect(() => {
-      this.updateCharts(this.selectedRange());
+      this.fetchAnalyticsData(this.selectedRange());
     });
   }
 
   ngOnInit() {
     this.initChartOptions();
-    this.updateCharts(this.selectedRange());
+  }
+
+  fetchAnalyticsData(range: TimeRange) {
+    this.isLoading.set(true);
+    this.api.getAdminAnalytics(range).subscribe({
+      next: (data) => {
+        this.updateCharts(data);
+        this.isLoading.set(false);
+      },
+      error: (err) => {
+        console.error('Failed to load analytics', err);
+        this.isLoading.set(false);
+      }
+    });
   }
 
   initChartOptions() {
@@ -168,12 +191,17 @@ export class AnalyticsComponent implements OnInit {
     this.reviewPieOptions = this.langOptions;
   }
 
-  updateCharts(range: TimeRange) {
-    const days = range === '7D' ? 7 : 30;
-    const sliceEnd = 30;
-    const sliceStart = 30 - days;
+  updateCharts(data: any) {
+    const labels = data.labels;
 
-    const labels = ANALYTICS_DATA.labels.slice(sliceStart, sliceEnd);
+    // 0. Summary stat cards
+    if (data.summary) {
+      const s = data.summary;
+      this.totalMessages.set(s.totalMessages?.toLocaleString() ?? '0');
+      this.avgRisk.set(s.avgRisk?.toFixed(2) ?? '0.00');
+      this.falsePositiveRate.set(s.falsePositiveRate + '%');
+      this.avgLatency.set(s.avgLatency + 'ms');
+    }
 
     // 1. Risk Score Evolution (Line)
     this.riskData = {
@@ -181,7 +209,7 @@ export class AnalyticsComponent implements OnInit {
       datasets: [
         {
           label: 'Average Risk Score',
-          data: ANALYTICS_DATA.riskScores.slice(sliceStart, sliceEnd),
+          data: data.riskScores,
           borderColor: '#06B6D4',
           backgroundColor: '#06B6D41A',
           borderWidth: 2,
@@ -195,9 +223,9 @@ export class AnalyticsComponent implements OnInit {
     this.decisionsData = {
       labels,
       datasets: [
-        { label: 'Blocked', data: ANALYTICS_DATA.decisions.blocked.slice(sliceStart, sliceEnd), backgroundColor: '#EF4444' },
-        { label: 'Warned', data: ANALYTICS_DATA.decisions.warned.slice(sliceStart, sliceEnd), backgroundColor: '#EAB308' },
-        { label: 'Allowed', data: ANALYTICS_DATA.decisions.allowed.slice(sliceStart, sliceEnd), backgroundColor: '#22C55E' }
+        { label: 'Blocked', data: data.decisions.blocked, backgroundColor: '#EF4444' },
+        { label: 'Warned', data: data.decisions.warned, backgroundColor: '#EAB308' },
+        { label: 'Allowed', data: data.decisions.allowed, backgroundColor: '#22C55E' }
       ]
     };
 
@@ -205,10 +233,10 @@ export class AnalyticsComponent implements OnInit {
     this.categoriesData = {
       labels,
       datasets: [
-        { label: 'Verbal', data: ANALYTICS_DATA.categories.verbal.slice(sliceStart, sliceEnd), backgroundColor: '#F97316' },
-        { label: 'Threat', data: ANALYTICS_DATA.categories.threat.slice(sliceStart, sliceEnd), backgroundColor: '#EF4444' },
-        { label: 'Sexual', data: ANALYTICS_DATA.categories.sexual.slice(sliceStart, sliceEnd), backgroundColor: '#A855F7' },
-        { label: 'Discrim.', data: ANALYTICS_DATA.categories.discrimination.slice(sliceStart, sliceEnd), backgroundColor: '#EAB308' }
+        { label: 'Verbal', data: data.categories.verbal, backgroundColor: '#F97316' },
+        { label: 'Threat', data: data.categories.threat, backgroundColor: '#EF4444' },
+        { label: 'Sexual', data: data.categories.sexual, backgroundColor: '#A855F7' },
+        { label: 'Discrim.', data: data.categories.discrimination, backgroundColor: '#EAB308' }
       ]
     };
 
@@ -218,7 +246,7 @@ export class AnalyticsComponent implements OnInit {
       datasets: [
         {
           label: 'Latency (ms)',
-          data: ANALYTICS_DATA.latency.slice(sliceStart, sliceEnd),
+          data: data.latency,
           borderColor: '#8B5CF6',
           backgroundColor: '#8B5CF61A',
           borderWidth: 2,
@@ -232,7 +260,7 @@ export class AnalyticsComponent implements OnInit {
     this.langData = {
       labels: ['French (FR)', 'Arabic (AR)', 'English (EN)'],
       datasets: [{
-        data: ANALYTICS_DATA.languageDistribution,
+        data: data.languageDistribution,
         backgroundColor: ['#06B6D4', '#EAB308', '#22C55E'],
         hoverBackgroundColor: ['#0891B2', '#CA8A04', '#16A34A'],
         borderWidth: 0
@@ -243,7 +271,7 @@ export class AnalyticsComponent implements OnInit {
     this.notificationData = {
       labels: ['SMS', 'Email', 'Push', 'Appel'],
       datasets: [{
-        data: ANALYTICS_DATA.notificationStats,
+        data: data.notificationStats,
         backgroundColor: ['#F97316', '#38BDF8', '#8B5CF6', '#EF4444'],
         hoverBackgroundColor: ['#EA580C', '#0284C7', '#7C3AED', '#DC2626'],
         borderWidth: 0
@@ -252,13 +280,13 @@ export class AnalyticsComponent implements OnInit {
 
     // 7. Confidence Score Distribution (Bar - Histogram)
     this.confDistData = {
-      labels: ANALYTICS_DATA.confidenceDistribution.labels,
+      labels: data.confidenceDistribution.labels,
       datasets: [{
         label: 'Messages Count',
-        data: ANALYTICS_DATA.confidenceDistribution.data,
+        data: data.confidenceDistribution.data,
         backgroundColor: ['#22C55E', '#8B5CF6', '#EAB308', '#F97316', '#EF4444'], // Safe -> Grey Zone -> Critical
         borderWidth: 0,
-        barPercentage: 1.0,  // removes gap between bars to look like a histogram
+        barPercentage: 1.0,  
         categoryPercentage: 1.0
       }]
     };
@@ -268,7 +296,7 @@ export class AnalyticsComponent implements OnInit {
       labels,
       datasets: [{
         label: 'Agent 3 Activation (%)',
-        data: ANALYTICS_DATA.agent3Activation.slice(sliceStart, sliceEnd),
+        data: data.agent3Activation,
         borderColor: '#A855F7',
         backgroundColor: '#A855F71A',
         borderWidth: 2,
@@ -282,7 +310,7 @@ export class AnalyticsComponent implements OnInit {
       labels,
       datasets: [{
         label: 'False Positive Rate (%)',
-        data: ANALYTICS_DATA.falsePositives.slice(sliceStart, sliceEnd),
+        data: data.falsePositives,
         borderColor: '#EAB308',
         backgroundColor: '#EAB3081A',
         borderWidth: 2,
@@ -296,15 +324,19 @@ export class AnalyticsComponent implements OnInit {
     this.reviewPieData = {
       labels: ['Confirmed Block', 'Reversed to Allow'],
       datasets: [{
-        data: ANALYTICS_DATA.reviewQueue.decisions,
+        data: data.reviewQueue.decisions,
         backgroundColor: ['#EF4444', '#22C55E'],
         hoverBackgroundColor: ['#DC2626', '#16A34A'],
         borderWidth: 0
       }]
     };
 
+    this.reviewAvgTime.set(data.reviewQueue.avgResolutionTime);
+    this.topHarassers.set(data.topHarassers);
+    this.perChildRisk.set(data.perChildRisk);
+
     // 11. Heatmap Data Generation
-    const rawHeatmap = ANALYTICS_DATA.peakActivity;
+    const rawHeatmap = data.peakActivity;
     let max = 0;
     for (const day of rawHeatmap) {
       for (const val of day) {
@@ -313,12 +345,9 @@ export class AnalyticsComponent implements OnInit {
     }
     this.heatmapMax = max;
 
-    const heatmapStyles = rawHeatmap.map(dayArr => {
-      return dayArr.map(val => {
-        const intensity = (val / max);
-        // We will blend from surface color to a deep red/orange for "heat"
-        // Let's use CSS directly or mapped colors. Actually we can return an opacity to apply to a #EF4444 background.
-        // A minimal intensity so 0 is still faintly visible, e.g., max 0.8 opacity.
+    const heatmapStyles = rawHeatmap.map((dayArr: number[]) => {
+      return dayArr.map((val: number) => {
+        const intensity = max > 0 ? (val / max) : 0;
         const opacity = Math.max(0.05, intensity * 0.9);
         return { val, color: `rgba(239, 68, 68, ${opacity})` };
       });

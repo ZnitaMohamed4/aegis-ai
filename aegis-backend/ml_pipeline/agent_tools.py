@@ -51,3 +51,57 @@ def search_similar_cases(text: str) -> str:
         return "No strictly similar past cases found in the database. Use your best judgment."
     except Exception as e:
         return f"Error searching cache: {e}"
+
+@tool
+def fetch_risk_profile(sender_jid: str) -> str:
+    """
+    Fetches the sender's behavioral risk profile (Digital Twin) built by Agent 4.
+    Returns their risk level, Bayesian archetype, and key behavioral evidence.
+    Use this when the message is ambiguous, from an unknown contact, or when
+    grooming signals are suspected. ALWAYS pass the exact sender_jid from the prompt.
+    """
+    from moderation.models import UserBehaviorProfile, BehavioralSnapshot
+    from django.utils import timezone
+    
+    try:
+        profile = UserBehaviorProfile.objects.get(user_jid=sender_jid)
+    except UserBehaviorProfile.DoesNotExist:
+        return (
+            "NO PROFILE FOUND: This is a first-time sender with zero behavioral history. "
+            "Treat as UNKNOWN contact — apply maximum caution for any suspicious content."
+        )
+    
+    days_known = (timezone.now() - profile.first_seen_at).days if profile.first_seen_at else 0
+    is_stranger = days_known < 14
+    total = max(1, profile.total_messages_sent)
+    
+    # Get latest Bayesian snapshot
+    snapshot = BehavioralSnapshot.objects.filter(profile=profile).order_by('-date_snapshot').first()
+    
+    lines = [
+        "[AEGIS SENDER RISK PROFILE]",
+        f"Overall Risk: {profile.risk_level} (Score: {profile.risk_score:.2f})",
+    ]
+    
+    if snapshot:
+        lines.append(f"Archetype: {snapshot.archetype}")
+        lines.append("")
+        lines.append("RISK PATHWAYS:")
+        lines.append(f"  - Grooming Probability: {snapshot.grooming_prob*100:.0f}%")
+        lines.append(f"  - Bully Probability: {snapshot.bully_prob*100:.0f}%")
+        lines.append(f"  - Troll Probability: {snapshot.troll_prob*100:.0f}%")
+    
+    night_label = "HIGH" if profile.night_activity_ratio > 0.5 else "MODERATE" if profile.night_activity_ratio > 0.2 else "LOW"
+    
+    lines.append("")
+    lines.append("BEHAVIORAL EVIDENCE:")
+    lines.append(f"  1. Stranger: {'YES' if is_stranger else 'NO'} (Known for {days_known} days)")
+    lines.append(f"  2. Night Activity: {night_label} ({profile.night_activity_ratio:.0%} of messages)")
+    lines.append(f"  3. Target Breadth: {profile.unique_targets_count} children contacted")
+    lines.append(f"  4. Message Style: avg {profile.avg_message_length:.0f} chars/msg")
+    lines.append(f"  5. Child Initiated: {'YES' if profile.child_initiated else 'NO'}")
+    lines.append(f"  6. Block Ratio: {profile.block_ratio:.0%} ({profile.total_blocked_messages_sent}/{total} blocked)")
+    lines.append(f"  7. Escalation Count: {profile.escalation_count}")
+    lines.append(f"  8. Toxicity (EMA): {profile.average_toxicity_score:.2f}")
+    
+    return "\n".join(lines)

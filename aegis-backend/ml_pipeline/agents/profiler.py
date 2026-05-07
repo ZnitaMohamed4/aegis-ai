@@ -109,11 +109,23 @@ def profiler_node(state: ModerationState) -> dict:
     prev_night_msgs = profile.night_activity_ratio * prev_total
     profile.night_activity_ratio = (prev_night_msgs + is_night) / profile.total_messages_sent
     
-    # Unique targets count
-    known_targets = set(ModerationResult.objects.filter(sender_jid=sender_jid).values_list('instance_name', flat=True))
+    # Unique targets count — count REAL monitored children, not raw instance strings
+    # The old code counted distinct instance_name values which inflated numbers.
+    from moderation.models import MonitoredChild
+    sender_instances = set(
+        ModerationResult.objects.filter(sender_jid=sender_jid)
+        .values_list('instance_name', flat=True).distinct()
+    )
     if instance_name:
-        known_targets.add(instance_name)
-    profile.unique_targets_count = len(known_targets)
+        sender_instances.add(instance_name)
+    
+    # Map instance_names → actual registered MonitoredChild records
+    real_children_count = MonitoredChild.objects.filter(
+        parent__evolution_instance_name__in=sender_instances
+    ).count()
+    
+    # Use real count; fallback to distinct instances capped at 5 if no children registered
+    profile.unique_targets_count = real_children_count if real_children_count > 0 else min(len(sender_instances), 5)
     
     # --- Tier 2 Features ---
     # Agent 3 overrides

@@ -1,4 +1,4 @@
-<div class="p-4 sm:p-6 w-full max-w-7xl mx-auto">
+<div class="p-4 sm:p-6 w-full">
   <app-page-header title="Analytics & Trends"
     subtitle="Macro-level insights into digital harassment patterns over time.">
     <!-- Time Range Selector -->
@@ -10,12 +10,12 @@
 
   <!-- Key Metrics Row (Over Time) -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
-    <app-stat-card label="Total Messages Analyzed" value="234,512" trend="+12%"></app-stat-card>
-    <app-stat-card label="Aggregated Risk Avg" value="0.38" sub="All monitored children"
+    <app-stat-card label="Total Messages Analyzed" [value]="totalMessages()"></app-stat-card>
+    <app-stat-card label="Aggregated Risk Avg" [value]="avgRisk()" sub="All monitored children"
       valueColor="var(--medium)"></app-stat-card>
-    <app-stat-card label="False Positive Rate" value="1.2%" trend="-0.4%"
+    <app-stat-card label="False Positive Rate" [value]="falsePositiveRate()"
       sub="Human overrides in review" valueColor="var(--info)"></app-stat-card>
-    <app-stat-card label="Average Latency" value="142ms" trend="-15ms"></app-stat-card>
+    <app-stat-card label="Average Latency" [value]="avgLatency()"></app-stat-card>
   </div>
 
   <!-- Primary Time-Series Charts -->
@@ -178,7 +178,7 @@
             <ng-template pTemplate="body" let-harasser>
               <tr class="border-b border-[var(--border)] bg-[var(--bg-base)]">
                 <td class="px-4 py-3 text-sm">
-                  <div class="font-bold text-[var(--text-primary)]">{{ harasser.contact }}</div>
+                  <div class="font-bold text-[var(--text-primary)]">{{ harasser.contact | whatsappJid }}</div>
                   <div class="text-xs text-[var(--text-muted)]">{{ harasser.name || 'Unknown' }}</div>
                 </td>
                 <td class="px-4 py-3 text-sm text-center font-mono font-bold">{{ harasser.messagesBlocked }}</td>
@@ -195,7 +195,7 @@
           <div
             class="bg-[var(--bg-surface-2)] rounded-lg p-3 border border-[var(--border)] flex justify-between items-center">
             <div>
-              <div class="text-sm font-bold text-[var(--text-primary)]">{{ harasser.contact }}</div>
+              <div class="text-sm font-bold text-[var(--text-primary)]">{{ harasser.contact | whatsappJid }}</div>
               <div class="text-xs text-[var(--text-muted)]">{{ harasser.name || 'Unknown' }}</div>
             </div>
             <div class="flex flex-col items-end gap-1">

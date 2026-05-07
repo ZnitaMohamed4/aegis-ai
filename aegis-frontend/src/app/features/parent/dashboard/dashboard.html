@@ -30,7 +30,7 @@
         </div>
         <div class="child-banner-info">
           <span class="child-banner-name">{{ childInfo.name }}</span>
-          <span class="child-banner-number mono">{{ childInfo.display_number || childInfo.whatsapp_jid }}</span>
+          <span class="child-banner-number mono">{{ childInfo.display_number || childInfo.whatsapp_jid | whatsappJid }}</span>
         </div>
       </div>
       <div class="child-banner-right">
