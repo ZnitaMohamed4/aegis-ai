@@ -344,10 +344,26 @@ def enforcer_node(state: ModerationState) -> dict:
                 # Fallback for old return type
                 warning_msg_key_id = warning_result
 
-            # PARENT ALERT: Notify parent on critical escalations
-            if decision == 'ESCALATE' and child and child.parent and child.parent.user.phone_number:
-                send_parent_alert(instance_name, child.parent.user.phone_number, child.full_name, primary_class, raw_text)
-                enforcement_actions.append("parent_alert")
+            # PARENT ALERT: Notify parent on critical escalations (and blocks for testing)
+            if decision in ['ESCALATE', 'BLOCK'] and child and child.parent:
+                parent_phone = child.parent.user.phone_number
+                
+                if parent_phone:
+                    # 1. Standard WhatsApp Alert
+                    send_parent_alert(instance_name, parent_phone, child.full_name, primary_class, raw_text)
+                    enforcement_actions.append("parent_alert")
+                    
+                    # 2. Twilio Emergency Voice Call (if enabled)
+                    if getattr(child.parent, 'receive_call_on_critical', False):
+                        from moderation.services.twilio_service import call_parent_emergency
+                        call_parent_emergency(parent_phone, child.full_name, primary_class, 'critical')
+                        enforcement_actions.append("emergency_call")
+                        
+                    # 3. Twilio SMS Alert Backup (if enabled)
+                    if getattr(child.parent, 'receive_sms_alerts', False):
+                        from moderation.services.twilio_service import send_sms_alert
+                        send_sms_alert(parent_phone, child.full_name, primary_class, raw_text[:100])
+                        enforcement_actions.append("sms_alert")
                 
             # 🛡️ INCOMING ATTACKER NEUTRALIZATION (Archive + Block)
             if decision in ['BLOCK', 'ESCALATE'] and not is_from_me:
