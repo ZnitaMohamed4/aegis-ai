@@ -19,7 +19,7 @@ C_RESET   = "\033[0m"
 DIVIDER   = "═" * 62
 
 
-def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid, instance_name):
+def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid, instance_name, image_context=None):
     """
     Agent 3: ReAct Agent — Calls tools before reaching a decision.
     Equipped with: fetch_recent_history + search_similar_cases
@@ -54,7 +54,7 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
 
     --- MESSAGE ---
     Text: "{raw_text}"
-    ML Label: {primary_class} | Confidence: {confidence:.2f} | Toxicity: {m1_score:.2f}
+    ML Label: {primary_class} | Confidence: {(confidence or 0.0):.2f} | Toxicity: {(m1_score or 0.0):.2f}
     Sender: {sender_jid} | Instance: {instance_name}
 
     --- CORE PRINCIPLE ---
@@ -117,10 +117,29 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     Still unclear after tools → HUMAN_REVIEW
 
     --- CATEGORIES ---
-    threat | sexual_harassment | discrimination | verbal_harassment | safe
+    threat | sexual_harassment | discrimination | verbal_harassment | nsfw_image | violent_image | safe
 
     --- OUTPUT (STRICT JSON ONLY, no preamble) ---
     {{"decision": "BLOCK|WARN|ALLOW|HUMAN_REVIEW", "category": "<category>", "explanation": "<12 words max>"}}"""
+
+    # ── IMAGE CONTEXT INJECTION ──────────────────────────────────────
+    # When the message contains an image that was analyzed by ViT classifiers,
+    # inject the results into the system prompt so the LLM can make informed decisions.
+    if image_context:
+        image_section = f"""
+
+    --- IMAGE ANALYSIS (ViT Classifiers) ---
+    This message contains an IMAGE analyzed by Vision Transformer models:
+    - NSFW Detected: {image_context.get('nsfw', False)} (confidence: {image_context.get('nsfw_score', 0.0):.4f})
+    - Violence Detected: {image_context.get('violent', False)} (confidence: {image_context.get('violent_score', 0.0):.4f})
+    - OCR Text Extracted: "{image_context.get('ocr_text', '') or '(none)'}" 
+
+    IMAGE RULES (override all other rules):
+    - If NSFW=True → BLOCK with category "nsfw_image". No exceptions.
+    - If Violence=True → BLOCK with category "violent_image". No exceptions.
+    - If OCR text contains harmful content → classify the OCR text using the standard rules above.
+    - Do NOT downgrade image-flagged content to HUMAN_REVIEW. ViT classifiers are definitive."""
+        system_prompt += image_section
 
     tools = [fetch_risk_profile, fetch_recent_history, search_similar_cases]
     agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))

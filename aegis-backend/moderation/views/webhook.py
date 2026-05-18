@@ -8,6 +8,11 @@ import logging
 import os
 import time
 
+# The Aegis Bot's WhatsApp JID — messages FROM the child TO the bot must be
+# excluded from the moderation pipeline (they're private chats with the assistant).
+# Format: 212XXXXXXXXX@s.whatsapp.net (phone number without leading +)
+AEGIS_BOT_JID = os.getenv('AEGIS_BOT_JID', '212668896664@s.whatsapp.net')
+
 from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -115,7 +120,41 @@ def webhook_messages(request):
         threading.Thread(target=forward_to_n8n).start()
         
         return JsonResponse({"status": "forwarded_to_n8n", "reason": "audio_message"})
-    # 4. Very deeply nested (sometimes Evo API v2 does this for regular messages)
+    # 4. Image Message (ViT + OCR Pipeline)
+    elif "imageMessage" in message:
+        image_msg = message["imageMessage"]
+        caption = image_msg.get("caption", "")
+        
+        logger.info("Image message detected. Running multimodal analysis...")
+        from ml_pipeline.image_analyzer import analyze_image
+        image_result = analyze_image(body.get("instance", "unknown"), inner_data)
+        
+        # 📸 Print image analysis results to terminal
+        nsfw_icon = "🔴" if image_result.get("nsfw") else "🟢"
+        violent_icon = "🔴" if image_result.get("violent") else "🟢"
+        ocr_preview = image_result.get("ocr_text", "")[:80] or "(none)"
+        print(f"\n┌──────────────────────────────────────────────┐")
+        print(f"│ 📸 IMAGE ANALYSIS RESULTS")
+        print(f"│ {nsfw_icon} NSFW:     {image_result.get('nsfw', False)}  (score: {image_result.get('nsfw_score', 0):.4f})")
+        print(f"│ {violent_icon} Violence: {image_result.get('violent', False)}  (score: {image_result.get('violent_score', 0):.4f})")
+        print(f"│ 📝 OCR:      {ocr_preview}")
+        print(f"└──────────────────────────────────────────────┘\n")
+        
+        parts = []
+        if caption: 
+            parts.append(caption)
+        if image_result.get("ocr_text"):
+            parts.append(f"[Image Text]: {image_result['ocr_text']}")
+        if image_result.get("nsfw"):
+            parts.append("[IMAGE FLAGGED: NSFW Content Detected]")
+        if image_result.get("violent"):
+            parts.append("[IMAGE FLAGGED: Violence Detected]")
+            
+        raw_text = " | ".join(parts) if parts else ""
+        
+        # Store the image results in a temporary location for the LangGraph state
+        request._image_analysis_result = image_result
+
     elif isinstance(message, str):
         raw_text = message
 
@@ -123,9 +162,12 @@ def webhook_messages(request):
         logger.debug("Ignoring message: raw_text is empty.")
         return JsonResponse({"status": "ignored", "reason": "no_text_content"})
 
-    # Don't moderate messages sent *by* the system running Evolution API
-    if key.get("fromMe", False):
-        return JsonResponse({"status": "ignored", "reason": "from_me"})
+    # Self-Moderation: Process outgoing messages too (fromMe=True)
+    # Instead of ignoring them, we route them through the pipeline with a flag.
+    # The Enforcer (Agent 5) uses is_from_me to pick the softer enforcement path:
+    #   - Delete for Everyone + educational DM (not punitive warning)
+    #   - Constructive parent notification (not alarm)
+    is_from_me = key.get("fromMe", False)
 
     # 2. Extract Sender Info
     instance = body.get("instance", "unknown_instance")
@@ -142,9 +184,117 @@ def webhook_messages(request):
     
     # Extract pushName from data or inner_data
     push_name = data.get("pushName") or inner_data.get("pushName")
-    
-    is_from_me = key.get("fromMe", False)
-    direction_icon = "📤 OUTGOING" if is_from_me else "📥 INCOMING"
+
+    # ── 🤖 AEGIS BOT BYPASS & ROUTING ────────────────────────────────────────────
+    # Two cases to handle involving the Aegis Assistant bot:
+    #
+    # CASE A — Child replies TO the bot (fromMe=True, remoteJid = bot's JID):
+    #   Instance 1 sees this as an outgoing message. We MUST skip the moderation
+    #   pipeline (it would delete the child's reply!). Instead, we forward it
+    #   directly to the chatbot handler so the bot can respond.
+    #   This also handles misconfigured Instance 2 webhook URLs gracefully.
+    #
+    # CASE B — Bot messages arrive at Instance 1 as INCOMING (fromMe=False, sender = bot):
+    #   When aegis-bot DMs the child, Instance 1 also receives that DM. We must
+    #   skip it to prevent the bot being profiled as a threat actor (Groomer Pattern!).
+    # ─────────────────────────────────────────────────────────────────────────────
+
+    if is_from_me and sender_jid == AEGIS_BOT_JID:
+        # CASE A: Child is replying to the bot — forward to chatbot handler.
+        # For fromMe=True: remoteJid = RECIPIENT = bot's JID (not the child's).
+        # We need to resolve the child's own JID to reply in the correct thread.
+        logger.debug(f"[WEBHOOK] ⏩ child→bot reply detected, forwarding to chatbot handler")
+        if os.getenv('AEGIS_BOT_ENABLED', 'False').lower() in ('true', '1', 'yes'):
+            try:
+                from moderation.services.chatbot_service import get_chatbot
+                from moderation.models import MonitoredChild
+
+                # Resolve child JID: look up the monitored child linked to this instance
+                child_jid = None
+                child_record = MonitoredChild.objects.filter(
+                    parent__evolution_instance_name=instance
+                ).first()
+                if child_record and child_record.whatsapp_jid:
+                    child_jid = child_record.whatsapp_jid
+                else:
+                    # Fallback: ask Evolution API for the instance owner's JID
+                    try:
+                        from moderation.evolution_api import get_instance_details
+                        details = get_instance_details(instance)
+                        if details and details.get('ownerJid'):
+                            child_jid = details['ownerJid']
+                    except Exception:
+                        pass
+
+                if child_jid:
+                    chatbot = get_chatbot()
+                    monitor_instance = os.getenv('EVOLUTION_INSTANCE_NAME', instance)
+                    is_safety_event = False
+                    threat_intel = None
+                    
+                    # 1. Save child's message to conversation memory
+                    chatbot.save_message(child_jid, 'user', raw_text)
+                    
+                    # 2. Static keyword safety check (fast fallback)
+                    is_critical_keyword, matched_keyword = chatbot.check_safety_escalation(raw_text)
+                    if is_critical_keyword:
+                        is_safety_event = True
+                        logger.warning(f"[WEBHOOK] 🚨 Keyword SAFETY ESCALATION in child→bot chat: '{matched_keyword}'")
+
+                    # 3. Generate LLM response
+                    raw_response = chatbot.generate_response(child_jid, raw_text)
+                    
+                    # 4. Parse THREAT_INTEL tag from response
+                    response_text, threat_intel = chatbot.parse_threat_intel(raw_response)
+                    
+                    if threat_intel:
+                        is_safety_event = True
+                        logger.warning(f"[WEBHOOK] 🚨 THREAT_INTEL extracted: {threat_intel.get('threat_type')} | urgency={threat_intel.get('urgency')}")
+                    
+                    # 5. Check legacy tag
+                    if "[SAFETY_ESCALATE]" in response_text:
+                        response_text = response_text.replace("[SAFETY_ESCALATE]", "").strip()
+                        is_safety_event = True
+                        logger.warning(f"[WEBHOOK] 🚨 LLM Reasoned SAFETY ESCALATION detected!")
+                    
+                    # 6. Send parent alert if safety event detected
+                    if is_safety_event:
+                        if threat_intel:
+                            chatbot.notify_parent_safety_detailed(chatbot.bot_instance, child_jid, threat_intel)
+                        else:
+                            chatbot.notify_parent_safety(chatbot.bot_instance, child_jid, matched_keyword or "LLM Danger Assessment")
+                    
+                    # 7. Send clean response to child
+                    chatbot.send_reply(child_jid, response_text)
+                    
+                    # 8. Save bot's response to conversation memory
+                    chatbot.save_message(
+                        child_jid, 'assistant', response_text,
+                        is_safety_flagged=is_safety_event,
+                        threat_intel=threat_intel,
+                    )
+                    
+                    logger.info(f"[WEBHOOK] 🤖 Chatbot replied to child ({child_jid}): {len(response_text)} chars"
+                                + (" 🚨 SAFETY" if is_safety_event else ""))
+                else:
+                    logger.warning(f"[WEBHOOK] ⚠️ Could not resolve child JID for chatbot reply (instance={instance})")
+            except Exception as e:
+                logger.error(f"[WEBHOOK] Chatbot forwarding failed: {e}")
+        return JsonResponse({"status": "forwarded_to_chatbot", "reason": "child_to_bot_conversation"})
+
+    if not is_from_me and sender_jid == AEGIS_BOT_JID:
+        # CASE B: Bot's own DM arriving at Instance 1 — skip entirely
+        logger.debug(f"[WEBHOOK] ⏩ Skipping bot's own message at Instance 1")
+        return JsonResponse({"status": "ignored", "reason": "bot_own_message"})
+        
+    # We also explicitly ignore messages if they happen to come from the aegis-bot instance
+    # just in case the user did manage to configure the webhook properly for it.
+    BOT_INSTANCE_NAME = os.getenv('AEGIS_BOT_INSTANCE_NAME', 'aegis-bot')
+    if instance == BOT_INSTANCE_NAME:
+        return JsonResponse({"status": "ignored", "reason": "bot_instance_webhook"})
+    # ─────────────────────────────────────────────────────────────────────────────
+
+    direction_icon = "📤 OUTGOING (Self-Moderation)" if is_from_me else "📥 INCOMING"
     sender_label = push_name if push_name else (pure_number if not is_from_me else "ME (Host)")
     recipient_label = pure_number if is_from_me else "ME (Host)"
     
@@ -156,6 +306,9 @@ def webhook_messages(request):
 
     # 3. 🧠 SEND TO AI PIPELINE (LangGraph Orchestrator)
     t_ml_start = time.time()
+
+    # Grab the image results we saved earlier (if any)
+    image_result = getattr(request, '_image_analysis_result', {})
     
     # Prepare the initial state
     initial_state = {
@@ -166,7 +319,15 @@ def webhook_messages(request):
         "message_key_id": message_key_id,
         "push_name": push_name,
         "is_from_me": is_from_me,
-        "start_time_ms": int(t_ml_start * 1000)
+        "start_time_ms": int(t_ml_start * 1000),
+
+        # IMAGE ANALYSIS DATA
+        "image_analyzed": bool(image_result),
+        "image_nsfw": image_result.get("nsfw", False),
+        "image_violent": image_result.get("violent", False),
+        "image_nsfw_score": image_result.get("nsfw_score", 0.0),
+        "image_violent_score": image_result.get("violent_score", 0.0),
+        "image_ocr_text": image_result.get("ocr_text", "")
     }
     
     # 🚀 EXECUTE THE GRAPH

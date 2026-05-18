@@ -51,10 +51,14 @@ def delete_message_from_whatsapp(instance_name, message_key_id, remote_jid, is_f
         return False
 
 
-def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision, message_key_id=None):
+def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision, message_key_id=None, image_flags=None):
     """
     Sends an automated warning using Evolution API.
-    Different text depending on who sent the bad message and whether it was blocked.
+    Different text depending on who sent the bad message, severity, and content type.
+    
+    Args:
+        image_flags: Optional dict with keys: nsfw (bool), violent (bool), ocr_text (str)
+                     When present, generates image-specific warning templates.
     """
     api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
     api_key = os.getenv('EVOLUTION_API_KEY')
@@ -69,28 +73,71 @@ def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision
         "Content-Type": "application/json"
     }
 
-    # Format the warning based on who was the attacker and the severity
+    # ── Determine the content type and build the appropriate warning ──
+    is_nsfw_image = image_flags and image_flags.get("nsfw", False)
+    is_violent_image = image_flags and image_flags.get("violent", False)
+    has_ocr_text = image_flags and image_flags.get("ocr_text", "")
+    is_image_flag = is_nsfw_image or is_violent_image
+
     if is_from_me:
-        if decision in ['BLOCK', 'ESCALATE']:
+        # ── OUTGOING (Self-Moderation) ──
+        if is_nsfw_image:
+            warning_text = (
+                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
+                f"📸 An image sent from this device was blocked for *NSFW Content*.\n\n"
+                f"⚠️ _The image was flagged by our AI vision system and this incident has been logged._"
+            )
+        elif is_violent_image:
+            warning_text = (
+                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
+                f"📸 An image sent from this device was blocked for *Violent Content*.\n\n"
+                f"⚠️ _The image was flagged by our AI vision system and this incident has been logged._"
+            )
+        elif has_ocr_text and decision in ['BLOCK', 'ESCALATE']:
+            warning_text = (
+                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
+                f"📸 An image sent from this device contained text flagged for *{category.replace('_', ' ').title()}*.\n\n"
+                f"⚠️ _The text was extracted and analyzed. This incident has been logged._"
+            )
+        elif decision in ['BLOCK', 'ESCALATE']:
             warning_text = (
                 f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
                 f"A message sent by this device was blocked for *{category.replace('_', ' ').title()}*.\n\n"
                 f"⚠️ _The message was deleted and this incident has been logged to the Parental Dashboard._"
             )
-        else: # WARN
+        else:  # WARN
             warning_text = (
                 f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
                 f"A message sent by this device was flagged as a *Warning* for *{category.replace('_', ' ').title()}*.\n\n"
                 f"⚠️ _The message was NOT deleted, but this incident has been logged. Please be respectful._"
             )
     else:
-        if decision in ['BLOCK', 'ESCALATE']:
+        # ── INCOMING (From external sender) ──
+        if is_nsfw_image:
+            warning_text = (
+                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
+                f"📸 Your image was flagged for *NSFW Content* and violated safety protocols.\n\n"
+                f"🚨 _This incident has been logged and reported. Sending inappropriate images to a minor is a serious offense._"
+            )
+        elif is_violent_image:
+            warning_text = (
+                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
+                f"📸 Your image was flagged for *Violent Content* and violated safety protocols.\n\n"
+                f"🚨 _This incident has been logged and reported. Further violations will result in an automatic block._"
+            )
+        elif has_ocr_text and decision in ['BLOCK', 'ESCALATE']:
+            warning_text = (
+                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
+                f"📸 Text extracted from your image was flagged for *{category.replace('_', ' ').title()}* and violated safety protocols.\n\n"
+                f"⚠️ _This incident has been logged and reported. Further violations will result in an automatic block._"
+            )
+        elif decision in ['BLOCK', 'ESCALATE']:
             warning_text = (
                 f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
                 f"Your message was flagged for *{category.replace('_', ' ').title()}* and violated safety protocols.\n\n"
                 f"⚠️ _This incident has been logged and reported. Further violations will result in an automatic block._"
             )
-        else: # WARN
+        else:  # WARN
             warning_text = (
                 f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
                 f"Your message was flagged as a *Warning* for *{category.replace('_', ' ').title()}*.\n\n"
@@ -413,6 +460,140 @@ def send_parent_alert(instance_name, parent_phone_number, child_name, category, 
     return False
 
 
+def send_educational_dm(bot_instance_name, child_jid, category, original_text=None):
+    """
+    Sends an empathetic educational DM from the Aegis Assistant bot (Instance 2)
+    to the child after catching their toxic outgoing message.
+    
+    This is NOT a punitive warning — it's an educational ally helping the child
+    understand why their message could be harmful and encouraging self-reflection.
+    
+    Args:
+        bot_instance_name: The Evolution API instance name for the Aegis bot
+        child_jid: The child's WhatsApp JID
+        category: The detected harassment category (e.g. 'verbal_harassment', 'threat')
+        original_text: Optional preview of the original message for context
+    
+    Returns:
+        tuple: (message_key_id, text_sent) or (None, None) on failure
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    
+    if not api_key or not bot_instance_name:
+        logger.warning("[AEGIS] ⚠️ Bot instance not configured — skipping educational DM.")
+        return None, None
+    
+    url = f"{api_url}/message/sendText/{bot_instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    
+    # Category-specific educational messages — empathetic, short, and punchy
+    EDUCATIONAL_TEMPLATES = {
+        'verbal_harassment': (
+            "Hey 👋 I noticed your last message was pretty harsh. "
+            "Words can really hurt — take a breath before you text. 🧘‍♂️"
+        ),
+        'threat': (
+            "Hey 👋 That last message sounded like a threat. "
+            "Even if you're just joking, that can get you in real trouble. 🛑"
+        ),
+        'sexual_harassment': (
+            "Hey 👋 That message could make someone really uncomfortable. "
+            "Let's keep the chat respectful. 🙏"
+        ),
+        'discrimination': (
+            "Hey 👋 Using words that target who someone is isn't okay. "
+            "Everyone deserves respect. 🌍"
+        ),
+        'repeated_messages': (
+            "Hey 👋 You're sending a lot of messages fast! "
+            "Give them some space to reply. 😅"
+        ),
+        'identity_theft': (
+            "Hey 👋 Pretending to be someone else can cause real harm. "
+            "Just be yourself! ⚠️"
+        ),
+    }
+    
+    # Get the template or use a generic fallback
+    category_message = EDUCATIONAL_TEMPLATES.get(category, (
+        "Hey 👋 That last message was a bit much. "
+        "Take a second to think before you hit send! 🌱"
+    ))
+    
+    dm_text = (
+        f"🛡️ *Aegis Assistant*\n\n"
+        f"{category_message}\n\n"
+        f"💡 _If you need to vent, just text me! I'm here to listen._"
+    )
+    
+    payload = {
+        "number": child_jid,
+        "text": dm_text,
+        "delay": 2000  # Natural typing delay
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code in [200, 201]:
+            resp_data = response.json()
+            msg_key_id = resp_data.get("key", {}).get("id")
+            logger.info(f"[AEGIS] 📚 Educational DM sent to child via {bot_instance_name}")
+            return msg_key_id, dm_text
+    except Exception as e:
+        logger.error(f"[AEGIS] ❌ Error sending educational DM: {e}")
+    
+    return None, dm_text
+
+
+def send_constructive_parent_alert(instance_name, parent_phone_number, child_name, category):
+    """
+    Sends a constructive, guidance-focused notification to the parent about
+    their child's self-moderation event. This is NOT an alarm — it frames
+    the incident as a learning opportunity.
+    
+    Different from send_parent_alert which is alarming (🚨 CRITICAL ALERT).
+    This is calm and supportive (🌱 GROWTH MOMENT).
+    """
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+    
+    if not api_key:
+        return False
+    
+    url = f"{api_url}/message/sendText/{instance_name}"
+    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    
+    category_label = category.replace('_', ' ').title()
+    
+    alert_text = (
+        f"🌱 *Aegis Growth Moment* 🌱\n\n"
+        f"Aegis caught a message from {child_name} that was flagged as *{category_label}*. "
+        f"The message was intercepted and {child_name} received a private, "
+        f"educational message from Aegis Assistant to help them understand why.\n\n"
+        f"💡 _This is normal — children learn digital citizenship through moments like these. "
+        f"Consider having a calm conversation about it._\n\n"
+        f"📊 Check your AEGIS Dashboard for details."
+    )
+    
+    clean_number = str(parent_phone_number).replace("+", "").replace("-", "").replace(" ", "")
+    
+    payload = {
+        "number": clean_number,
+        "text": alert_text,
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers, timeout=10)
+        if response.status_code in [200, 201]:
+            logger.info(f"[AEGIS] 🌱 Constructive parent alert sent to {clean_number}")
+            return True
+    except Exception as e:
+        logger.error(f"[AEGIS] ❌ Error sending constructive parent alert: {e}")
+    
+    return False
+
+
 def create_whatsapp_instance(instance_name):
     """
     Step 1: Create the instance in Evolution API.
@@ -598,4 +779,126 @@ def fetch_relationship_start(instance_name, remote_jid):
 
     logger.info(f"[AEGIS] 🕒 No historical messages found for {remote_jid}. Defaulting to now.")
     return timezone.now(), False
+
+
+def fetch_shared_groups(instance_name, sender_jid):
+    """
+    Fetches shared WhatsApp groups between the monitored child and a specific sender.
+
+    Calls Evolution API to get all groups, then checks participant lists for the
+    sender's JID. Returns a list of dicts with group metadata for BN evidence
+    (SharedGroupsCount) and LLM contextual reasoning (Agent 3).
+
+    Returns:
+        list of dicts: [{"group_jid": "...", "group_name": "...", "created_at": "...",
+                         "participant_count": N}, ...]
+        Returns empty list on failure.
+    """
+    import datetime as _dt
+
+    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    api_key = os.getenv('EVOLUTION_API_KEY')
+
+    if not api_key:
+        logger.warning("[AEGIS] ⚠️ Evolution API Key missing — cannot fetch shared groups.")
+        return []
+
+    url = f"{api_url}/group/fetchAllGroups/{instance_name}?getParticipants=true"
+    headers = {"apikey": api_key}
+
+    # Extract the pure phone number for flexible matching.
+    # Sender JID may be "212628283965@s.whatsapp.net" or "+212628283965".
+    # We normalize to just digits for comparison.
+    sender_number = sender_jid.split('@')[0].replace('+', '').strip()
+
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        if response.status_code not in [200, 201]:
+            # Log the actual response body to debug HTTP 400 errors
+            resp_body = ""
+            try:
+                resp_body = response.text[:500]
+            except Exception:
+                pass
+            logger.warning(
+                f"[AEGIS] ⚠️ fetchAllGroups returned HTTP {response.status_code} "
+                f"for instance={instance_name}. Response: {resp_body}"
+            )
+            return []
+
+        groups = response.json()
+
+        # Evolution API v2 may wrap groups in a list or a dict with a key
+        if isinstance(groups, dict):
+            # Try common wrapper keys
+            groups = groups.get("data", groups.get("groups", []))
+        if not isinstance(groups, list):
+            logger.warning(f"[AEGIS] ⚠️ fetchAllGroups returned unexpected type: {type(groups)}")
+            return []
+
+        shared = []
+        for group in groups:
+            participants = group.get("participants", [])
+
+            # Build a set of all phone numbers in this group for matching.
+            # Evolution API v2 participants are dicts with:
+            #   - "id": usually a @lid JID (internal, NOT the phone number)
+            #   - "phoneNumber": the ACTUAL phone number (e.g. "212628283965")
+            # We must check phoneNumber first, then fall back to id.
+            group_phone_numbers = set()
+            for p in participants:
+                if isinstance(p, dict):
+                    # Primary: phoneNumber field (real number)
+                    phone = p.get("phoneNumber", "")
+                    if phone:
+                        # Normalize: strip +, spaces, dashes
+                        clean = str(phone).replace('+', '').replace(' ', '').replace('-', '').strip()
+                        if clean:
+                            group_phone_numbers.add(clean)
+                    # Secondary: id field (may be @s.whatsapp.net or @lid)
+                    pid = p.get("id", "")
+                    if pid and "@s.whatsapp.net" in pid:
+                        # Extract number from JID
+                        num = pid.split('@')[0].replace('+', '').strip()
+                        if num:
+                            group_phone_numbers.add(num)
+                elif isinstance(p, str):
+                    # Plain JID string
+                    num = p.split('@')[0].replace('+', '').strip()
+                    if num:
+                        group_phone_numbers.add(num)
+
+            # Check if sender's number is in this group
+            if sender_number in group_phone_numbers:
+                # Extract group metadata
+                group_name = group.get("subject", group.get("name", "Unknown Group"))
+                creation_ts = group.get("creation", group.get("subjectTime", 0))
+                try:
+                    created_at = _dt.datetime.fromtimestamp(
+                        int(creation_ts), tz=_dt.timezone.utc
+                    ).strftime('%Y-%m-%d') if creation_ts else "unknown"
+                except (ValueError, TypeError, OSError):
+                    created_at = "unknown"
+
+                shared.append({
+                    "group_jid": group.get("id", ""),
+                    "group_name": group_name,
+                    "created_at": created_at,
+                    "participant_count": len(participants),
+                })
+
+        logger.info(
+            f"[AEGIS] 👥 Shared groups for {sender_jid}: "
+            f"{len(shared)} groups found"
+            + (f" — {[g['group_name'] for g in shared]}" if shared else "")
+        )
+        return shared
+
+    except requests.exceptions.Timeout:
+        logger.warning(f"[AEGIS] ⚠️ fetchAllGroups timed out for {instance_name}")
+        return []
+    except Exception as e:
+        logger.error(f"[AEGIS] ❌ Error fetching shared groups: {e}")
+        return []
+
 

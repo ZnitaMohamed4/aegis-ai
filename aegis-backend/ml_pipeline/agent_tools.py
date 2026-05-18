@@ -104,4 +104,16 @@ def fetch_risk_profile(sender_jid: str) -> str:
     lines.append(f"  7. Escalation Count: {profile.escalation_count}")
     lines.append(f"  8. Toxicity (EMA): {profile.average_toxicity_score:.2f}")
     
+    # Shared groups context for LLM reasoning
+    lines.append(f"  9. Shared Groups: {profile.shared_groups_count}")
+    shared_meta = getattr(profile, 'shared_groups_metadata', None) or []
+    if shared_meta:
+        for g in shared_meta:
+            g_name = g.get('group_name', 'Unknown')
+            g_count = g.get('participant_count', '?')
+            g_date = g.get('created_at', 'unknown')
+            lines.append(f"     - \"{g_name}\" ({g_count} members, created {g_date})")
+    else:
+        lines.append("     No shared groups — pure stranger or individual contact")
+    
     return "\n".join(lines)

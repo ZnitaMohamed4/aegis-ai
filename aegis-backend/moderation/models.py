@@ -313,6 +313,7 @@ class ModerationResult(models.Model):
         ESCALATE = 'ESCALATE', 'Escalate'
         REVISE = 'REVISE', 'Revise'          # Grey zone (0.65 - 0.75)
         HUMAN_REVIEW = 'HUMAN_REVIEW', 'Human Review'  # Too ambiguous — send to human
+        EDUCATE = 'EDUCATE', 'Educate'        # Self-moderation — educational DM instead of punitive
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
@@ -324,10 +325,19 @@ class ModerationResult(models.Model):
     language = models.CharField(max_length=20, default='en', help_text="Detected language (e.g. en, fr, ar, darija)")
     message_key_id = models.CharField(max_length=255, null=True, blank=True, help_text="Evolution API message key for deletion")
     primary_class = models.CharField(max_length=50, null=True, blank=True, help_text="M2 detected category (e.g. threat, sexual_harassment)")
+
+    # Image Analysis fields
+    has_image = models.BooleanField(default=False)
+    image_nsfw_detected = models.BooleanField(default=False)
+    image_violence_detected = models.BooleanField(default=False)
+    image_nsfw_score = models.FloatField(null=True, blank=True)
+    image_violence_score = models.FloatField(null=True, blank=True)
+    image_ocr_text = models.TextField(null=True, blank=True)
     
     # Sender details
     sender_name = models.CharField(max_length=255, null=True, blank=True, help_text="Push name or display name of the sender")
     is_from_me = models.BooleanField(default=False, help_text="True if the monitored child sent this message")
+    is_self_moderation = models.BooleanField(default=False, help_text="True if this was a self-moderation event (child's own toxic message caught)")
 
     # Link to harassment category reference table
     category = models.ForeignKey(HarassmentCategory, on_delete=models.SET_NULL,
@@ -443,6 +453,8 @@ class UserBehaviorProfile(models.Model):
     first_seen_at = models.DateTimeField(default=timezone.now, null=True, help_text="Account age (can be backdated via WhatsApp history)")
     child_initiated = models.BooleanField(default=False, help_text="True if the child sent the very first message in the relationship")
     shared_groups_count = models.IntegerField(default=0, help_text="Number of shared WhatsApp groups (synced by background task)")
+    shared_groups_metadata = models.JSONField(default=list, blank=True,
+        help_text="Group details: [{group_jid, group_name, created_at, participant_count}, ...]")
     burst_count_24h = models.IntegerField(default=0, help_text="Number of burst episodes in 24h (5+ msgs in 10 mins)")
     max_toxicity_24h = models.FloatField(default=0.0, help_text="Worst toxicity score today")
     upward_corrections_total = models.IntegerField(default=0, help_text="Times Agent 3 escalated ML decision")
@@ -809,3 +821,112 @@ class PlatformSettings(models.Model):
         """Returns the singleton instance, creating it if it doesn't exist."""
         obj, created = cls.objects.get_or_create(id=uuid.UUID('00000000-0000-0000-0000-000000000001'))
         return obj
+
+
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  UML PACKAGE 7 — SELF-MODERATION                           ║
+# ║  SelfModerationEvent                                        ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+class SelfModerationEvent(models.Model):
+    """
+    Tracks when Aegis catches the CHILD'S own toxic message and sends
+    an educational DM instead of a punitive warning.
+    
+    Links to ModerationResult for the triggering message and stores
+    the outcome of the educational intervention.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
+    # Link to the moderation result that triggered this
+    moderation_result = models.OneToOneField(ModerationResult, on_delete=models.CASCADE,
+        related_name='self_moderation_event',
+        help_text="The ModerationResult for the child's toxic message")
+    
+    # What happened
+    category = models.CharField(max_length=50,
+        help_text="Category of the child's message (e.g., verbal_harassment, threat)")
+    original_decision = models.CharField(max_length=20,
+        help_text="What the pipeline originally decided (BLOCK/WARN/ESCALATE) before converting to EDUCATE")
+    message_deleted = models.BooleanField(default=False,
+        help_text="Whether the message was deleted for everyone")
+    
+    # Educational DM
+    educational_dm_sent = models.BooleanField(default=False,
+        help_text="Whether the educational DM was sent via Aegis Assistant (Instance 2)")
+    educational_dm_text = models.TextField(blank=True, default='',
+        help_text="The actual text of the educational DM sent to the child")
+    
+    # Parent notification
+    parent_notified = models.BooleanField(default=False,
+        help_text="Whether the parent received a constructive notification")
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Self-Moderation Event"
+        verbose_name_plural = "Self-Moderation Events"
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Self-Mod: {self.category} ({self.created_at.strftime('%Y-%m-%d %H:%M')})"
+
+
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  UML PACKAGE 10 — BOT CONVERSATION MEMORY                  ║
+# ║  BotConversation                                             ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+class BotConversation(models.Model):
+    """
+    Stores child ↔ Aegis Bot conversation history for LLM memory.
+    
+    Each row is a single message (either from the child or the bot).
+    Used by chatbot_service.py to fetch the last N exchanges before
+    generating a response, giving the bot conversational context.
+    
+    Safety-flagged messages and extracted threat intelligence are 
+    stored here for audit trail and parent alert generation.
+    """
+    class Role(models.TextChoices):
+        USER = 'user', 'User (Child)'
+        ASSISTANT = 'assistant', 'Assistant (Bot)'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    child_jid = models.CharField(max_length=255, db_index=True,
+        help_text="WhatsApp JID of the child")
+    role = models.CharField(max_length=10, choices=Role.choices,
+        help_text="Who sent this message: 'user' (child) or 'assistant' (bot)")
+    content = models.TextField(
+        help_text="The message text content")
+    
+    # Safety escalation tracking
+    is_safety_flagged = models.BooleanField(default=False,
+        help_text="True if this message triggered a safety escalation")
+    threat_intel = models.JSONField(null=True, blank=True,
+        help_text="Extracted threat intelligence: {threat_type, perpetrator, location, urgency, summary}")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = "Bot Conversation Message"
+        verbose_name_plural = "Bot Conversation Messages"
+        ordering = ['created_at']
+        indexes = [
+            models.Index(fields=['child_jid', 'created_at']),
+        ]
+    
+    def __str__(self):
+        preview = self.content[:50] + '...' if len(self.content) > 50 else self.content
+        flag = "🚨" if self.is_safety_flagged else ""
+        return f"[{self.role}] {flag}{preview}"
+
+    @classmethod
+    def cleanup_old(cls, days=30):
+        """Remove conversation history older than N days."""
+        from django.utils import timezone
+        import datetime
+        cutoff = timezone.now() - datetime.timedelta(days=days)
+        deleted, _ = cls.objects.filter(created_at__lt=cutoff).delete()
+        return deleted

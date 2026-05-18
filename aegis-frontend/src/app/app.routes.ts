@@ -51,6 +51,7 @@ export const routes: Routes = [
       { path: 'whatsapp-setup', loadComponent: () => import('@features/parent/whatsapp-setup/whatsapp-setup.component').then(c => c.WhatsappSetupComponent) },
       { path: 'settings', loadComponent: () => import('@features/parent/settings/settings.component').then(c => c.SettingsComponent) },
       { path: 'chatbot', loadComponent: () => import('@features/chatbot/chatbot-page/chatbot-page.component').then(c => c.ChatbotPageComponent) },
+      { path: 'digital-citizenship', loadComponent: () => import('@features/parent/digital-citizenship/digital-citizenship.component').then(c => c.DigitalCitizenshipComponent) },
     ]
   },
 

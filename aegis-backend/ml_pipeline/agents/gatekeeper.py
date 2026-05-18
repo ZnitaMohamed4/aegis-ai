@@ -68,15 +68,37 @@ def ml_pipeline_node(state: ModerationState) -> dict:
     ml_original_decision = result.decision
     ml_original_class = result.primary_class
 
+    # ── IMAGE FLAG OVERRIDE ──────────────────────────────────────────
+    # If ViT detected NSFW or violence in an image, the text-based ML models
+    # will still see the injected "[IMAGE FLAGGED: ...]" tag as safe text.
+    # Override the ML decision so image-flagged messages reach Agent 3 and
+    # the Enforcer with the correct severity.
+    image_override_decision = result.decision
+    image_override_class = result.primary_class
+    image_needs_audit = needs_audit
+
+    if state.get("image_nsfw", False):
+        image_override_decision = "BLOCK"
+        image_override_class = "nsfw_image"
+        image_needs_audit = True
+        audit_reason = "image-flagged-nsfw"
+        logger.info("[GATEKEEPER] 📸 Image NSFW override → BLOCK / nsfw_image")
+    elif state.get("image_violent", False):
+        image_override_decision = "BLOCK"
+        image_override_class = "violent_image"
+        image_needs_audit = True
+        audit_reason = "image-flagged-violence"
+        logger.info("[GATEKEEPER] 📸 Image violence override → BLOCK / violent_image")
+
     return {
         "normalized_text": result.normalized_text,
         "m1_score": result.m1_score,
         "is_harmful": result.is_harmful,
-        "primary_class": result.primary_class,
+        "primary_class": image_override_class,
         "secondary_class": getattr(result, "secondary_class", None),
         "m2_confidence": result.m2_confidence,
-        "decision": result.decision,
-        "needs_audit": needs_audit,
+        "decision": image_override_decision,
+        "needs_audit": image_needs_audit,
         "ml_original_decision": ml_original_decision,
         "ml_original_class": ml_original_class,
         "ml_corrected": False,

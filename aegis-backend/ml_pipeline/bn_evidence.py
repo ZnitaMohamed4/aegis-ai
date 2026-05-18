@@ -48,12 +48,18 @@ def discretize_shared_groups(count: int) -> str:
     return "MANY"
 
 
-def discretize_night_active(night_ratio: float) -> str:
+def discretize_night_active(night_ratio: float, total_messages: int = 0) -> str:
     """
     Night activity level: when parental supervision is lowest.
     DHS identifies late-night contact as a grooming risk factor.
     Night alone is NOT dangerous — only in combination with Stranger=YES.
+
+    Cold-start fix: on < 5 messages the night ratio is unreliable
+    (e.g. 1 message at 1 AM → ratio = 1.0). Dampen heavily so it
+    doesn't inflate grooming risk for family members.
     """
+    if total_messages < 5:
+        night_ratio = night_ratio * 0.3  # Dampen heavily on small samples
     if night_ratio < 0.20:
         return "LOW"
     elif night_ratio < 0.50:
@@ -202,7 +208,10 @@ def collect_evidence(profile, threat_category: str = "safe") -> dict:
         "Stranger": discretize_stranger(days),
         "ChildInitiated": discretize_child_initiated(getattr(profile, 'child_initiated', False)),
         "SharedGroupsCount": discretize_shared_groups(getattr(profile, 'shared_groups_count', 0)),
-        "NightActive": discretize_night_active(float(profile.night_activity_ratio)),
+        "NightActive": discretize_night_active(
+            float(profile.night_activity_ratio),
+            total_messages=profile.total_messages_sent,
+        ),
         "ToxicityLevel": discretize_toxicity(float(profile.average_toxicity_score)),
         "UpwardCorrection": discretize_upward_correction(upward_rate),
         "DownwardCorrection": discretize_downward_correction(downward_rate),

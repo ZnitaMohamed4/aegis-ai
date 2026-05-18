@@ -37,6 +37,14 @@ class ModerationState(TypedDict):
     push_name: Optional[str]
     start_time_ms: Optional[int]
 
+    # IMAGE ANALYSIS
+    image_analyzed: Optional[bool]
+    image_nsfw: Optional[bool]
+    image_violent: Optional[bool]
+    image_nsfw_score: Optional[float]
+    image_violent_score: Optional[float]
+    image_ocr_text: Optional[str]
+
     # OUTPUTS (Populated by Agents as the graph runs)
     normalized_text: Optional[str]
     m1_score: Optional[float]

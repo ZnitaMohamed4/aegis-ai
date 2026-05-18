@@ -232,5 +232,9 @@ export class ApiService {
   getParentRiskProfile(): Observable<any> {
     return this.http.get<any>(`${this.BASE_URL}/parent/risk-profile/`);
   }
-}
 
+  /** Fetches Digital Citizenship events (SelfModerationEvents) — scoped to the parent's child. */
+  getDigitalCitizenship(): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/parent/digital-citizenship/`);
+  }
+}

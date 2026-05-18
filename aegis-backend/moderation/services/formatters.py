@@ -18,6 +18,7 @@ SEVERITY_MAP = {
     'BLOCK': 'high',
     'ESCALATE': 'critical',
     'HUMAN_REVIEW': 'high',
+    'EDUCATE': 'low',      # Self-moderation — educational, not punitive
     'ALLOW': 'none',
 }
 

@@ -18,7 +18,7 @@ from rest_framework.response import Response
 
 from moderation.models import (
     ModerationResult, UserBehaviorProfile, SecurityAlert,
-    MonitoredChild, ParentProfile
+    MonitoredChild, ParentProfile, SelfModerationEvent
 )
 from moderation.permissions import IsParentUser
 from moderation.services.formatters import get_severity, SEVERITY_MAP, format_phone_number
@@ -242,6 +242,144 @@ def parent_dashboard_stats(request):
     })
 
 
+# ────────────────────────────────────────────────────────────────────────────────
+# DIGITAL CITIZENSHIP ENDPOINT
+# ────────────────────────────────────────────────────────────────────────────────
+
+# Parenting tips shown per category — constructive & non-punitive
+PARENTING_TIPS = {
+    'verbal_harassment': "Children often lash out verbally when they're frustrated or overwhelmed. Ask them calmly how they're feeling without mentioning the message.",
+    'threat': "Sending threats is often a sign of helplessness or escalating conflict. Try creating a safe space for your child to express strong emotions verbally instead.",
+    'sexual_harassment': "This can indicate exposure to inappropriate content or peer pressure. Consider an open, non-judgmental conversation about respectful communication.",
+    'discrimination': "Discriminatory language is often learned from the environment. This is a good opportunity to discuss respect for others regardless of background.",
+    'repeated_messages': "Sending repeated messages can be a sign of anxiety or conflict. Ask if they are in a conflict situation that needs your support.",
+    'identity_theft': "Impersonation online can have serious consequences. This is a great moment to discuss digital identity and the impact of online actions.",
+}
+DEFAULT_TIP = "This is a good opportunity to have a calm, open conversation about digital kindness and responsible messaging."
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsParentUser])
+def parent_digital_citizenship(request):
+    """
+    GET /api/v1/parent/digital-citizenship/
+    Returns SelfModerationEvent records for the parent's Digital Citizenship tab.
+
+    Privacy-first: Parents see WHAT CATEGORY of message was caught and WHAT
+    the bot said to their child, but NOT the raw offensive text. This preserves
+    the educational intent and avoids triggering punitive reactions.
+
+    Response includes constructive parenting tips per category.
+    """
+    user = request.user
+    parent_q, profile, child_jids = _get_parent_filter(user)
+
+    # 1. Fetch self-moderation events linked to this parent's child
+    events = SelfModerationEvent.objects.filter(
+        moderation_result__in=ModerationResult.objects.filter(parent_q)
+    ).select_related('moderation_result').order_by('-created_at')[:50]
+    
+    # 2. Fetch BotConversations linked to the child
+    from moderation.models import BotConversation
+    bot_messages = BotConversation.objects.filter(
+        child_jid__in=child_jids
+    ).order_by('created_at')
+
+    # Summary stats
+    total_events = events.count()
+    deleted_count = sum(1 for e in events if e.message_deleted)
+    dm_sent_count = sum(1 for e in events if e.educational_dm_sent)
+
+    # Category breakdown
+    category_counts: dict = {}
+    for e in events:
+        cat = e.category or 'unknown'
+        category_counts[cat] = category_counts.get(cat, 0) + 1
+
+    # Build the self-moderation data list
+    interventions_data = []
+    for e in events:
+        cat = e.category or 'unknown'
+        interventions_data.append({
+            "type": "intervention",
+            "id": f"sm_{e.id}",
+            "created_at": e.created_at.isoformat(),
+            "category": cat,
+            "category_label": cat.replace('_', ' ').title(),
+            "original_severity": e.original_decision,
+            "message_deleted": e.message_deleted,
+            "educational_dm_sent": e.educational_dm_sent,
+            "educational_dm_text": e.educational_dm_text or "",
+            "parent_notified": e.parent_notified,
+            "parenting_tip": PARENTING_TIPS.get(cat, DEFAULT_TIP),
+        })
+
+    # 3. Group BotConversations into Sessions (1 hour gap = new session)
+    import datetime
+    sessions_data = []
+    current_session = None
+    
+    for msg in bot_messages:
+        if not current_session:
+            current_session = {
+                "type": "bot_session",
+                "id": f"bs_{msg.id}",
+                "created_at": msg.created_at.isoformat(),
+                "last_activity": msg.created_at,
+                "message_count": 1,
+                "has_safety_alert": msg.is_safety_flagged,
+                "threat_intel": msg.threat_intel,
+            }
+        else:
+            gap = (msg.created_at - current_session["last_activity"]).total_seconds()
+            if gap > 3600: # 1 hour gap -> new session
+                # Save previous session
+                current_session["last_activity"] = current_session["last_activity"].isoformat()
+                sessions_data.append(current_session)
+                
+                # Start new session
+                current_session = {
+                    "type": "bot_session",
+                    "id": f"bs_{msg.id}",
+                    "created_at": msg.created_at.isoformat(),
+                    "last_activity": msg.created_at,
+                    "message_count": 1,
+                    "has_safety_alert": msg.is_safety_flagged,
+                    "threat_intel": msg.threat_intel,
+                }
+            else:
+                # Update current session
+                current_session["message_count"] += 1
+                current_session["last_activity"] = msg.created_at
+                if msg.is_safety_flagged:
+                    current_session["has_safety_alert"] = True
+                if msg.threat_intel:
+                    current_session["threat_intel"] = msg.threat_intel
+                    
+    if current_session:
+        current_session["last_activity"] = current_session["last_activity"].isoformat()
+        sessions_data.append(current_session)
+        
+    # Stats for Bot Sessions
+    total_sessions = len(sessions_data)
+    total_alerts = sum(1 for s in sessions_data if s["has_safety_alert"])
+    
+    # Merge and sort all items (interventions + bot sessions) by created_at DESC
+    all_timeline_items = interventions_data + sessions_data
+    all_timeline_items.sort(key=lambda x: x["created_at"], reverse=True)
+
+    return Response({
+        "summary": {
+            "total_events": total_events,
+            "messages_deleted": deleted_count,
+            "educational_dms_sent": dm_sent_count,
+            "category_breakdown": category_counts,
+            "total_bot_sessions": total_sessions,
+            "total_safety_alerts": total_alerts,
+        },
+        "timeline": all_timeline_items,
+    })
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsParentUser])
 def parent_alert_list(request):
@@ -297,6 +435,11 @@ def parent_activity_feed(request):
     GET /api/v1/parent/activity/
     Recent moderation events (ALL decisions) filtered to parent's child only.
     Seeds the parent dashboard activity feed.
+    
+    Privacy: raw_text is ONLY returned for flagged decisions (BLOCK, ESCALATE, WARN, etc).
+    For ALLOW (safe messages), raw_text is withheld — parents see behavioral signals,
+    not the message content. This aligns with our Loi 09-08 compliance philosophy.
+    For EDUCATE (self-moderation), the category and DM are shown, not the raw offensive text.
     """
     user = request.user
 
@@ -311,23 +454,41 @@ def parent_activity_feed(request):
         'ESCALATE': 'critical',
         'HUMAN_REVIEW': 'high',
         'ALLOW': 'none',
+        'EDUCATE': 'low',
     }
+
+    # Decisions where the parent is allowed to see raw content
+    CONTENT_ALLOWED_DECISIONS = {'WARN', 'BLOCK', 'ESCALATE', 'REVISE', 'HUMAN_REVIEW'}
 
     data = []
     for r in results:
+        # Privacy gate: safe messages and educational events don't expose raw text
+        is_content_visible = r.decision in CONTENT_ALLOWED_DECISIONS
+        
+        # For EDUCATE events, surface the educational DM text instead of the offensive message
+        educational_dm_text = None
+        if r.decision == 'EDUCATE':
+            try:
+                educational_dm_text = r.self_moderation_event.educational_dm_text
+            except Exception:
+                pass
+        
         data.append({
             "id": str(r.id),
             "created_at": r.created_at.isoformat(),
-            "raw_text": r.raw_text,
+            # raw_text: only for flagged messages, never for ALLOW or EDUCATE
+            "raw_text": r.raw_text if is_content_visible else None,
             "primary_class": r.primary_class or 'safe',
             "decision": r.decision,
             "severity": severity_map.get(r.decision, 'medium'),
             "toxicity_score": r.toxicity_score,
             "confidence_score": r.confidence_score,
             "llm_triggered": r.llm_triggered,
-            "llm_explanation": r.llm_explanation,
+            "llm_explanation": r.llm_explanation if is_content_visible else None,
             "language": r.language or 'unknown',
             "sender_jid": r.sender_jid,
+            "is_self_moderation": r.is_self_moderation,
+            "educational_dm_text": educational_dm_text,
         })
     return Response(data)
 

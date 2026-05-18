@@ -74,6 +74,7 @@ export class SidebarComponent {
       title: 'Education',
       items: [
         { label: 'Chatbot', icon: 'pi-graduation-cap', route: '/parent/chatbot' },
+        { label: 'Digital Citizenship', icon: 'pi-book', route: '/parent/digital-citizenship' },
       ]
     }
   ];

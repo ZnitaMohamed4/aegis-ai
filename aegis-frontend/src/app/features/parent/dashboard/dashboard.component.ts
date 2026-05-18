@@ -104,6 +104,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             feedText = `🛡️ Blocked ${(alert.primary_class || '').replace(/_/g, ' ')} from ${shortSender}`;
             feedIcon = 'pi-ban';
             break;
+          case 'EDUCATE':
+            feedText = `🎓 Aegis guided your child toward better digital habits`;
+            feedIcon = 'pi-book';
+            break;
           default:
             feedText = `Message analyzed from ${shortSender}`;
         }
@@ -115,7 +119,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
         type: alert.decision.toLowerCase() as any,
         icon: feedIcon,
         text: feedText,
-        fullText: alert.llm_explanation ? `Message: ${alert.text}\n\nAI Analysis:\n${alert.llm_explanation}` : alert.text
+        // Privacy: only show raw message content for flagged (harmful) events.
+        // ALLOW events show privacy notice; EDUCATE events show what the bot said.
+        fullText: (() => {
+          const dec = alert.decision.toUpperCase();
+          if (dec === 'ALLOW') return '\u2705 This message was analyzed and cleared. Content is not stored to protect your child\'s privacy.';
+          if (dec === 'EDUCATE') return alert.llm_explanation
+            ? `🎓 Aegis intercepted a message and sent your child this educational note:\n\n"${alert.llm_explanation}"`
+            : '🎓 Aegis intercepted a message and sent your child a friendly educational reminder.';
+          return alert.llm_explanation
+            ? `Message: ${alert.text}\n\nAI Analysis:\n${alert.llm_explanation}`
+            : alert.text;
+        })()
       };
 
       this.feedEvents.update(list => {
@@ -247,6 +262,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 feedText = `Message from ${shortSender} sent to review`;
                 feedIcon = 'pi-user';
                 break;
+              case 'EDUCATE':
+                feedText = `🎓 Aegis guided your child toward better digital habits`;
+                feedIcon = 'pi-book';
+                break;
               default:
                 feedText = `Message analyzed from ${shortSender}`;
             }
@@ -258,7 +277,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
             type: decision.toLowerCase() as any,
             icon: feedIcon,
             text: feedText,
-            fullText: a.llm_explanation ? `Message: ${a.raw_text}\n\nAI Analysis:\n${a.llm_explanation}` : a.raw_text
+            // Privacy: safe messages never show raw content; educate shows the bot DM
+            fullText: (() => {
+              if (decision === 'ALLOW' || !a.raw_text) {
+                return '\u2705 This message was analyzed and cleared. Content is not stored to protect your child\'s privacy.';
+              }
+              if (decision === 'EDUCATE') {
+                return a.educational_dm_text
+                  ? `🎓 Aegis intercepted a message and sent your child this note:\n\n"${a.educational_dm_text}"`
+                  : '🎓 Aegis intercepted a message and sent your child a friendly educational reminder.';
+              }
+              return a.llm_explanation
+                ? `Message: ${a.raw_text}\n\nAI Analysis:\n${a.llm_explanation}`
+                : a.raw_text;
+            })()
           };
         });
 
@@ -475,7 +507,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       warn: 'var(--medium)',
       allow: 'var(--low)',
       review: 'var(--accent)',
-      risk: 'var(--high)'
+      risk: 'var(--high)',
+      educate: 'var(--accent)',    // Teal — educational, not harmful
+      human_review: 'var(--accent)',
+      revise: 'var(--medium)',
     };
     return map[type] ?? 'var(--text-muted)';
   }

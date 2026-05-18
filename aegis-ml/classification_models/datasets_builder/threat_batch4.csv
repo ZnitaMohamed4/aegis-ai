@@ -1,0 +1,76 @@
+text,label,language,source_dataset,routing_method
+i see you read that. say something or i'm coming over,threat,en,augment_whatsapp_dm,synthetic_llm
+you left me on read for the last time,threat,en,augment_whatsapp_dm,synthetic_llm
+pick up your phone or i'll be at your door in 20 minutes,threat,en,augment_whatsapp_dm,synthetic_llm
+i know you're awake. answer me or deal with what comes next,threat,en,augment_whatsapp_dm,synthetic_llm
+last warning before i show up,threat,en,augment_whatsapp_dm,synthetic_llm
+you have 10 minutes to reply before i do something stupid,threat,en,augment_whatsapp_dm,synthetic_llm
+don't make me come there,threat,en,augment_whatsapp_dm,synthetic_llm
+you're testing me and you know exactly what that means,threat,en,augment_whatsapp_dm,synthetic_llm
+i'm outside. come out and face me like you talk on here,threat,en,augment_whatsapp_dm,synthetic_llm
+read my messages again. this is your last chance to respond,threat,en,augment_whatsapp_dm,synthetic_llm
+i'm giving you one hour. after that i can't promise anything,threat,en,augment_whatsapp_dm,synthetic_llm
+blocking me was a mistake. you'll see that very soon,threat,en,augment_whatsapp_dm,synthetic_llm
+you deleted me from your contacts. that was brave. let's see how brave you are in person,threat,en,augment_whatsapp_dm,synthetic_llm
+i know your schedule. i'll be at the bus stop tomorrow. we need to talk,threat,en,augment_whatsapp_dm,synthetic_llm
+if you're not home in 30 minutes i'm contacting your family,threat,en,augment_whatsapp_dm,synthetic_llm
+we can do this easy or hard. your choice but reply NOW,threat,en,augment_whatsapp_dm,synthetic_llm
+why are you at his place right now. you have one chance to explain,threat,en,augment_whatsapp_dm,synthetic_llm
+you think leaving the group chat helps? i know where you live,threat,en,augment_whatsapp_dm,synthetic_llm
+don't bother blocking this number. i have six more,threat,en,augment_whatsapp_dm,synthetic_llm
+show me the proof or i post everything we have — you have five minutes,threat,en,augment_whatsapp_dm,synthetic_llm
+i tracked your location from that photo you posted. nice neighborhood,threat,en,augment_whatsapp_dm,synthetic_llm
+you left the group but you can't leave the situation. call me,threat,en,augment_whatsapp_dm,synthetic_llm
+replying 'ok' is not good enough. call me right now or this escalates,threat,en,augment_whatsapp_dm,synthetic_llm
+you muted my notifications? unmute them and pick up,threat,en,augment_whatsapp_dm,synthetic_llm
+i can be very patient or very impatient — right now i'm choosing impatient,threat,en,augment_whatsapp_dm,synthetic_llm
+if you leave me i will destroy everything we built together and you will have nothing,threat,en,augment_relationship,synthetic_llm
+you think you can just walk out? i'll make sure no one ever wants you after i'm done,threat,en,augment_relationship,synthetic_llm
+i'll tell everyone what you did — every detail — if you file those papers,threat,en,augment_relationship,synthetic_llm
+you'll never see the kids again if you go through with this,threat,en,augment_relationship,synthetic_llm
+go ahead and leave — i'll be at your mother's house by morning,threat,en,augment_relationship,synthetic_llm
+you belong to me and that doesn't end because you want it to,threat,en,augment_relationship,synthetic_llm
+i'll hurt myself and tell everyone it was you if you leave,threat,en,augment_relationship,synthetic_llm
+you leave and i ruin your career with one email to your boss,threat,en,augment_relationship,synthetic_llm
+you have nowhere to go that i won't follow you to,threat,en,augment_relationship,synthetic_llm
+i will make every day of your new life a living nightmare,threat,en,augment_relationship,synthetic_llm
+you think a restraining order will stop me? it's a piece of paper,threat,en,augment_relationship,synthetic_llm
+the second you walk out that door everything changes for the worse — for you,threat,en,augment_relationship,synthetic_llm
+i'll take the children and disappear before any court can do anything about it,threat,en,augment_relationship,synthetic_llm
+you will never date again after i'm done spreading what i know about you,threat,en,augment_relationship,synthetic_llm
+if i can't have you nobody will — and i mean that literally,threat,en,augment_relationship,synthetic_llm
+leaving me was the worst decision of your life and you'll understand that soon,threat,en,augment_relationship,synthetic_llm
+i will make you watch everything you care about burn down,threat,en,augment_relationship,synthetic_llm
+i'll call your boss every day until you lose your job if you do this,threat,en,augment_relationship,synthetic_llm
+i will show your family every private thing you ever sent me,threat,en,augment_relationship,synthetic_llm
+you have one chance to come back — after that the gloves come off,threat,en,augment_relationship,synthetic_llm
+pay me by tonight or i send those files to your employer tomorrow morning,threat,en,augment_financial_coercion,synthetic_llm
+you have 48 hours to transfer the money or things get ugly fast,threat,en,augment_financial_coercion,synthetic_llm
+i know you have the money — pay up or everyone finds out what you did,threat,en,augment_financial_coercion,synthetic_llm
+consider this a professional courtesy: settle the debt or face professional consequences,threat,en,augment_financial_coercion,synthetic_llm
+i'll destroy your credit rating and your reputation if you default on this,threat,en,augment_financial_coercion,synthetic_llm
+you owe me and i collect one way or another — money or pain,threat,en,augment_financial_coercion,synthetic_llm
+transfer it now or your wife gets a very detailed email tonight,threat,en,augment_financial_coercion,synthetic_llm
+you think i'm bluffing? miss one more payment and find out,threat,en,augment_financial_coercion,synthetic_llm
+"i'll sue you, destroy you online, and make sure you never work in this industry again",threat,en,augment_financial_coercion,synthetic_llm
+you'll pay me what you owe or i'll take it out of your hide,threat,en,augment_financial_coercion,synthetic_llm
+your little business will be in flames by the end of the month if you don't pay,threat,en,augment_financial_coercion,synthetic_llm
+i have documentation of every transaction — pay or i go to the authorities with all of it,threat,en,augment_financial_coercion,synthetic_llm
+one wire transfer and this goes away — refuse and nothing goes away,threat,en,augment_financial_coercion,synthetic_llm
+the interest on what you owe is pain — start paying,threat,en,augment_financial_coercion,synthetic_llm
+i have partners who specialize in collecting debts from people like you,threat,en,augment_financial_coercion,synthetic_llm
+keep talking about me to HR and see what i do to your reputation,threat,en,augment_workplace,synthetic_llm
+i will make sure you never get hired anywhere in this industry after what you did,threat,en,augment_workplace,synthetic_llm
+you think you can fire me and nothing happens? watch what happens next,threat,en,augment_workplace,synthetic_llm
+i know where the bodies are buried in this company and i'll start digging,threat,en,augment_workplace,synthetic_llm
+email my boss one more time and i'll email yours with everything i know about you,threat,en,augment_workplace,synthetic_llm
+i have recordings of every meeting — be very careful what you say next,threat,en,augment_workplace,synthetic_llm
+i'll go to the press with everything if you don't reinstate me immediately,threat,en,augment_workplace,synthetic_llm
+i know exactly which regulations you've been violating — pay me or i report everything,threat,en,augment_workplace,synthetic_llm
+one call to your biggest client and your entire account collapses — fix this now,threat,en,augment_workplace,synthetic_llm
+you promoted her over me — that was a mistake you'll regret professionally and personally,threat,en,augment_workplace,synthetic_llm
+i'll destroy your professional network one contact at a time,threat,en,augment_workplace,synthetic_llm
+you'll receive a very public and very detailed exposé if this isn't resolved today,threat,en,augment_workplace,synthetic_llm
+i kept all your dirty emails — don't make me use them,threat,en,augment_workplace,synthetic_llm
+your investors will be very interested in what i have to say — unless we settle this,threat,en,augment_workplace,synthetic_llm
+i have screenshots of every policy violation in this office — don't push me,threat,en,augment_workplace,synthetic_llm

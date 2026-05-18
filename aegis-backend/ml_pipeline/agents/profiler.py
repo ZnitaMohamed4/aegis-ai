@@ -70,7 +70,7 @@ def profiler_node(state: ModerationState) -> dict:
     profile, created = UserBehaviorProfile.objects.get_or_create(user_jid=sender_jid)
     
     if created and instance_name:
-        from moderation.evolution_api import fetch_relationship_start
+        from moderation.evolution_api import fetch_relationship_start, fetch_shared_groups
         # If this is the very first time AEGIS sees this sender, we query WhatsApp history
         # to find out how long they've ACTUALLY known the child, overriding the default "now".
         try:
@@ -84,6 +84,65 @@ def profiler_node(state: ModerationState) -> dict:
             profile.save(update_fields=['first_seen_at', 'child_initiated'])
         except Exception as e:
             logger.error(f"[AGENT 4] Failed to backdate profile via WhatsApp history: {e}")
+
+        # Fetch shared groups on first creation
+        try:
+            shared_groups = fetch_shared_groups(instance_name, sender_jid)
+            profile.shared_groups_count = len(shared_groups)
+            profile.shared_groups_metadata = shared_groups
+            profile.save(update_fields=['shared_groups_count', 'shared_groups_metadata'])
+            if shared_groups:
+                group_names = [g.get('group_name', '?') for g in shared_groups]
+                logger.info(f"[AGENT 4] 👥 {sender_jid} shares {len(shared_groups)} groups: {group_names}")
+        except Exception as e:
+            logger.error(f"[AGENT 4] Failed to fetch shared groups: {e}")
+
+    elif instance_name:
+        # Refresh shared groups for EXISTING profiles when:
+        #   (a) Count is 0 — clearly stale, do FOREGROUND (blocking) refresh
+        #       because the first message's risk score depends critically on this
+        #   (b) Every 50 messages — periodic background refresh
+        if profile.shared_groups_count == 0:
+            # FOREGROUND refresh — blocks pipeline but ensures correct scoring
+            try:
+                from moderation.evolution_api import fetch_shared_groups as _fetch_groups
+                groups = _fetch_groups(instance_name, sender_jid)
+                profile.shared_groups_count = len(groups)
+                profile.shared_groups_metadata = groups
+                profile.save(update_fields=['shared_groups_count', 'shared_groups_metadata'])
+                if groups:
+                    names = [g.get('group_name', '?') for g in groups]
+                    logger.info(f"[AGENT 4] 👥 Foreground shared groups refresh for {sender_jid}: {len(groups)} groups {names}")
+            except Exception as e:
+                logger.error(f"[AGENT 4] Foreground group refresh failed for {sender_jid}: {e}")
+        elif profile.total_messages_sent > 0 and profile.total_messages_sent % 50 == 0:
+            # BACKGROUND refresh — periodic, doesn't block the pipeline
+            import threading
+            from moderation.evolution_api import fetch_shared_groups as _fetch_groups
+            
+            def _refresh_groups(jid, inst, prof_id):
+                """Background refresh — doesn't block the pipeline."""
+                try:
+                    from moderation.models import UserBehaviorProfile as UBP
+                    groups = _fetch_groups(inst, jid)
+                    UBP.objects.filter(id=prof_id).update(
+                        shared_groups_count=len(groups),
+                        shared_groups_metadata=groups,
+                    )
+                    if groups:
+                        names = [g.get('group_name', '?') for g in groups]
+                        logger.info(f"[AGENT 4] 🔄 Refreshed shared groups for {jid}: {len(groups)} groups {names}")
+                    else:
+                        logger.debug(f"[AGENT 4] 🔄 Shared groups refresh for {jid}: 0 groups found")
+                except Exception as exc:
+                    logger.error(f"[AGENT 4] Background group refresh failed for {jid}: {exc}")
+            
+            threading.Thread(
+                target=_refresh_groups,
+                args=(sender_jid, instance_name, profile.id),
+                daemon=True
+            ).start()
+
 
     # --- 1. Update Digital Twin Base Stats ---
     # Total messages
@@ -280,7 +339,14 @@ def profiler_node(state: ModerationState) -> dict:
     down_rate = profile.downward_corrections_total / total_msgs
     days_known = int((timezone.now() - profile.first_seen_at).days) if profile.first_seen_at else 0
     
-    print(f"  📉 Features:   night={profile.night_activity_ratio:.2f}, targets={profile.unique_targets_count}, up_corr={up_rate:.2f}, down_corr={down_rate:.2f}, days={days_known}")
+    # BN Observables for logging
+    stranger_val = "YES" if days_known < 14 else "NO"
+    block_ratio = profile.total_blocked_messages_sent / total_msgs
+    escalation_rate = profile.escalation_count / max(1, days_known)
+    child_init_val = "YES" if profile.child_initiated else "NO"
+    
+    print(f"  📉 Features:   Stranger={stranger_val} | Night={profile.night_activity_ratio:.2f} | Targets={profile.unique_targets_count} | SharedGroups={profile.shared_groups_count}")
+    print(f"                 ChildInit={child_init_val} | MsgLen={profile.avg_message_length:.0f} | BlockRatio={block_ratio:.2f} | EscRate={escalation_rate:.2f} | ToxEMA={profile.average_toxicity_score:.2f}")
     print(C4_DIVIDER + "\n")
     
     logger.info(

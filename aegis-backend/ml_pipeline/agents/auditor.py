@@ -62,9 +62,21 @@ def auditor_node(state: ModerationState) -> dict:
         llm_response = cached_response
     else:
         # 2. CALL THE LLM!
+        # Build image context for the LLM if this message has an analyzed image
+        image_context = None
+        if state.get("image_analyzed"):
+            image_context = {
+                "nsfw": state.get("image_nsfw", False),
+                "nsfw_score": state.get("image_nsfw_score", 0.0),
+                "violent": state.get("image_violent", False),
+                "violent_score": state.get("image_violent_score", 0.0),
+                "ocr_text": state.get("image_ocr_text", ""),
+            }
+
         llm_response = analyze_grey_zone(
             raw_text, check_class, check_conf, m1_score,
-            state["sender_jid"], state["instance_name"]
+            state["sender_jid"], state["instance_name"],
+            image_context=image_context
         )
         # 3. SAVE KNOWLEDGE
         # NOTE: Semantic cache save is temporarily disabled.

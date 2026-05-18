@@ -190,9 +190,9 @@ class BayesianProfiler:
 
         # Grooming contribution scores for each parent state
         stranger_scores = {"NO": 0.0, "YES": 0.45}  # Increased from 0.35 for stronger stranger signal
-        child_init_scores = {"NO": 0.15, "YES": -0.20}
+        child_init_scores = {"NO": 0.05, "YES": -0.20}  # Reduced: NO alone is weak; interaction below is key
         groups_scores = {"ZERO": 0.0, "ONE": -0.30, "MANY": -0.40}
-        night_scores = {"LOW": 0.0, "MEDIUM": 0.10, "HIGH": 0.20}
+        night_scores = {"LOW": 0.0, "MEDIUM": 0.05, "HIGH": 0.10}  # Reduced: night alone ≠ danger for known contacts
         upward_scores = {"LOW": 0.0, "MEDIUM": 0.20, "HIGH": 0.35}
         downward_scores = {"LOW": 0.0, "MEDIUM": -0.10, "HIGH": -0.25}  # Negative = reduces risk
         style_scores = {"SHORT": -0.05, "MEDIUM": 0.0, "LONG": 0.15}
@@ -216,6 +216,9 @@ class BayesianProfiler:
                                         # Interaction: Stranger + NightActive HIGH = extra grooming signal
                                         if s == "YES" and n == "HIGH":
                                             score += 0.15
+                                        # Interaction: Stranger initiated contact = predatory approach
+                                        if s == "YES" and ci == "NO":
+                                            score += 0.10
                                         # Clamp to [0, 1]
                                         score = max(0.0, min(1.0, score))
                                         # Convert score to probabilities
@@ -382,6 +385,11 @@ class BayesianProfiler:
         """
         Compute P(OverallRisk | GroomingRisk, BullyRisk, TrollRisk).
         Returns (P_LOW, P_MEDIUM, P_HIGH, P_CRITICAL).
+
+        Recalibrated to prevent false CRITICALs:
+        - MEDIUM-only pathways should NOT leak significant CRITICAL probability
+        - Only HIGH grooming (or HIGH bully + other signals) should reach CRITICAL
+        - All-LOW must strongly concentrate on LOW (>0.90)
         """
         # Convert to numeric levels
         level = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
@@ -393,15 +401,17 @@ class BayesianProfiler:
                 return (0.01, 0.02, 0.12, 0.85)  # Groomer + bully signals
             return (0.02, 0.03, 0.15, 0.80)       # Pure groomer
 
-        # Grooming MEDIUM → elevated concern
+        # Grooming MEDIUM → elevated concern but NOT alarm
         if gl == 1:
             if bl == 2:
-                return (0.03, 0.07, 0.45, 0.45)   # Potential groomer + bully
+                return (0.03, 0.07, 0.45, 0.45)   # Potential groomer + confirmed bully
             if bl == 1:
-                return (0.05, 0.15, 0.40, 0.40)
+                return (0.08, 0.22, 0.40, 0.30)    # Both pathways medium = real concern
             if tl == 2:
                 return (0.05, 0.25, 0.50, 0.20)   # Troll dominant — HIGH, not CRITICAL
-            return (0.10, 0.30, 0.35, 0.25)
+            if tl == 1:
+                return (0.25, 0.40, 0.25, 0.10)   # Grooming+troll both MEDIUM
+            return (0.30, 0.45, 0.20, 0.05)        # Grooming MEDIUM alone = mild, 5% CRITICAL max
 
         # No grooming signal — bully/troll only
         if bl == 2:
@@ -413,15 +423,15 @@ class BayesianProfiler:
             if tl == 2:
                 return (0.05, 0.30, 0.55, 0.10)
             if tl == 1:
-                return (0.10, 0.40, 0.40, 0.10)
-            return (0.15, 0.45, 0.30, 0.10)
+                return (0.15, 0.45, 0.35, 0.05)    # Both MEDIUM but no grooming = LOW-MEDIUM
+            return (0.25, 0.45, 0.25, 0.05)         # Bully MEDIUM alone = mild
 
         # No bully signal either — troll alone should NOT reach CRITICAL
         if tl == 2:
             return (0.08, 0.32, 0.50, 0.10)        # Pure troll → cap at HIGH
         if tl == 1:
-            return (0.30, 0.50, 0.15, 0.05)
-        return (0.85, 0.10, 0.03, 0.02)            # All LOW → normal user
+            return (0.40, 0.45, 0.13, 0.02)         # Troll MEDIUM alone = mostly LOW
+        return (0.90, 0.07, 0.02, 0.01)             # All LOW → normal user
 
     @staticmethod
     def _score_to_3probs(score: float) -> tuple:

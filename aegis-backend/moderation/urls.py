@@ -3,8 +3,9 @@ from . import views
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 urlpatterns = [
-    # 1. Webhook - Evolution API posts here
+    # 1. Webhooks - Evolution API posts here
     path('webhook/messages/', views.webhook_messages, name='webhook-messages'),
+    path('webhook/chatbot/', views.webhook_chatbot, name='webhook-chatbot'),
     
     # 2. REST API - Angular fetches history from here
     path('alerts/', views.alert_list, name='alert-list'),
@@ -69,6 +70,7 @@ urlpatterns = [
     path('parent/blocked-messages/', views.parent_blocked_messages, name='parent-blocked-messages'),
     path('parent/conversations/', views.parent_conversations, name='parent-conversations'),
     path('parent/risk-profile/', views.parent_risk_profile, name='parent-risk-profile'),
+    path('parent/digital-citizenship/', views.parent_digital_citizenship, name='parent-digital-citizenship'),
     
     # 9. Reports Endpoints
     path('parent/reports/', views.parent_report_list, name='parent-report-list'),

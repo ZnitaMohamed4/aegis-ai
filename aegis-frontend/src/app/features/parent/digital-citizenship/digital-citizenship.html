@@ -1,0 +1,219 @@
+<div class="dc-page">
+
+  <!-- Header -->
+  <div class="page-header">
+    <div class="header-left">
+      <div class="header-icon-wrap">
+        <i class="pi pi-book header-icon"></i>
+        <i class="pi pi-shield header-icon-behind"></i>
+      </div>
+      <div>
+        <h1 class="page-title">Digital Citizenship</h1>
+        <p class="page-subtitle">Moments where Aegis helped your child grow as a digital citizen</p>
+      </div>
+    </div>
+    <a routerLink="/parent/dashboard" class="back-link">
+      <i class="pi pi-arrow-left"></i> Dashboard
+    </a>
+  </div>
+
+  <!-- Philosophy Banner -->
+  <div class="philosophy-banner">
+    <i class="pi pi-lock-open philosophy-icon"></i>
+    <div>
+      <strong>Privacy-first reporting</strong>
+      <span>You can see what category of message was intercepted and what Aegis told your child — but never the exact words. This preserves trust between you and your child.</span>
+    </div>
+  </div>
+
+  <!-- Loading State -->
+  @if (loading) {
+    <div class="loading-grid">
+      @for (i of [1,2,3]; track i) {
+        <div class="skeleton-card">
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line medium"></div>
+        </div>
+      }
+    </div>
+  }
+
+  @if (!loading) {
+
+    <!-- Summary Stats -->
+    @if (summary) {
+      <div class="summary-grid summary-grid-expanded">
+        <div class="summary-stat">
+          <div class="summary-stat-value">{{ summary.total_events }}</div>
+          <div class="summary-stat-label">Moments Caught</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-stat-value">{{ summary.total_bot_sessions }}</div>
+          <div class="summary-stat-label">Support Sessions</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-stat-value" [class.alert-text]="summary.total_safety_alerts > 0">{{ summary.total_safety_alerts }}</div>
+          <div class="summary-stat-label">Safety Alerts</div>
+        </div>
+        <div class="summary-stat">
+          <div class="summary-stat-value">{{ summary.messages_deleted }}</div>
+          <div class="summary-stat-label">Messages Removed</div>
+        </div>
+      </div>
+
+      <!-- Top Categories -->
+      @if (getTopCategories().length > 0) {
+        <div class="categories-panel panel">
+          <div class="panel-header">
+            <span class="panel-title">Patterns Detected</span>
+            <span class="panel-subtitle">What types of messages Aegis has intercepted</span>
+          </div>
+          <div class="categories-list">
+            @for (cat of getTopCategories(); track cat.label) {
+              <div class="category-chip" [style.border-color]="cat.color + '44'" [style.background]="cat.color + '12'">
+                <span class="category-dot" [style.background]="cat.color"></span>
+                <span class="category-chip-label" [style.color]="cat.color">{{ cat.label | titlecase }}</span>
+                <span class="category-chip-count">{{ cat.count }}×</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    }
+
+    <!-- Empty State -->
+    @if (timeline.length === 0) {
+      <div class="empty-state">
+        <div class="empty-icon-wrap">
+          <i class="pi pi-check-circle empty-icon"></i>
+        </div>
+        <h3 class="empty-title">All clear — your child is doing well!</h3>
+        <p class="empty-subtitle">No self-moderation events or bot sessions have been recorded. Aegis is monitoring, and your child's digital behavior looks great.</p>
+      </div>
+    }
+
+    <!-- Timeline List -->
+    @if (timeline.length > 0) {
+      <div class="events-section">
+        <div class="events-header">
+          <span class="events-title">Growth & Support Timeline</span>
+          <span class="events-count mono">{{ timeline.length }} records</span>
+        </div>
+        <div class="events-list">
+          @for (item of timeline; track item.id) {
+            
+            <!-- Type 1: Self-Moderation Intervention -->
+            @if (isIntervention(item)) {
+              <div class="event-card intervention-card">
+                <div class="event-card-left">
+                  <div class="event-category-icon" [style.background]="getCategoryColor(item.category) + '20'" [style.border-color]="getCategoryColor(item.category) + '40'">
+                    <i class="pi {{ getCategoryIcon(item.category) }}" [style.color]="getCategoryColor(item.category)"></i>
+                  </div>
+                </div>
+
+                <div class="event-card-body">
+                  <div class="event-header-row">
+                    <span class="event-category-badge" [style.background]="getCategoryColor(item.category) + '18'" [style.color]="getCategoryColor(item.category)">
+                      {{ item.category_label }}
+                    </span>
+                    <span class="event-time mono">{{ formatDate(item.created_at) }}</span>
+                  </div>
+
+                  <div class="event-actions-row">
+                    <span class="action-tag" [class.action-tag-success]="item.message_deleted">
+                      <i class="pi" [class.pi-trash]="item.message_deleted" [class.pi-times-circle]="!item.message_deleted"></i>
+                      {{ item.message_deleted ? 'Message removed' : 'Could not delete' }}
+                    </span>
+                    <span class="action-tag" [class.action-tag-info]="item.educational_dm_sent">
+                      <i class="pi" [class.pi-send]="item.educational_dm_sent" [class.pi-minus-circle]="!item.educational_dm_sent"></i>
+                      {{ item.educational_dm_sent ? 'Note sent to child' : 'Note not delivered' }}
+                    </span>
+                  </div>
+
+                  <!-- Educational DM Preview -->
+                  @if (item.educational_dm_text) {
+                    <div class="dm-preview">
+                      <i class="pi pi-comments dm-preview-icon"></i>
+                      <span class="dm-preview-text">"{{ item.educational_dm_text }}"</span>
+                    </div>
+                  }
+
+                  <!-- Parenting Tip -->
+                  <button class="tip-toggle" (click)="toggleTip(item.id)">
+                    <i class="pi pi-lightbulb tip-icon"></i>
+                    <span>Parenting tip</span>
+                    <i class="pi" [class.pi-chevron-down]="expandedTip !== item.id" [class.pi-chevron-up]="expandedTip === item.id"></i>
+                  </button>
+                  @if (expandedTip === item.id) {
+                    <div class="tip-content">{{ item.parenting_tip }}</div>
+                  }
+                </div>
+              </div>
+            }
+
+            <!-- Type 2: Bot Support Session -->
+            @if (isBotSession(item)) {
+              <div class="event-card bot-session-card" [class.has-alert]="item.has_safety_alert">
+                <div class="event-card-left">
+                  <div class="bot-icon-wrap" [class.alert-icon-wrap]="item.has_safety_alert">
+                    <i class="pi" [class.pi-shield]="!item.has_safety_alert" [class.pi-exclamation-triangle]="item.has_safety_alert"></i>
+                  </div>
+                </div>
+
+                <div class="event-card-body">
+                  <div class="event-header-row">
+                    <span class="bot-badge" [class.alert-badge]="item.has_safety_alert">
+                      {{ item.has_safety_alert ? 'Safety Alert Triggered' : 'Aegis Support Session' }}
+                    </span>
+                    <span class="event-time mono">{{ formatDate(item.created_at) }}</span>
+                  </div>
+
+                  <div class="bot-session-summary">
+                    Child reached out to Aegis Assistant. 
+                    They exchanged <strong class="mono">{{ item.message_count }}</strong> messages during this session.
+                  </div>
+
+                  @if (item.has_safety_alert && item.threat_intel) {
+                    <div class="threat-intel-box">
+                      <div class="intel-header">Extracted Intelligence</div>
+                      <div class="intel-grid">
+                        <div class="intel-item">
+                          <span class="intel-label">Threat Type</span>
+                          <span class="intel-value">{{ item.threat_intel.threat_type | titlecase }}</span>
+                        </div>
+                        <div class="intel-item">
+                          <span class="intel-label">Involved Person</span>
+                          <span class="intel-value">{{ item.threat_intel.perpetrator }}</span>
+                        </div>
+                        <div class="intel-item">
+                          <span class="intel-label">Location</span>
+                          <span class="intel-value">{{ item.threat_intel.location | titlecase }}</span>
+                        </div>
+                        <div class="intel-item">
+                          <span class="intel-label">Urgency</span>
+                          <span class="intel-value urgency-badge" [attr.data-urgency]="item.threat_intel.urgency">
+                            {{ item.threat_intel.urgency | uppercase }}
+                          </span>
+                        </div>
+                      </div>
+                      <div class="intel-summary">
+                        "{{ item.threat_intel.summary }}"
+                      </div>
+                    </div>
+                  } @else if (!item.has_safety_alert) {
+                    <div class="privacy-note">
+                      <i class="pi pi-lock"></i> Chat logs remain private to preserve child's trust in the Assistant.
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </div>
+    }
+
+  }
+
+</div>
