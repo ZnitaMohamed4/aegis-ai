@@ -42,18 +42,10 @@ def alert_list(request):
 
     results = queryset[:100]
 
-    severity_map = {
-        'WARN': 'medium',
-        'REVISE': 'high',
-        'BLOCK': 'high',
-        'ESCALATE': 'critical',
-        'HUMAN_REVIEW': 'high',
-    }
-
     data = []
     for r in results:
         alert_obj = r.alerts.first()
-        severity = alert_obj.severity if alert_obj else severity_map.get(r.decision, 'medium')
+        severity = get_severity(r.decision, alert_obj)
         is_resolved = alert_obj.is_resolved if alert_obj else False
         
         formatted_contact = format_phone_number(r.sender_jid)
@@ -314,9 +306,6 @@ def admin_user_list(request):
                     "whatsapp_connected": profile.evolution_connected
                 }
             elif profile.evolution_connected or profile.evolution_instance_name:
-                # Calculate real risk level based on the instance's history
-                from django.utils import timezone
-                import datetime
                 instance_risk = 'low'
                 if profile.evolution_instance_name:
                     thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
@@ -325,12 +314,8 @@ def admin_user_list(request):
                         decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
                         created_at__gte=thirty_days_ago
                     ).count()
-                    if blocked_count >= 10:
-                        instance_risk = 'critical'
-                    elif blocked_count >= 5:
-                        instance_risk = 'high'
-                    elif blocked_count >= 1:
-                        instance_risk = 'medium'
+                    risk_level, _ = calculate_risk_level(blocked_count)
+                    instance_risk = risk_level.lower()
 
                 wa_number = "Setup Pending"
                 wa_identifier = f"Device: {profile.evolution_instance_name}"
@@ -752,15 +737,6 @@ def activity_feed(request):
     """
     results = ModerationResult.objects.all().order_by('-created_at')[:20]
     
-    severity_map = {
-        'WARN': 'medium',
-        'REVISE': 'high',
-        'BLOCK': 'high',
-        'ESCALATE': 'critical',
-        'HUMAN_REVIEW': 'high',
-        'ALLOW': 'none',
-    }
-    
     data = []
     for r in results:
         data.append({
@@ -769,7 +745,7 @@ def activity_feed(request):
             "raw_text": r.raw_text,
             "primary_class": r.primary_class or 'safe',
             "decision": r.decision,
-            "severity": severity_map.get(r.decision, 'medium'),
+            "severity": SEVERITY_MAP.get(r.decision, 'medium'),
             "toxicity_score": r.toxicity_score,
             "confidence_score": r.confidence_score,
             "llm_triggered": r.llm_triggered,
@@ -820,12 +796,9 @@ def admin_risk_profiles(request):
         wa_number = entity.whatsapp_display_number if is_child else ""
         parent_id = str(entity.parent.user.id) if is_child else str(entity.user.id)
         
-        base_risk = 'LOW'
         total_count = results.count()
         blocked_count = results.filter(decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE']).count()
-        if blocked_count >= 10: base_risk = 'CRITICAL'
-        elif blocked_count >= 5: base_risk = 'HIGH'
-        elif blocked_count >= 1: base_risk = 'MEDIUM'
+        base_risk, _ = calculate_risk_level(blocked_count)
         
         # Continuous risk score from blocked ratio (not fixed tiers)
         if total_count > 0:

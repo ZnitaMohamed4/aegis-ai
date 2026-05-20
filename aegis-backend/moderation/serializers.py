@@ -19,10 +19,31 @@ from .models import AegisUser, ParentProfile
 
 class AegisUserSerializer(serializers.ModelSerializer):
     """Serializer for user details."""
+    monitoring_mode = serializers.SerializerMethodField()
+    trusted_contact_name = serializers.SerializerMethodField()
+    trusted_contact_phone = serializers.SerializerMethodField()
+
     class Meta:
         model = AegisUser
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 'language_preference', 'phone_number', 'auto_protection_enabled', 'notification_email')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'role', 
+                  'language_preference', 'phone_number', 'auto_protection_enabled', 
+                  'notification_email', 'monitoring_mode', 'trusted_contact_name', 'trusted_contact_phone')
         read_only_fields = ('id', 'role')
+
+    def get_monitoring_mode(self, obj):
+        if obj.role == AegisUser.Role.PARENT and hasattr(obj, 'parent_profile'):
+            return obj.parent_profile.monitoring_mode
+        return 'child'
+
+    def get_trusted_contact_name(self, obj):
+        if obj.role == AegisUser.Role.PARENT and hasattr(obj, 'parent_profile'):
+            return obj.parent_profile.trusted_contact_name
+        return ''
+
+    def get_trusted_contact_phone(self, obj):
+        if obj.role == AegisUser.Role.PARENT and hasattr(obj, 'parent_profile'):
+            return obj.parent_profile.trusted_contact_phone
+        return ''
 
 
 class ParentProfileSerializer(serializers.ModelSerializer):

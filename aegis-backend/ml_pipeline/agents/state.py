@@ -28,6 +28,7 @@ THREAT_PHRASES = [
 # Every node (Agent) can read from it and return updates to it.
 class ModerationState(TypedDict):
     # INPUTS (Extracted from WhatsApp Webhook)
+    monitoring_mode: Optional[str]  # 'child' or 'adult' — determines enforcement strategy
     raw_text: str
     sender_jid: str
     sender_phone_jid: Optional[str]  # Phone-based JID from remoteJidAlt (for block/archive API calls)

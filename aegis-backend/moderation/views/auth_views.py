@@ -72,7 +72,26 @@ def current_user(request):
             serializer = AegisUserSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
+            
+            # Handle ParentProfile fields
+            if request.user.is_parent() and hasattr(request.user, 'parent_profile'):
+                profile = request.user.parent_profile
+                updated = False
+                if 'monitoring_mode' in request.data:
+                    mode = request.data['monitoring_mode']
+                    if mode in ('child', 'adult'):
+                        profile.monitoring_mode = mode
+                        updated = True
+                if 'trusted_contact_name' in request.data:
+                    profile.trusted_contact_name = request.data['trusted_contact_name']
+                    updated = True
+                if 'trusted_contact_phone' in request.data:
+                    profile.trusted_contact_phone = request.data['trusted_contact_phone']
+                    updated = True
+                if updated:
+                    profile.save()
+
+            return Response(AegisUserSerializer(request.user).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])

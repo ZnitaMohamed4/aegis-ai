@@ -56,6 +56,9 @@ export class SettingsComponent implements OnInit {
   parentAccount = signal({
     displayName: '',
     email: '',
+    monitoringMode: 'child',
+    trustedContactName: '',
+    trustedContactPhone: '',
     lastLogin: new Date().toLocaleString()
   });
 
@@ -65,7 +68,10 @@ export class SettingsComponent implements OnInit {
         this.parentAccount.update(p => ({
           ...p,
           displayName: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username,
-          email: user.email || ''
+          email: user.email || '',
+          monitoringMode: user.monitoring_mode || 'child',
+          trustedContactName: user.trusted_contact_name || '',
+          trustedContactPhone: user.trusted_contact_phone || ''
         }));
       }
     });
@@ -148,8 +154,13 @@ export class SettingsComponent implements OnInit {
       first_name: firstName,
       last_name: lastName,
       notification_email: a.email,
+      monitoring_mode: a.monitoringMode,
+      trusted_contact_name: a.trustedContactName,
+      trusted_contact_phone: a.trustedContactPhone
     }).subscribe({
       next: () => {
+        // Refresh user in auth service so other components see the change
+        this.authService.fetchCurrentUser();
         this.messageService.add({ 
           severity: 'success', 
           summary: 'Settings Saved', 

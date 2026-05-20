@@ -6,7 +6,6 @@ related to the logged-in parent's monitored child(ren).
 Extracted from views.py during Phase 2 audit refactoring (2026-04-21).
 """
 import datetime
-import datetime as _dt
 import logging
 
 from django.db.models import Count, Q
@@ -75,18 +74,14 @@ def parent_dashboard_stats(request):
     today_results = all_results.filter(created_at__date=today)
 
     # ---------------- CALCULATE RISK LEVEL DYNAMICALLY ----------------
-    import datetime
     thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
-    
+
     blocked_count = all_results.filter(
-        decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
+        decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE', 'SELF_WARN'],
         created_at__gte=thirty_days_ago
     ).count()
 
-    base_level = 'LOW'
-    if blocked_count >= 10: base_level = 'CRITICAL'
-    elif blocked_count >= 5: base_level = 'HIGH'
-    elif blocked_count >= 1: base_level = 'MEDIUM'
+    base_level, _ = calculate_risk_level(blocked_count)
 
     # Get max threat actor risk
     sender_jids_all = list(all_results.exclude(sender_jid__in=child_jids).exclude(sender_jid='').values_list('sender_jid', flat=True).distinct())
@@ -96,10 +91,8 @@ def parent_dashboard_stats(request):
         for p in risky:
             if p.risk_score > 0:
                 max_actor_risk = max(max_actor_risk, p.risk_score)
-                
-    dynamic_risk_level = base_level
-    if max_actor_risk >= 0.8 and base_level in ['LOW', 'MEDIUM']: dynamic_risk_level = 'HIGH'
-    elif max_actor_risk >= 0.3 and base_level == 'LOW': dynamic_risk_level = 'MEDIUM'
+
+    dynamic_risk_level = escalate_risk_by_actor(base_level, max_actor_risk)
     # ------------------------------------------------------------------
 
     # Get child info for the UI header
@@ -137,7 +130,7 @@ def parent_dashboard_stats(request):
 
     # Core metrics
     total_messages = today_results.count()
-    total_blocked = today_results.filter(decision__in=['BLOCK', 'ESCALATE']).count()
+    total_blocked = today_results.filter(decision__in=['BLOCK', 'ESCALATE', 'SELF_WARN']).count()
 
     # Alerts scoped to the parent's child
     alert_q = Q()
@@ -152,7 +145,7 @@ def parent_dashboard_stats(request):
 
     # All-time stats for more persistent dashboard cards
     total_messages_all_time = all_results.count()
-    total_blocked_all_time = all_results.filter(decision__in=['BLOCK', 'ESCALATE']).count()
+    total_blocked_all_time = all_results.filter(decision__in=['BLOCK', 'ESCALATE', 'SELF_WARN']).count()
     total_alerts_all_time = SecurityAlert.objects.filter(alert_q).count()
 
     # Category breakdown
@@ -168,13 +161,12 @@ def parent_dashboard_stats(request):
         day_results = recent_results.filter(created_at__date=day_date)
         weekly_data.append({
             "day": day_date.strftime("%a"),
-            "blocked": day_results.filter(decision__in=['BLOCK', 'ESCALATE']).count(),
+            "blocked": day_results.filter(decision__in=['BLOCK', 'ESCALATE', 'SELF_WARN']).count(),
             "warned": day_results.filter(decision__in=['WARN', 'REVISE']).count(),
             "safe": day_results.filter(decision='ALLOW').count()
         })
 
     # Hourly activity (today)
-    from django.db.models.functions import ExtractHour
     hourly_counts = today_results.annotate(hour=ExtractHour('created_at')).values('hour', 'decision').annotate(count=Count('id'))
 
     hourly_data = {
@@ -184,7 +176,7 @@ def parent_dashboard_stats(request):
     }
     for entry in hourly_counts:
         bucket_idx = entry['hour'] // 2
-        if entry['decision'] in ['BLOCK', 'ESCALATE', 'WARN', 'REVISE']:
+        if entry['decision'] in ['BLOCK', 'ESCALATE', 'WARN', 'REVISE', 'SELF_WARN']:
             hourly_data["threats"][bucket_idx] += entry['count']
         elif entry['decision'] == 'ALLOW':
             hourly_data["safe"][bucket_idx] += entry['count']
@@ -315,7 +307,6 @@ def parent_digital_citizenship(request):
         })
 
     # 3. Group BotConversations into Sessions (1 hour gap = new session)
-    import datetime
     sessions_data = []
     current_session = None
     
@@ -393,21 +384,13 @@ def parent_alert_list(request):
     parent_q, profile, child_jids = _get_parent_filter(user)
 
     results = ModerationResult.objects.filter(parent_q).filter(
-        decision__in=['BLOCK', 'ESCALATE', 'REVISE', 'WARN', 'HUMAN_REVIEW']
+        decision__in=['BLOCK', 'ESCALATE', 'REVISE', 'WARN', 'HUMAN_REVIEW', 'SELF_WARN']
     ).select_related().prefetch_related('alerts').order_by('-created_at')[:100]
-
-    severity_map = {
-        'WARN': 'medium',
-        'REVISE': 'high',
-        'BLOCK': 'high',
-        'ESCALATE': 'critical',
-        'HUMAN_REVIEW': 'high',
-    }
 
     data = []
     for r in results:
         alert_obj = r.alerts.first()
-        severity = alert_obj.severity if alert_obj else severity_map.get(r.decision, 'medium')
+        severity = get_severity(r.decision, alert_obj)
         data.append({
             "id": str(r.id),
             "created_at": r.created_at.isoformat(),
@@ -447,18 +430,10 @@ def parent_activity_feed(request):
 
     results = ModerationResult.objects.filter(parent_q).order_by('-created_at')[:20]
 
-    severity_map = {
-        'WARN': 'medium',
-        'REVISE': 'high',
-        'BLOCK': 'high',
-        'ESCALATE': 'critical',
-        'HUMAN_REVIEW': 'high',
-        'ALLOW': 'none',
-        'EDUCATE': 'low',
-    }
+
 
     # Decisions where the parent is allowed to see raw content
-    CONTENT_ALLOWED_DECISIONS = {'WARN', 'BLOCK', 'ESCALATE', 'REVISE', 'HUMAN_REVIEW'}
+    CONTENT_ALLOWED_DECISIONS = {'WARN', 'BLOCK', 'ESCALATE', 'REVISE', 'HUMAN_REVIEW', 'SELF_WARN'}
 
     data = []
     for r in results:
@@ -480,7 +455,7 @@ def parent_activity_feed(request):
             "raw_text": r.raw_text if is_content_visible else None,
             "primary_class": r.primary_class or 'safe',
             "decision": r.decision,
-            "severity": severity_map.get(r.decision, 'medium'),
+            "severity": SEVERITY_MAP.get(r.decision, 'medium'),
             "toxicity_score": r.toxicity_score,
             "confidence_score": r.confidence_score,
             "llm_triggered": r.llm_triggered,
@@ -501,7 +476,7 @@ def parent_blocked_messages(request):
     parent_q, profile, child_jids = _get_parent_filter(user)
     
     # We want ModerationResults with BLOCK or ESCALATE
-    blocked = ModerationResult.objects.filter(parent_q).filter(decision__in=['BLOCK', 'ESCALATE']).order_by('-created_at')
+    blocked = ModerationResult.objects.filter(parent_q).filter(decision__in=['BLOCK', 'ESCALATE', 'SELF_WARN']).order_by('-created_at')
     
     data = []
     for r in blocked:
@@ -561,7 +536,7 @@ def parent_conversations(request):
             "content": r.raw_text,
             "timestamp": r.created_at.isoformat(),
             "is_flagged": r.decision != 'ALLOW',
-            "is_blocked": r.decision in ['BLOCK', 'ESCALATE'],
+            "is_blocked": r.decision in ['BLOCK', 'ESCALATE', 'SELF_WARN'],
             "decision": r.decision,
             "toxicity_score": r.toxicity_score,
             "category": r.primary_class,
@@ -643,55 +618,26 @@ def parent_risk_profile(request):
                     "archetype": "Suspicious Activity" # Generic for parents
                 })
                 
-    # Recalculate robust risk level based on actual messages matching parent_q (even if child object is missing)
-    import datetime
+    # Recalculate robust risk level using extracted service functions
     thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
-    
+
     blocked_count = all_results.filter(
-        decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
+        decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE', 'SELF_WARN'],
         created_at__gte=thirty_days_ago
     ).count()
 
-    if blocked_count >= 10:
-        base_level = 'CRITICAL'
-    elif blocked_count >= 5:
-        base_level = 'HIGH'
-    elif blocked_count >= 1:
-        base_level = 'MEDIUM'
-    else:
-        base_level = 'LOW'
-
-    # Escalate if communicating with a highly risky actor (like someone with 1.0 risk)
-    if max_actor_risk >= 0.8 and base_level in ['LOW', 'MEDIUM']:
-        risk_level = 'HIGH'
-    elif max_actor_risk >= 0.5 and base_level == 'LOW':
-        risk_level = 'MEDIUM'
-    elif max_actor_risk >= 0.3 and base_level == 'LOW':
-        risk_level = 'MEDIUM'
-    else:
-        risk_level = base_level
-
-    # Compute a slightly more dynamic score based on the new risk_level
-    if risk_level == 'CRITICAL':
-        current_score = 0.88 + min(0.12, blocked_count * 0.01)
-    elif risk_level == 'HIGH':
-        current_score = 0.65 + min(0.2, blocked_count * 0.02)
-    elif risk_level == 'MEDIUM':
-        current_score = 0.35 + min(0.25, blocked_count * 0.02)
-    else:
-        current_score = 0.10
-        
-    current_score = min(1.0, round(current_score, 2))
+    base_level, _ = calculate_risk_level(blocked_count)
+    risk_level = escalate_risk_by_actor(base_level, max_actor_risk)
+    current_score = risk_score_from_level(risk_level, blocked_count)
     
     # Generate trend data based on actual moderation history (not random)
-    import datetime as _dt
     trend_data = []
     trend_labels = ["Week 1", "Week 2", "Week 3", "Week 4", "Today"]
     for i in range(4):
-        week_start = timezone.now() - _dt.timedelta(weeks=4-i)
-        week_end = timezone.now() - _dt.timedelta(weeks=3-i)
+        week_start = timezone.now() - datetime.timedelta(weeks=4-i)
+        week_end = timezone.now() - datetime.timedelta(weeks=3-i)
         week_blocked = all_results.filter(
-            decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
+            decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE', 'SELF_WARN'],
             created_at__range=(week_start, week_end)
         ).count()
         # Map weekly blocked count to a 0-1 score using same thresholds
@@ -713,3 +659,151 @@ def parent_risk_profile(request):
         }
     })
 
+
+# ════════════════════════════════════════════════════════════════════════
+# EMOTIONAL PATTERN HEATMAP
+# ════════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsParentUser])
+def parent_emotional_heatmap(request):
+    """
+    Returns a 7×6 heatmap matrix (day-of-week × time-slot) showing
+    when the user's flagged messages occur most frequently.
+    
+    Response:
+        {
+            "days": ["Mon", "Tue", ...],
+            "slots": ["12am-4am", "4am-8am", ...],
+            "matrix": [[0, 1, 0, ...], ...]   # rows=slots, cols=days
+        }
+    """
+    user = request.user
+    parent_q, profile, child_jids = _get_parent_filter(user)
+    
+    # Only flagged/harmful messages (not ALLOW)
+    flagged = ModerationResult.objects.filter(parent_q).exclude(
+        decision='ALLOW'
+    )
+    
+    # Optional: filter to last N days
+    range_param = request.GET.get('range', '30')
+    try:
+        days_back = int(range_param)
+    except ValueError:
+        days_back = 30
+    cutoff = timezone.now() - datetime.timedelta(days=days_back)
+    flagged = flagged.filter(created_at__gte=cutoff)
+    
+    # Time slots: 6 buckets of 4 hours
+    SLOT_LABELS = [
+        "12am-4am", "4am-8am", "8am-12pm",
+        "12pm-4pm", "4pm-8pm", "8pm-12am"
+    ]
+    DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    
+    # Initialize 6×7 matrix (slots × days)
+    matrix = [[0] * 7 for _ in range(6)]
+    
+    for ts in flagged.values_list('created_at', flat=True):
+        dow = ts.weekday()   # 0=Mon, 6=Sun
+        hour = ts.hour
+        slot_idx = min(hour // 4, 5)
+        matrix[slot_idx][dow] += 1
+    
+    return Response({
+        "days": DAY_LABELS,
+        "slots": SLOT_LABELS,
+        "matrix": matrix
+    })
+
+
+# ════════════════════════════════════════════════════════════════════════
+# FORENSIC EVIDENCE EXPORT
+# ════════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsParentUser])
+def parent_export_evidence(request):
+    """
+    Generates a forensic-grade JSON report of all flagged messages
+    with timestamps, severity scores, SHA-256 content hashes, and
+    sender behavior profiles. Designed for legal evidence.
+    
+    Query params:
+        ?days=30    — how far back to include (default: 30)
+    """
+    import hashlib
+    
+    user = request.user
+    parent_q, profile, child_jids = _get_parent_filter(user)
+    
+    days_back = int(request.GET.get('days', '30'))
+    cutoff = timezone.now() - datetime.timedelta(days=days_back)
+    
+    results = ModerationResult.objects.filter(parent_q).filter(
+        decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE', 'SELF_WARN'],
+        created_at__gte=cutoff
+    ).order_by('created_at')
+    
+    evidence_entries = []
+    for r in results:
+        content_hash = hashlib.sha256(
+            (r.raw_text or '').encode('utf-8')
+        ).hexdigest()
+        
+        evidence_entries.append({
+            "id": str(r.id),
+            "timestamp": r.created_at.isoformat(),
+            "sender_jid": r.sender_jid,
+            "sender_name": r.sender_name or '',
+            "content": r.raw_text,
+            "content_hash_sha256": content_hash,
+            "decision": r.decision,
+            "primary_class": r.primary_class or 'unknown',
+            "toxicity_score": round(r.toxicity_score, 4),
+            "confidence_score": round(r.confidence_score, 4) if r.confidence_score else None,
+            "ai_explanation": r.llm_explanation or '',
+            "is_from_me": r.is_from_me,
+        })
+    
+    # Gather unique senders and their behavioral profiles
+    sender_jids = set(r.sender_jid for r in results if not r.is_from_me)
+    sender_profiles = []
+    for jid in sender_jids:
+        try:
+            bp = UserBehaviorProfile.objects.get(user_jid=jid)
+            sender_profiles.append({
+                "jid": jid,
+                "risk_level": bp.risk_level,
+                "risk_score": round(bp.risk_score, 4),
+                "total_messages": bp.total_messages_sent,
+                "total_blocked": bp.total_blocked_messages_sent,
+                "block_ratio": round(bp.block_ratio, 4),
+                "escalation_count": bp.escalation_count,
+            })
+        except UserBehaviorProfile.DoesNotExist:
+            pass
+    
+    return Response({
+        "report_title": "AEGIS Forensic Evidence Report",
+        "generated_at": timezone.now().isoformat(),
+        "generated_by": f"{user.first_name} {user.last_name}".strip() or user.username,
+        "period": f"Last {days_back} days",
+        "total_incidents": len(evidence_entries),
+        "summary": {
+            "total_flagged": len(evidence_entries),
+            "total_block": sum(1 for e in evidence_entries if e['decision'] == 'BLOCK'),
+            "total_escalate": sum(1 for e in evidence_entries if e['decision'] == 'ESCALATE'),
+            "total_warn": sum(1 for e in evidence_entries if e['decision'] in ['WARN', 'REVISE']),
+            "total_self_warn": sum(1 for e in evidence_entries if e['decision'] == 'SELF_WARN'),
+            "unique_senders": len(sender_jids),
+        },
+        "incidents": evidence_entries,
+        "sender_profiles": sender_profiles,
+        "integrity_note": (
+            "Each message includes a SHA-256 content hash computed at export time. "
+            "This hash can be used to verify that the content has not been modified "
+            "since this report was generated."
+        ),
+    })

@@ -33,6 +33,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Child info from backend
   childInfo: ParentChildInfo | null = null;
   childName: string = 'Your Child';
+  monitoringMode: string = 'child';
 
   // Stats
   stats: any[] | null = null;
@@ -50,6 +51,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Risky contacts
   riskyContacts: any[] | null = null;
+
+  // Emotional Pattern Heatmap
+  heatmapData: any = null;
 
   // Severity utils
   getRiskHex = getRiskHex;
@@ -71,6 +75,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     // Show loading toast
+
+    this.authService.currentUser$.subscribe(user => {
+      if (user && user.monitoring_mode) {
+        this.monitoringMode = user.monitoring_mode;
+      }
+    });
 
     // ── WebSocket: Live alerts (filter client-side to this parent's instance) ──
     this.alertSub = this.alertService.alerts$.subscribe((alert: WebSocketAlertPayload) => {
@@ -107,6 +117,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
           case 'EDUCATE':
             feedText = `🎓 Aegis guided your child toward better digital habits`;
             feedIcon = 'pi-book';
+            break;
+          case 'SELF_WARN':
+            feedText = `💭 Self-reflection nudge for ${(alert.primary_class || '').replace(/_/g, ' ')}`;
+            feedIcon = 'pi-heart';
             break;
           default:
             feedText = `Message analyzed from ${shortSender}`;
@@ -153,7 +167,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       // Live update stat cards
       if (this.stats) {
         this.stats[1].value = Number(this.stats[1].value) + 1;
-        if (alert.decision.toUpperCase() === 'BLOCK' || alert.decision.toUpperCase() === 'ESCALATE') {
+        if (['BLOCK', 'ESCALATE', 'SELF_WARN'].includes(alert.decision.toUpperCase())) {
           this.stats[2].value = Number(this.stats[2].value) + 1;
         }
       }
@@ -325,9 +339,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.childInfo = data.child;
         this.childName = data.child?.name || 'Your Child';
 
+        const isAdult = this.monitoringMode === 'adult';
         this.stats = [
           {
-            label: 'Messages Monitored',
+            label: 'Messages Analyzed',
             value: data.stats.total_messages_all_time,
             icon: 'pi-comments',
             trend: `${data.stats.total_messages_today} new today`,
@@ -335,26 +350,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
             color: 'accent'
           },
           {
-            label: 'Active Alerts',
+            label: isAdult ? 'Self-Reflection Alerts' : 'Active Alerts',
             value: data.stats.total_alerts_all_time,
-            icon: 'pi-bell',
+            icon: isAdult ? 'pi-heart' : 'pi-bell',
             trend: `${data.stats.total_alerts_today} new today`,
             trendUp: data.stats.total_alerts_today === 0,
             color: data.stats.total_alerts_today > 0 ? 'critical' : 'low'
           },
           {
-            label: 'Threats Blocked',
+            label: isAdult ? 'Messages Flagged' : 'Threats Blocked',
             value: data.stats.total_blocked_all_time,
-            icon: 'pi-shield',
+            icon: isAdult ? 'pi-flag' : 'pi-shield',
             trend: `${data.stats.total_blocked_today} new today`,
             trendUp: true,
             color: data.stats.total_blocked_today > 0 ? 'high' : 'low'
           },
           {
-            label: 'Risk Level',
+            label: isAdult ? 'Wellness Score' : 'Risk Level',
             value: data.child?.risk_level?.toUpperCase() || 'LOW',
-            icon: 'pi-chart-line',
-            trend: data.child?.is_monitored ? 'Monitoring Active' : (data.child ? 'Not Monitoring' : 'No child linked'),
+            icon: isAdult ? 'pi-heart-fill' : 'pi-chart-line',
+            trend: isAdult ? 'Self-monitoring Active' : (data.child?.is_monitored ? 'Monitoring Active' : (data.child ? 'Not Monitoring' : 'No child linked')),
             trendUp: (data.child?.risk_level || 'low').toLowerCase() === 'low',
             color: this.getRiskColor(data.child?.risk_level || 'low')
           }
@@ -476,7 +491,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         // Success toast
         this.messageService.add({
           severity: 'success',
-          summary: 'Child Data Synced',
+          summary: this.monitoringMode === 'adult' ? 'Wellness Data Synced' : 'Child Data Synced',
           detail: 'Dashboard metrics are up to date.',
           life: 3000
         });
@@ -488,6 +503,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.stats = [];
         this.cdr.detectChanges();
       }
+    });
+
+    // ── Fetch Emotional Heatmap ──
+    this.apiService.getEmotionalHeatmap(30).subscribe({
+      next: (data) => {
+        this.heatmapData = data;
+        this.cdr.detectChanges();
+      },
+      error: (err) => console.error('[AEGIS] Failed to load heatmap:', err)
     });
   }
 
@@ -508,9 +532,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
       allow: 'var(--low)',
       review: 'var(--accent)',
       risk: 'var(--high)',
-      educate: 'var(--accent)',    // Teal — educational, not harmful
+      educate: 'var(--accent)',
       human_review: 'var(--accent)',
       revise: 'var(--medium)',
+      self_warn: '#A78BFA',        // Soft purple — gentle adult self-reflection
     };
     return map[type] ?? 'var(--text-muted)';
   }
@@ -529,5 +554,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   getRiskLabel(level: string): string {
     return (level || 'LOW').toUpperCase();
+  }
+
+  getHeatmapColor(count: number): string {
+    if (count === 0) return 'var(--surface-b)';
+    if (count <= 1) return 'rgba(234, 179, 8, 0.35)';    // light amber
+    if (count <= 3) return 'rgba(249, 115, 22, 0.55)';   // orange
+    if (count <= 5) return 'rgba(239, 68, 68, 0.7)';     // red
+    return 'rgba(220, 38, 38, 0.9)';                      // dark red
   }
 }

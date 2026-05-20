@@ -1,904 +1,673 @@
+"""
+Evolution API Client — Facade Pattern.
+
+Centralizes all Evolution API HTTP interactions behind a single client class.
+Each public method is a thin wrapper around the shared ``_request()`` method,
+which handles authentication, headers, error logging, and timeouts.
+
+Module-level convenience functions (``send_text_message``, ``delete_message_from_whatsapp``,
+etc.) are preserved for backward compatibility — they delegate to the singleton client.
+
+Refactored during Phase 3 architecture cleanup (2026-05-20).
+"""
 import os
-import requests
 import logging
+
+import requests
 
 logger = logging.getLogger(__name__)
 
-def delete_message_from_whatsapp(instance_name, message_key_id, remote_jid, is_from_me):
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FACADE: EvolutionAPIClient
+# ══════════════════════════════════════════════════════════════════════════════
+
+class EvolutionAPIClient:
+    """Facade for all Evolution API HTTP interactions.
+
+    Reads ``EVOLUTION_API_URL`` and ``EVOLUTION_API_KEY`` from the environment
+    once at construction time and reuses them for every call.
     """
-    Calls Evolution API to delete a blocked message.
-    If the child sent it, we delete for everyone.
-    If a stranger sent it, we delete it locally from the child's phone.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    
-    if not api_key:
-        logger.error("[AEGIS] ❌ Evolution API Key missing in .env!")
-        return False
 
-    # WhatsApp Protocol Limitation: We CANNOT delete incoming messages locally 
-    # from a linked device (Evolution API). We can only "Delete for Everyone" 
-    # for messages we originated.
-    if not is_from_me:
-        logger.warning(f"[AEGIS] ⚠️ Cannot delete incoming message {message_key_id}. Relying on Auto-Reply deterrence.")
-        return False
+    def __init__(self):
+        self.base_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+        self.api_key = os.getenv('EVOLUTION_API_KEY', '')
 
-    url = f"{api_url}/chat/deleteMessageForEveryone/{instance_name}"
-    
-    headers = {
-        "apikey": api_key,
-        "Content-Type": "application/json"
-    }
-    
-    payload = {
-        "id": message_key_id,
-        "remoteJid": remote_jid,
-        "fromMe": is_from_me
-    }
+    # ── Core HTTP helper ─────────────────────────────────────────────────
 
-    try:
-        response = requests.delete(url, json=payload, headers=headers)
-        if response.status_code in [200, 201]:
-            action = "for everyone" if is_from_me else "locally"
-            logger.info(f"[AEGIS] 🗑️ Successfully deleted message {action} on WhatsApp")
-            return True
-        else:
-            logger.error(f"[AEGIS] ❌ Failed to delete message. Status: {response.status_code}, Resp: {response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"[AEGIS] ❌ Error calling Evolution API: {e}")
-        return False
+    def _request(self, method, path, payload=None, *, timeout=10,
+                 extra_headers=None, raw_response=False):
+        """Centralised HTTP method — handles auth, errors, and logging.
 
+        Returns parsed JSON on success, or *None* on failure.
+        When *raw_response* is True the raw ``requests.Response`` is returned
+        instead so callers can inspect status codes themselves.
+        """
+        if not self.api_key:
+            logger.error("[EVO API] ❌ Evolution API Key missing in .env!")
+            return None
 
-def send_aegis_warning(instance_name, remote_jid, category, is_from_me, decision, message_key_id=None, image_flags=None):
-    """
-    Sends an automated warning using Evolution API.
-    Different text depending on who sent the bad message, severity, and content type.
-    
-    Args:
-        image_flags: Optional dict with keys: nsfw (bool), violent (bool), ocr_text (str)
-                     When present, generates image-specific warning templates.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    
-    if not api_key:
-        return False
-        
-    url = f"{api_url}/message/sendText/{instance_name}"
-    
-    headers = {
-        "apikey": api_key,
-        "Content-Type": "application/json"
-    }
+        headers = {"apikey": self.api_key, "Content-Type": "application/json"}
+        if extra_headers:
+            headers.update(extra_headers)
 
-    # ── Determine the content type and build the appropriate warning ──
-    is_nsfw_image = image_flags and image_flags.get("nsfw", False)
-    is_violent_image = image_flags and image_flags.get("violent", False)
-    has_ocr_text = image_flags and image_flags.get("ocr_text", "")
-    is_image_flag = is_nsfw_image or is_violent_image
+        url = f"{self.base_url}/{path.lstrip('/')}"
 
-    if is_from_me:
-        # ── OUTGOING (Self-Moderation) ──
-        if is_nsfw_image:
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"📸 An image sent from this device was blocked for *NSFW Content*.\n\n"
-                f"⚠️ _The image was flagged by our AI vision system and this incident has been logged._"
+        try:
+            resp = requests.request(
+                method, url, json=payload, headers=headers, timeout=timeout,
             )
-        elif is_violent_image:
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"📸 An image sent from this device was blocked for *Violent Content*.\n\n"
-                f"⚠️ _The image was flagged by our AI vision system and this incident has been logged._"
+            if raw_response:
+                return resp
+            if resp.status_code in (200, 201):
+                try:
+                    return resp.json()
+                except ValueError:
+                    return True  # HTTP 200 but no JSON body
+            logger.error(
+                f"[EVO API] {method} {path} → {resp.status_code}: "
+                f"{resp.text[:200]}"
             )
-        elif has_ocr_text and decision in ['BLOCK', 'ESCALATE']:
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"📸 An image sent from this device contained text flagged for *{category.replace('_', ' ').title()}*.\n\n"
-                f"⚠️ _The text was extracted and analyzed. This incident has been logged._"
-            )
-        elif decision in ['BLOCK', 'ESCALATE']:
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"A message sent by this device was blocked for *{category.replace('_', ' ').title()}*.\n\n"
-                f"⚠️ _The message was deleted and this incident has been logged to the Parental Dashboard._"
-            )
-        else:  # WARN
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"A message sent by this device was flagged as a *Warning* for *{category.replace('_', ' ').title()}*.\n\n"
-                f"⚠️ _The message was NOT deleted, but this incident has been logged. Please be respectful._"
-            )
-    else:
-        # ── INCOMING (From external sender) ──
-        if is_nsfw_image:
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"📸 Your image was flagged for *NSFW Content* and violated safety protocols.\n\n"
-                f"🚨 _This incident has been logged and reported. Sending inappropriate images to a minor is a serious offense._"
-            )
-        elif is_violent_image:
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"📸 Your image was flagged for *Violent Content* and violated safety protocols.\n\n"
-                f"🚨 _This incident has been logged and reported. Further violations will result in an automatic block._"
-            )
-        elif has_ocr_text and decision in ['BLOCK', 'ESCALATE']:
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"📸 Text extracted from your image was flagged for *{category.replace('_', ' ').title()}* and violated safety protocols.\n\n"
-                f"⚠️ _This incident has been logged and reported. Further violations will result in an automatic block._"
-            )
-        elif decision in ['BLOCK', 'ESCALATE']:
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"Your message was flagged for *{category.replace('_', ' ').title()}* and violated safety protocols.\n\n"
-                f"⚠️ _This incident has been logged and reported. Further violations will result in an automatic block._"
-            )
-        else:  # WARN
-            warning_text = (
-                f"🛡️ *[AEGIS SAFETY SYSTEM]* 🛡️\n\n"
-                f"Your message was flagged as a *Warning* for *{category.replace('_', ' ').title()}*.\n\n"
-                f"⚠️ _This incident has been lightly logged. Please maintain a respectful environment._"
-            )
-    
-    # 🎯 DELAY & TYPING LOGIC
-    payload = {
-        "number": remote_jid,
-        "text": warning_text,
-        "delay": 1500
-    }
-    
-    # 🎯 QUOTED REPLY LOGIC
-    # Evolution API v2 requires the 'quoted' object to be placed at the ROOT of the payload!
-    if message_key_id:
-        payload["quoted"] = {
+        except requests.exceptions.Timeout:
+            logger.warning(f"[EVO API] {method} {path} → Timeout ({timeout}s)")
+        except Exception as e:
+            logger.error(f"[EVO API] {method} {path} → Exception: {e}")
+
+        return None
+
+    def _get(self, path, **kw):
+        return self._request("GET", path, **kw)
+
+    def _post(self, path, payload=None, **kw):
+        return self._request("POST", path, payload=payload, **kw)
+
+    def _delete(self, path, payload=None, **kw):
+        return self._request("DELETE", path, payload=payload, **kw)
+
+    # ── Messaging ────────────────────────────────────────────────────────
+
+    def send_text(self, instance, jid, text, delay=1500):
+        """Send a plain text message."""
+        return self._post(f"message/sendText/{instance}", {
+            "number": jid, "text": text, "delay": delay,
+        })
+
+    def send_reaction(self, instance, jid, message_key_id, is_from_me,
+                      reaction="🚨"):
+        """Pin a reaction emoji onto a message."""
+        if not message_key_id:
+            return None
+        return self._post(f"message/sendReaction/{instance}", {
             "key": {
+                "remoteJid": jid,
+                "fromMe": is_from_me,
                 "id": message_key_id,
-                "remoteJid": remote_jid,
-                "fromMe": is_from_me
-            }
-        }
+            },
+            "reaction": reaction,
+        })
 
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code in [200, 201]:
-            logger.info(f"[AEGIS] 🚨 Successfully sent warning Auto-Reply to {remote_jid}")
-            # Extract the message key ID, exact timestamp, AND the full node response from Evolution API.
-            # Building a fully valid `lastMessage` anchor requires the full node structural shape.
-            try:
-                resp_data = response.json()
-                warning_msg_id = resp_data.get("key", {}).get("id")
-                warning_ts = resp_data.get("messageTimestamp")
-                if warning_msg_id and warning_ts:
-                    logger.info(f"[AEGIS] 📌 Warning message key ID: {warning_msg_id}, TS: {warning_ts}")
-                    return (warning_msg_id, warning_ts, resp_data)
-            except Exception:
-                pass
+    def send_presence(self, instance, jid, presence="composing", delay=1500):
+        """Simulate typing indicator."""
+        return self._post(f"chat/sendPresence/{instance}", {
+            "number": jid, "presence": presence, "delay": delay,
+        })
+
+    # ── Message Deletion ─────────────────────────────────────────────────
+
+    def delete_message_for_everyone(self, instance, message_key_id, jid,
+                                    is_from_me):
+        """Delete a message for everyone.
+
+        WhatsApp protocol limitation: we can only delete-for-everyone for
+        messages **we** originated (``is_from_me=True``).
+        """
+        if not is_from_me:
+            logger.warning(
+                f"[EVO API] ⚠️ Cannot delete incoming message "
+                f"{message_key_id}. Relying on Auto-Reply deterrence."
+            )
+            return False
+        result = self._delete(
+            f"chat/deleteMessageForEveryone/{instance}",
+            payload={
+                "id": message_key_id,
+                "remoteJid": jid,
+                "fromMe": is_from_me,
+            },
+        )
+        if result is not None:
+            logger.info("[EVO API] 🗑️ Successfully deleted message for everyone")
             return True
-    except Exception as e:
-        logger.error(f"[AEGIS] ❌ Error sending warning: {e}")
-        
-    return False
-
-
-def send_aegis_reaction(instance_name, remote_jid, message_key_id, is_from_me, reaction="🚨"):
-    """
-    Instantly slaps a reaction emoji onto a bad message to visually tag it before the warning.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    
-    if not api_key or not message_key_id:
-        return False
-        
-    url = f"{api_url}/message/sendReaction/{instance_name}"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-    
-    # Evolution V2 strictly requires the key object for Reactions!
-    payload = {
-        "key": {
-            "remoteJid": remote_jid,
-            "fromMe": is_from_me,
-            "id": message_key_id
-        },
-        "reaction": reaction
-    }
-    
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code in [200, 201]:
-            logger.info(f"[AEGIS] 🚨 Successfully pinned '{reaction}' reaction to message {message_key_id}")
-            return True
-    except Exception as e:
-        logger.error(f"[AEGIS] ❌ Error sending reaction: {e}")
-        
-    return False
-
-def send_aegis_presence(instance_name, remote_jid, presence="composing", delay=1500):
-    """
-    Evolution V2 requires a dedicated endpoint to simulate AEGIS magically typing!
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    
-    if not api_key:
-        return False
-        
-    url = f"{api_url}/chat/sendPresence/{instance_name}"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-    
-    payload = {
-        "number": remote_jid,
-        "presence": presence,
-        "delay": delay
-    }
-    
-    try:
-        requests.post(url, json=payload, headers=headers)
-        return True
-    except Exception:
         return False
 
-def block_contact(instance_name, remote_jid):
-    """
-    Instantly blocks the contact so they can't send any more messages.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    
-    if not api_key: return False
-    
-    # /chat/ is the correct path for v2.3.6 (/message/ returns 404)
-    url = f"{api_url}/chat/updateBlockStatus/{instance_name}"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-    
-    # Extract plain phone number from the phone-based JID
-    clean_number = remote_jid.split('@')[0]
-    
-    payload = {
-        "number": clean_number,
-        "status": "block"
-    }
-    
-    try:
-        logger.info(f"[AEGIS] 🛡️ Attempting to BLOCK {clean_number} via {url}")
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code in [200, 201]:
-            logger.info(f"[AEGIS] 🛑 Successfully BLOCKED attacker: {remote_jid}")
-            return True
-        else:
-            logger.error(f"[AEGIS] ❌ Failed to block contact. Status: {response.status_code}, Resp: {response.text}")
-    except Exception as e:
-        logger.error(f"[AEGIS] ❌ Error blocking contact: {e}")
-    return False
+    # ── Warning / Alert Messages ─────────────────────────────────────────
 
-def archive_chat(
-    instance_name,
-    remote_jid,               # phone JID (@s.whatsapp.net)
-    warning_msg_key_id=None,
-    warning_timestamp=None,
-    full_last_message=None,
-    lid_jid=None,             # LID JID (@lid)
-):
-    """
-    Archives a chat via Evolution API / Baileys chatModify.
+    def send_warning(self, instance, jid, warning_text, *,
+                     message_key_id=None, is_from_me=False, delay=1500):
+        """Send a warning auto-reply, optionally as a quoted reply.
 
-    CRITICAL BUG FOUND IN EVOLUTION API SOURCE CODE:
-    ─────────────────────────────────────────────────
-    When `lastMessage` is provided, Evolution API IGNORES the `chat` field entirely.
-    The JID passed to Baileys' chatModify() is extracted from `lastMessage.key.remoteJid`:
-
-        // Evolution API source (whatsapp.baileys.service.mjs):
-        if (!t && o)
-            t = await this.getLastMessage(o);   // only when NO lastMessage
-        else
-            (t = e.lastMessage, o = t?.key?.remoteJid);  // OVERWRITES chat target!
-        await this.client.chatModify({...}, W(o));  // uses overwritten 'o'
-
-    This means our `chat: @lid` was NEVER reaching Baileys.
-    The fix: put the LID in `lastMessage.key.remoteJid` so it becomes the chatModify target.
-
-    Strategy A: LID in lastMessage.key.remoteJid (preferred)
-    Strategy B: No lastMessage, just `chat` field → Prisma auto-lookup (fallback)
-    """
-    import time as _time
-    import json as _json
-
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-
-    if not api_key:
-        return False
-
-    url = f"{api_url}/chat/archiveChat/{instance_name}"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-
-    # Resolve the target JID — prefer LID, fallback to phone JID
-    effective_target = lid_jid if lid_jid else remote_jid
-
-    # ── STRATEGY A: LID in lastMessage.key.remoteJid ─────────────────────
-    # Since Evolution API extracts the chatModify JID from lastMessage.key.remoteJid,
-    # we MUST put the correct target (LID) there, not the phone JID.
-    def _build_strategy_a_payload():
-        """Build payload with LID in lastMessage.key.remoteJid."""
-        payload = {"chat": effective_target, "archive": True}
-
-        if full_last_message:
-            last_msg_node = dict(full_last_message)
-            if isinstance(last_msg_node.get("key"), dict):
-                last_msg_node["key"] = dict(last_msg_node["key"])
-                # ✅ THE FIX: Put LID here so Evolution API passes it to chatModify
-                last_msg_node["key"]["remoteJid"] = effective_target
-                last_msg_node["key"]["participant"] = remote_jid  # phone JID for participant
-            if not last_msg_node.get("message"):
-                last_msg_node["message"] = {"conversation": "⚠️"}
-            payload["lastMessage"] = last_msg_node
-
-        elif warning_msg_key_id:
-            ts = warning_timestamp or int(_time.time())
-            payload["lastMessage"] = {
+        Returns ``(msg_key_id, timestamp, full_response)`` on success
+        so callers can use the response as an archive anchor.
+        """
+        payload = {"number": jid, "text": warning_text, "delay": delay}
+        if message_key_id:
+            payload["quoted"] = {
                 "key": {
-                    "remoteJid": effective_target,  # ✅ LID here
-                    "fromMe": True,
-                    "id": warning_msg_key_id,
-                    "participant": remote_jid,
-                },
-                "messageTimestamp": ts,
-                "message": {"conversation": "⚠️"},
+                    "id": message_key_id,
+                    "remoteJid": jid,
+                    "fromMe": is_from_me,
+                }
             }
-        return payload
 
-    # ── STRATEGY B: No lastMessage — Prisma auto-lookup ──────────────────
-    # Let Evolution API's getLastMessage() query Prisma by the phone JID.
-    # When no lastMessage is provided, the `chat` field IS used as the
-    # chatModify JID target (it doesn't get overwritten).
-    def _build_strategy_b_payload():
-        """Build minimal payload — let Evolution API handle lastMessage lookup."""
-        return {"chat": remote_jid, "archive": True}
+        resp = self._post(f"message/sendText/{instance}", payload)
+        if resp and isinstance(resp, dict):
+            logger.info(f"[EVO API] 🚨 Warning sent to {jid}")
+            msg_id = resp.get("key", {}).get("id")
+            msg_ts = resp.get("messageTimestamp")
+            if msg_id and msg_ts:
+                return (msg_id, msg_ts, resp)
+            return True
+        return False
 
-    # ── EXECUTE WITH RETRY ───────────────────────────────────────────────
-    strategies = [
-        ("A: LID-in-remoteJid", _build_strategy_a_payload),
-        ("B: Prisma-auto-lookup", _build_strategy_b_payload),
-    ]
+    def send_parent_alert(self, instance, parent_phone, alert_text):
+        """Send an alert message to a parent's WhatsApp number."""
+        clean = str(parent_phone).replace("+", "").replace("-", "").replace(" ", "")
+        result = self._post(f"message/sendText/{instance}", {
+            "number": clean, "text": alert_text,
+        })
+        if result is not None:
+            logger.info(f"[EVO API] 🚨 Parent alert sent to {clean}")
+            return True
+        return False
 
-    for strategy_name, build_fn in strategies:
-        payload = build_fn()
+    def send_educational_dm(self, bot_instance, child_jid, dm_text):
+        """Send an educational DM via the Aegis Assistant bot instance.
 
-        logger.info("=" * 60)
-        logger.info(f"[ARCHIVE] ── Strategy {strategy_name} ──")
-        logger.info(f"[ARCHIVE] chat         : {payload.get('chat')}")
-        last_key = payload.get("lastMessage", {}).get("key", {})
-        logger.info(f"[ARCHIVE] lm.remoteJid : {last_key.get('remoteJid', 'N/A (Prisma lookup)')}")
-        logger.info(f"[ARCHIVE] lm.id        : {last_key.get('id', 'N/A')}")
-        logger.info(f"[ARCHIVE] FULL JSON:\n{_json.dumps(payload, indent=2, default=str)}")
-        logger.info("=" * 60)
+        Returns ``(message_key_id, dm_text)`` or ``(None, dm_text)`` on failure.
+        """
+        if not bot_instance:
+            logger.warning("[EVO API] ⚠️ Bot instance not configured — skipping educational DM.")
+            return None, dm_text
 
-        # Retry loop: 3 attempts with exponential backoff
-        delays = [0, 3, 7]  # seconds before each attempt
-        for attempt, delay in enumerate(delays, 1):
-            if delay > 0:
-                logger.info(f"[ARCHIVE] ⏳ Retry {attempt}/3 in {delay}s...")
-                _time.sleep(delay)
+        resp = self._post(f"message/sendText/{bot_instance}", {
+            "number": child_jid, "text": dm_text, "delay": 2000,
+        })
+        if resp and isinstance(resp, dict):
+            msg_key_id = resp.get("key", {}).get("id")
+            logger.info(f"[EVO API] 📚 Educational DM sent via {bot_instance}")
+            return msg_key_id, dm_text
+        return None, dm_text
 
-            try:
-                response = requests.post(url, json=payload, headers=headers)
-                resp_text = response.text[:500]
+    # ── Contact Management ───────────────────────────────────────────────
 
-                if response.status_code in [200, 201]:
-                    logger.info(f"[ARCHIVE] ✅ HTTP {response.status_code} | Strategy {strategy_name} | Attempt {attempt}/3")
-                    logger.info(f"[ARCHIVE] Response: {resp_text}")
+    def block_contact(self, instance, jid):
+        """Block a contact so they can't send any more messages."""
+        clean = jid.split('@')[0]
+        logger.info(f"[EVO API] 🛡️ Attempting to BLOCK {clean}")
+        result = self._post(f"chat/updateBlockStatus/{instance}", {
+            "number": clean, "status": "block",
+        })
+        if result is not None:
+            logger.info(f"[EVO API] 🛑 Successfully BLOCKED: {jid}")
+            return True
+        return False
 
-                    # Check for actual success vs silent failure
+    # ── Archive ──────────────────────────────────────────────────────────
+
+    def archive_chat(self, instance, remote_jid, *,
+                     warning_msg_key_id=None, warning_timestamp=None,
+                     full_last_message=None, lid_jid=None):
+        """Archive a chat via Evolution API / Baileys chatModify.
+
+        Implements two strategies with retry logic to work around
+        Evolution API's internal JID routing quirks.
+        """
+        import time as _time
+        import json as _json
+
+        effective_target = lid_jid if lid_jid else remote_jid
+
+        # ── Strategy A: LID in lastMessage.key.remoteJid ─────────────
+        def _build_strategy_a_payload():
+            payload = {"chat": effective_target, "archive": True}
+            if full_last_message:
+                last_msg_node = dict(full_last_message)
+                if isinstance(last_msg_node.get("key"), dict):
+                    last_msg_node["key"] = dict(last_msg_node["key"])
+                    last_msg_node["key"]["remoteJid"] = effective_target
+                    last_msg_node["key"]["participant"] = remote_jid
+                if not last_msg_node.get("message"):
+                    last_msg_node["message"] = {"conversation": "⚠️"}
+                payload["lastMessage"] = last_msg_node
+            elif warning_msg_key_id:
+                ts = warning_timestamp or int(_time.time())
+                payload["lastMessage"] = {
+                    "key": {
+                        "remoteJid": effective_target,
+                        "fromMe": True,
+                        "id": warning_msg_key_id,
+                        "participant": remote_jid,
+                    },
+                    "messageTimestamp": ts,
+                    "message": {"conversation": "⚠️"},
+                }
+            return payload
+
+        # ── Strategy B: No lastMessage — Prisma auto-lookup ──────────
+        def _build_strategy_b_payload():
+            return {"chat": remote_jid, "archive": True}
+
+        strategies = [
+            ("A: LID-in-remoteJid", _build_strategy_a_payload),
+            ("B: Prisma-auto-lookup", _build_strategy_b_payload),
+        ]
+
+        url_path = f"chat/archiveChat/{instance}"
+
+        for strategy_name, build_fn in strategies:
+            payload = build_fn()
+            logger.info("=" * 60)
+            logger.info(f"[ARCHIVE] ── Strategy {strategy_name} ──")
+            logger.info(f"[ARCHIVE] chat         : {payload.get('chat')}")
+            last_key = payload.get("lastMessage", {}).get("key", {})
+            logger.info(f"[ARCHIVE] lm.remoteJid : {last_key.get('remoteJid', 'N/A (Prisma lookup)')}")
+            logger.info(f"[ARCHIVE] lm.id        : {last_key.get('id', 'N/A')}")
+            logger.info(f"[ARCHIVE] FULL JSON:\n{_json.dumps(payload, indent=2, default=str)}")
+            logger.info("=" * 60)
+
+            delays = [0, 3, 7]
+            for attempt, delay in enumerate(delays, 1):
+                if delay > 0:
+                    logger.info(f"[ARCHIVE] ⏳ Retry {attempt}/3 in {delay}s...")
+                    _time.sleep(delay)
+
+                resp = self._request(
+                    "POST", url_path, payload=payload, raw_response=True,
+                )
+                if resp is None:
+                    continue
+
+                if resp.status_code in (200, 201):
+                    resp_text = resp.text[:500]
+                    logger.info(
+                        f"[ARCHIVE] ✅ HTTP {resp.status_code} | "
+                        f"Strategy {strategy_name} | Attempt {attempt}/3"
+                    )
                     try:
-                        resp_data = response.json()
+                        resp_data = resp.json()
                         if resp_data.get("archived") is True:
-                            logger.info(f"[AEGIS] 🗃️ ✅ Archive CONFIRMED for {effective_target}")
+                            logger.info(f"[EVO API] 🗃️ ✅ Archive CONFIRMED for {effective_target}")
                             return True
                         elif resp_data.get("archived") is False:
                             logger.warning(f"[ARCHIVE] ⚠️ API returned archived=false: {resp_text}")
                             break  # Try next strategy
                     except Exception:
                         pass
-
-                    return True  # HTTP 200 but couldn't parse — assume success
+                    return True
                 else:
-                    logger.error(f"[ARCHIVE] ❌ HTTP {response.status_code} | Attempt {attempt}/3 | {resp_text}")
-                    if response.status_code == 404:
-                        break  # Instance doesn't exist, don't retry
-            except Exception as e:
-                logger.error(f"[ARCHIVE] ❌ Exception on attempt {attempt}/3: {e}")
+                    logger.error(
+                        f"[ARCHIVE] ❌ HTTP {resp.status_code} | "
+                        f"Attempt {attempt}/3 | {resp.text[:500]}"
+                    )
+                    if resp.status_code == 404:
+                        break
 
-        logger.warning(f"[ARCHIVE] Strategy {strategy_name} exhausted. Trying next...")
+            logger.warning(f"[ARCHIVE] Strategy {strategy_name} exhausted. Trying next...")
 
-    logger.error(f"[AEGIS] ❌ All archive strategies failed for {effective_target}")
-    return False
-
-def send_parent_alert(instance_name, parent_phone_number, child_name, category, text):
-    """
-    Sends an immediate critical alert to the parent's actual WhatsApp via Evolution API.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    
-    if not api_key:
+        logger.error(f"[EVO API] ❌ All archive strategies failed for {effective_target}")
         return False
-        
-    url = f"{api_url}/message/sendText/{instance_name}"
-    
-    headers = {
-        "apikey": api_key,
-        "Content-Type": "application/json"
-    }
 
-    warning_text = (
-        f"🚨 *AEGIS CRITICAL ALERT* 🚨\n\n"
-        f"A severely harmful message categorized as *{category.replace('_', ' ').title()}* "
-        f"was just intercepted on {child_name}'s device.\n\n"
-        f"📝 _Preview_: \"{text[:100]}...\"\n\n"
-        f"Please check your AEGIS Dashboard immediately."
-    )
-    
-    clean_number = str(parent_phone_number).replace("+", "").replace("-", "").replace(" ", "")
-    
-    payload = {
-        "number": clean_number,
-        "text": warning_text
-    }
+    # ── Instance Management ──────────────────────────────────────────────
 
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        if response.status_code in [200, 201]:
-            logger.info(f"[AEGIS] 🚨 Successfully sent parent alert to {clean_number}")
-            return True
-    except Exception as e:
-        logger.error(f"[AEGIS] ❌ Error sending parent alert: {e}")
-        
-    return False
+    def create_instance(self, instance_name):
+        """Create a new WhatsApp instance."""
+        return self._post("instance/create", {
+            "instanceName": instance_name,
+            "integration": "WHATSAPP-BAILEYS",
+            "qrcode": True,
+        })
 
+    def get_qr_code(self, instance_name):
+        """Get the QR code for device pairing."""
+        return self._get(f"instance/connect/{instance_name}")
 
-def send_educational_dm(bot_instance_name, child_jid, category, original_text=None):
-    """
-    Sends an empathetic educational DM from the Aegis Assistant bot (Instance 2)
-    to the child after catching their toxic outgoing message.
-    
-    This is NOT a punitive warning — it's an educational ally helping the child
-    understand why their message could be harmful and encouraging self-reflection.
-    
-    Args:
-        bot_instance_name: The Evolution API instance name for the Aegis bot
-        child_jid: The child's WhatsApp JID
-        category: The detected harassment category (e.g. 'verbal_harassment', 'threat')
-        original_text: Optional preview of the original message for context
-    
-    Returns:
-        tuple: (message_key_id, text_sent) or (None, None) on failure
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    
-    if not api_key or not bot_instance_name:
-        logger.warning("[AEGIS] ⚠️ Bot instance not configured — skipping educational DM.")
-        return None, None
-    
-    url = f"{api_url}/message/sendText/{bot_instance_name}"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-    
-    # Category-specific educational messages — empathetic, short, and punchy
-    EDUCATIONAL_TEMPLATES = {
-        'verbal_harassment': (
-            "Hey 👋 I noticed your last message was pretty harsh. "
-            "Words can really hurt — take a breath before you text. 🧘‍♂️"
-        ),
-        'threat': (
-            "Hey 👋 That last message sounded like a threat. "
-            "Even if you're just joking, that can get you in real trouble. 🛑"
-        ),
-        'sexual_harassment': (
-            "Hey 👋 That message could make someone really uncomfortable. "
-            "Let's keep the chat respectful. 🙏"
-        ),
-        'discrimination': (
-            "Hey 👋 Using words that target who someone is isn't okay. "
-            "Everyone deserves respect. 🌍"
-        ),
-        'repeated_messages': (
-            "Hey 👋 You're sending a lot of messages fast! "
-            "Give them some space to reply. 😅"
-        ),
-        'identity_theft': (
-            "Hey 👋 Pretending to be someone else can cause real harm. "
-            "Just be yourself! ⚠️"
-        ),
-    }
-    
-    # Get the template or use a generic fallback
-    category_message = EDUCATIONAL_TEMPLATES.get(category, (
-        "Hey 👋 That last message was a bit much. "
-        "Take a second to think before you hit send! 🌱"
-    ))
-    
-    dm_text = (
-        f"🛡️ *Aegis Assistant*\n\n"
-        f"{category_message}\n\n"
-        f"💡 _If you need to vent, just text me! I'm here to listen._"
-    )
-    
-    payload = {
-        "number": child_jid,
-        "text": dm_text,
-        "delay": 2000  # Natural typing delay
-    }
-    
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
-        if response.status_code in [200, 201]:
-            resp_data = response.json()
-            msg_key_id = resp_data.get("key", {}).get("id")
-            logger.info(f"[AEGIS] 📚 Educational DM sent to child via {bot_instance_name}")
-            return msg_key_id, dm_text
-    except Exception as e:
-        logger.error(f"[AEGIS] ❌ Error sending educational DM: {e}")
-    
-    return None, dm_text
+    def set_webhook(self, instance_name, webhook_url):
+        """Configure the webhook for an instance."""
+        self._post(f"webhook/set/{instance_name}", {
+            "webhook": {
+                "enabled": True,
+                "url": webhook_url,
+                "byEvents": False,
+                "base64": False,
+                "events": ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+            }
+        })
 
+    def delete_instance(self, instance_name):
+        """Delete a WhatsApp instance."""
+        self._delete(f"instance/delete/{instance_name}")
 
-def send_constructive_parent_alert(instance_name, parent_phone_number, child_name, category):
-    """
-    Sends a constructive, guidance-focused notification to the parent about
-    their child's self-moderation event. This is NOT an alarm — it frames
-    the incident as a learning opportunity.
-    
-    Different from send_parent_alert which is alarming (🚨 CRITICAL ALERT).
-    This is calm and supportive (🌱 GROWTH MOMENT).
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    
-    if not api_key:
-        return False
-    
-    url = f"{api_url}/message/sendText/{instance_name}"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-    
-    category_label = category.replace('_', ' ').title()
-    
-    alert_text = (
-        f"🌱 *Aegis Growth Moment* 🌱\n\n"
-        f"Aegis caught a message from {child_name} that was flagged as *{category_label}*. "
-        f"The message was intercepted and {child_name} received a private, "
-        f"educational message from Aegis Assistant to help them understand why.\n\n"
-        f"💡 _This is normal — children learn digital citizenship through moments like these. "
-        f"Consider having a calm conversation about it._\n\n"
-        f"📊 Check your AEGIS Dashboard for details."
-    )
-    
-    clean_number = str(parent_phone_number).replace("+", "").replace("-", "").replace(" ", "")
-    
-    payload = {
-        "number": clean_number,
-        "text": alert_text,
-    }
-    
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=10)
-        if response.status_code in [200, 201]:
-            logger.info(f"[AEGIS] 🌱 Constructive parent alert sent to {clean_number}")
-            return True
-    except Exception as e:
-        logger.error(f"[AEGIS] ❌ Error sending constructive parent alert: {e}")
-    
-    return False
+    def get_connection_status(self, instance_name):
+        """Check if an instance is connected."""
+        return self._get(f"instance/connectionState/{instance_name}")
 
-
-def create_whatsapp_instance(instance_name):
-    """
-    Step 1: Create the instance in Evolution API.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    url = f"{api_url}/instance/create"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-    payload = {
-        "instanceName": instance_name,
-        "integration": "WHATSAPP-BAILEYS",
-        "qrcode": True
-    }
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to create instance: {e}")
-        return None
-
-def get_qr_code(instance_name):
-    """
-    Step 2: Get the QR code base64 string for the scan.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    url = f"{api_url}/instance/connect/{instance_name}"
-    headers = {"apikey": api_key}
-    try:
-        response = requests.get(url, headers=headers)
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to get QR: {e}")
-        return None
-
-def set_webhook_for_instance(instance_name, webhook_url):
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    url = f"{api_url}/webhook/set/{instance_name}"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
-    payload = {
-        "webhook": {
-            "enabled": True,
-            "url": webhook_url,
-            "byEvents": False,
-            "base64": False,
-            "events": ["MESSAGES_UPSERT", "CONNECTION_UPDATE"]
-        }
-    }
-    try:
-        requests.post(url, json=payload, headers=headers)
-    except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
-
-def delete_whatsapp_instance(instance_name):
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    url = f"{api_url}/instance/delete/{instance_name}"
-    headers = {"apikey": api_key}
-    try:
-        requests.delete(url, headers=headers)
-    except Exception as e:
-        logger.error(f"Failed to delete instance: {e}")
-
-def check_connection_status(instance_name):
-    """
-    Checks if the instance is currently 'open' (connected) or still 'close'.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    url = f"{api_url}/instance/connectionState/{instance_name}"
-    headers = {"apikey": api_key}
-    try:
-        response = requests.get(url, headers=headers)
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to check connection: {e}")
-        return None
-
-def get_instance_details(instance_name):
-    """
-    Fetches the instance details to get the connected phone number.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    url = f"{api_url}/instance/fetchInstances?instanceName={instance_name}"
-    headers = {"apikey": api_key}
-    try:
-        response = requests.get(url, headers=headers)
-        data = response.json()
+    def get_instance_details(self, instance_name):
+        """Fetch instance details including connected phone number."""
+        data = self._get(
+            f"instance/fetchInstances?instanceName={instance_name}",
+        )
         if data and isinstance(data, list) and len(data) > 0:
             return data[0]
         return None
-    except Exception as e:
-        logger.error(f"Failed to get instance details: {e}")
-        return None
+
+    def get_all_instances(self):
+        """Fetch all instances from the Evolution API server."""
+        data = self._get("instance/fetchInstances")
+        return data if isinstance(data, list) else []
+
+    # ── Chat History ─────────────────────────────────────────────────────
+
+    def fetch_messages(self, instance, jid_field, jid_value):
+        """Fetch messages from chat history, ordered by timestamp ascending."""
+        return self._post(f"chat/findMessages/{instance}", {
+            "where": {"key": {jid_field: jid_value}},
+            "orderBy": {"messageTimestamp": "asc"},
+            "take": 1,
+        })
+
+    def fetch_all_groups(self, instance):
+        """Fetch all groups with participant lists."""
+        return self._get(
+            f"group/fetchAllGroups/{instance}?getParticipants=true",
+            timeout=15,
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SINGLETON ACCESS
+# ══════════════════════════════════════════════════════════════════════════════
+
+_client = None
+
+
+def get_evolution_client() -> EvolutionAPIClient:
+    """Return the module-level singleton client instance."""
+    global _client
+    if _client is None:
+        _client = EvolutionAPIClient()
+    return _client
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BACKWARD-COMPATIBLE MODULE-LEVEL FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+# These thin wrappers keep all existing call sites working without changes.
+
+def delete_message_from_whatsapp(instance_name, message_key_id, remote_jid,
+                                 is_from_me):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.delete_message_for_everyone``."""
+    return get_evolution_client().delete_message_for_everyone(
+        instance_name, message_key_id, remote_jid, is_from_me,
+    )
+
+
+def send_aegis_warning(instance_name, remote_jid, category, is_from_me,
+                       decision, message_key_id=None, image_flags=None):
+    """Backward-compatible wrapper.
+
+    Builds the warning text via ``message_templates`` then delegates to the client.
+    """
+    from moderation.services.message_templates import get_warning_text
+    warning_text = get_warning_text(category, decision, is_from_me,
+                                    image_flags=image_flags)
+    return get_evolution_client().send_warning(
+        instance_name, remote_jid, warning_text,
+        message_key_id=message_key_id, is_from_me=is_from_me,
+    )
+
+
+def send_aegis_reaction(instance_name, remote_jid, message_key_id,
+                        is_from_me, reaction="🚨"):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.send_reaction``."""
+    return get_evolution_client().send_reaction(
+        instance_name, remote_jid, message_key_id, is_from_me, reaction,
+    )
+
+
+def send_aegis_presence(instance_name, remote_jid, presence="composing",
+                        delay=1500):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.send_presence``."""
+    return get_evolution_client().send_presence(
+        instance_name, remote_jid, presence, delay,
+    )
+
+
+def block_contact(instance_name, remote_jid):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.block_contact``."""
+    return get_evolution_client().block_contact(instance_name, remote_jid)
+
+
+def archive_chat(instance_name, remote_jid, warning_msg_key_id=None,
+                 warning_timestamp=None, full_last_message=None,
+                 lid_jid=None):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.archive_chat``."""
+    return get_evolution_client().archive_chat(
+        instance_name, remote_jid,
+        warning_msg_key_id=warning_msg_key_id,
+        warning_timestamp=warning_timestamp,
+        full_last_message=full_last_message,
+        lid_jid=lid_jid,
+    )
+
+
+def send_parent_alert(instance_name, parent_phone_number, child_name,
+                      category, text):
+    """Backward-compatible wrapper — builds alert text then sends."""
+    from moderation.services.message_templates import get_parent_alert_text
+    alert_text = get_parent_alert_text(child_name, category, text)
+    return get_evolution_client().send_parent_alert(
+        instance_name, parent_phone_number, alert_text,
+    )
+
+
+def send_text_message(instance_name, remote_jid, text):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.send_text``."""
+    result = get_evolution_client().send_text(instance_name, remote_jid, text)
+    return result is not None
+
+
+def send_educational_dm(bot_instance_name, child_jid, category,
+                        original_text=None):
+    """Backward-compatible wrapper — builds DM text then sends.
+
+    Returns ``(message_key_id, dm_text)`` or ``(None, dm_text)`` on failure.
+    """
+    from moderation.services.message_templates import get_educational_dm_text
+    dm_text = get_educational_dm_text(category)
+    return get_evolution_client().send_educational_dm(
+        bot_instance_name, child_jid, dm_text,
+    )
+
+
+def send_constructive_parent_alert(instance_name, parent_phone_number,
+                                   child_name, category):
+    """Backward-compatible wrapper — builds constructive alert then sends."""
+    from moderation.services.message_templates import (
+        get_constructive_parent_alert_text,
+    )
+    alert_text = get_constructive_parent_alert_text(child_name, category)
+    return get_evolution_client().send_parent_alert(
+        instance_name, parent_phone_number, alert_text,
+    )
+
+
+def create_whatsapp_instance(instance_name):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.create_instance``."""
+    return get_evolution_client().create_instance(instance_name)
+
+
+def get_qr_code(instance_name):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.get_qr_code``."""
+    return get_evolution_client().get_qr_code(instance_name)
+
+
+def set_webhook_for_instance(instance_name, webhook_url):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.set_webhook``."""
+    get_evolution_client().set_webhook(instance_name, webhook_url)
+
+
+def delete_whatsapp_instance(instance_name):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.delete_instance``."""
+    get_evolution_client().delete_instance(instance_name)
+
+
+def check_connection_status(instance_name):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.get_connection_status``."""
+    return get_evolution_client().get_connection_status(instance_name)
+
+
+def get_instance_details(instance_name):
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.get_instance_details``."""
+    return get_evolution_client().get_instance_details(instance_name)
 
 
 def get_all_instances():
-    """
-    Fetches all instances from the Evolution API server.
-    """
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
-    headers = {"apikey": api_key}
-    
-    try:
-        url = f"{api_url}/instance/fetchInstances"
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            return response.json()
-        return []
-    except Exception as e:
-        logger.error(f"Failed to get instances: {e}")
-        return []
+    """Backward-compatible wrapper — see ``EvolutionAPIClient.get_all_instances``."""
+    return get_evolution_client().get_all_instances()
+
 
 def fetch_relationship_start(instance_name, remote_jid):
+    """Query Evolution API for the oldest synced message in a chat.
+
+    Tries both ``remoteJid`` and ``remoteJidAlt`` to handle LID contacts.
     """
-    Queries Evolution API to find the oldest synced message in the chat history.
-    Tries both remoteJid and remoteJidAlt to handle LID contacts.
-    """
-    from django.utils import timezone
     import datetime
+    from django.utils import timezone
 
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
+    client = get_evolution_client()
 
-    if not api_key:
-        return timezone.now()
+    def _try_fetch(jid_field, jid_value):
+        data = client.fetch_messages(instance_name, jid_field, jid_value)
+        if data is None:
+            return []
+        messages = []
+        if isinstance(data, list):
+            messages = data
+        elif isinstance(data, dict):
+            if "messages" in data and isinstance(data["messages"], list):
+                messages = data["messages"]
+            elif ("messages" in data and isinstance(data["messages"], dict)
+                  and "records" in data["messages"]):
+                messages = data["messages"]["records"]
+            elif "data" in data and isinstance(data["data"], list):
+                messages = data["data"]
+        return [m for m in messages
+                if isinstance(m, dict) and "messageTimestamp" in m]
 
-    url = f"{api_url}/chat/findMessages/{instance_name}"
-    headers = {"apikey": api_key, "Content-Type": "application/json"}
+    # Attempt 1: standard @s.whatsapp.net
+    messages = _try_fetch("remoteJid", remote_jid)
 
-    def try_fetch(jid_field, jid_value):
-        payload = {
-            "where": {
-                "key": {
-                    jid_field: jid_value
-                }
-            },
-            "orderBy": {
-                "messageTimestamp": "asc"
-            },
-            "take": 1
-        }
-        try:
-            response = requests.post(url, json=payload, headers=headers)
-            if response.status_code in [200, 201]:
-                data = response.json()
-
-                messages = []
-                if isinstance(data, list):
-                    messages = data
-                elif isinstance(data, dict):
-                    if "messages" in data and isinstance(data["messages"], list):
-                        messages = data["messages"]
-                    elif "messages" in data and isinstance(data["messages"], dict) and "records" in data["messages"]:
-                        messages = data["messages"]["records"]
-                    elif "data" in data and isinstance(data["data"], list):
-                        messages = data["data"]
-
-                valid_msgs = [m for m in messages if isinstance(m, dict) and "messageTimestamp" in m]
-                return valid_msgs
-        except Exception as e:
-            logger.error(f"[AEGIS] ❌ Error in try_fetch({jid_field}={jid_value}): {e}")
-        return []
-
-    # Attempt 1: query by remoteJid (standard @s.whatsapp.net)
-    messages = try_fetch("remoteJid", remote_jid)
-
-    # Attempt 2: LID contacts store phone number in remoteJidAlt
+    # Attempt 2: LID contacts store phone in remoteJidAlt
     if not messages:
-        logger.info(f"[AEGIS] 🔄 No messages found with remoteJid={remote_jid}, trying remoteJidAlt...")
-        messages = try_fetch("remoteJidAlt", remote_jid)
+        logger.info(
+            f"[EVO API] 🔄 No messages with remoteJid={remote_jid}, "
+            f"trying remoteJidAlt..."
+        )
+        messages = _try_fetch("remoteJidAlt", remote_jid)
 
     if messages:
-        oldest_msg = min(messages, key=lambda m: int(m["messageTimestamp"]))
-        oldest_ts = int(oldest_msg["messageTimestamp"])
-        oldest_date = datetime.datetime.fromtimestamp(oldest_ts, tz=datetime.timezone.utc)
-        child_initiated = oldest_msg.get("key", {}).get("fromMe", False)
-        logger.info(f"[AEGIS] 🕒 Retrieved true relationship start date for {remote_jid}: {oldest_date.strftime('%Y-%m-%d')} | Child Initiated: {child_initiated}")
+        oldest = min(messages, key=lambda m: int(m["messageTimestamp"]))
+        oldest_ts = int(oldest["messageTimestamp"])
+        oldest_date = datetime.datetime.fromtimestamp(
+            oldest_ts, tz=datetime.timezone.utc,
+        )
+        child_initiated = oldest.get("key", {}).get("fromMe", False)
+        logger.info(
+            f"[EVO API] 🕒 Relationship start for {remote_jid}: "
+            f"{oldest_date.strftime('%Y-%m-%d')} | "
+            f"Child Initiated: {child_initiated}"
+        )
         return oldest_date, child_initiated
 
-    logger.info(f"[AEGIS] 🕒 No historical messages found for {remote_jid}. Defaulting to now.")
+    logger.info(
+        f"[EVO API] 🕒 No historical messages for {remote_jid}. "
+        f"Defaulting to now."
+    )
     return timezone.now(), False
 
 
 def fetch_shared_groups(instance_name, sender_jid):
-    """
-    Fetches shared WhatsApp groups between the monitored child and a specific sender.
+    """Fetch shared WhatsApp groups between the child and a sender.
 
-    Calls Evolution API to get all groups, then checks participant lists for the
-    sender's JID. Returns a list of dicts with group metadata for BN evidence
-    (SharedGroupsCount) and LLM contextual reasoning (Agent 3).
-
-    Returns:
-        list of dicts: [{"group_jid": "...", "group_name": "...", "created_at": "...",
-                         "participant_count": N}, ...]
-        Returns empty list on failure.
+    Returns a list of dicts with group metadata.
     """
     import datetime as _dt
 
-    api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    api_key = os.getenv('EVOLUTION_API_KEY')
+    client = get_evolution_client()
+    data = client.fetch_all_groups(instance_name)
 
-    if not api_key:
-        logger.warning("[AEGIS] ⚠️ Evolution API Key missing — cannot fetch shared groups.")
+    if data is None:
         return []
 
-    url = f"{api_url}/group/fetchAllGroups/{instance_name}?getParticipants=true"
-    headers = {"apikey": api_key}
+    # Normalise response shape
+    groups = data
+    if isinstance(groups, dict):
+        groups = groups.get("data", groups.get("groups", []))
+    if not isinstance(groups, list):
+        logger.warning(
+            f"[EVO API] ⚠️ fetchAllGroups returned unexpected type: "
+            f"{type(groups)}"
+        )
+        return []
 
-    # Extract the pure phone number for flexible matching.
-    # Sender JID may be "212628283965@s.whatsapp.net" or "+212628283965".
-    # We normalize to just digits for comparison.
     sender_number = sender_jid.split('@')[0].replace('+', '').strip()
 
-    try:
-        response = requests.get(url, headers=headers, timeout=15)
-        if response.status_code not in [200, 201]:
-            # Log the actual response body to debug HTTP 400 errors
-            resp_body = ""
-            try:
-                resp_body = response.text[:500]
-            except Exception:
-                pass
-            logger.warning(
-                f"[AEGIS] ⚠️ fetchAllGroups returned HTTP {response.status_code} "
-                f"for instance={instance_name}. Response: {resp_body}"
-            )
-            return []
+    shared = []
+    for group in groups:
+        participants = group.get("participants", [])
+        group_numbers = set()
 
-        groups = response.json()
-
-        # Evolution API v2 may wrap groups in a list or a dict with a key
-        if isinstance(groups, dict):
-            # Try common wrapper keys
-            groups = groups.get("data", groups.get("groups", []))
-        if not isinstance(groups, list):
-            logger.warning(f"[AEGIS] ⚠️ fetchAllGroups returned unexpected type: {type(groups)}")
-            return []
-
-        shared = []
-        for group in groups:
-            participants = group.get("participants", [])
-
-            # Build a set of all phone numbers in this group for matching.
-            # Evolution API v2 participants are dicts with:
-            #   - "id": usually a @lid JID (internal, NOT the phone number)
-            #   - "phoneNumber": the ACTUAL phone number (e.g. "212628283965")
-            # We must check phoneNumber first, then fall back to id.
-            group_phone_numbers = set()
-            for p in participants:
-                if isinstance(p, dict):
-                    # Primary: phoneNumber field (real number)
-                    phone = p.get("phoneNumber", "")
-                    if phone:
-                        # Normalize: strip +, spaces, dashes
-                        clean = str(phone).replace('+', '').replace(' ', '').replace('-', '').strip()
-                        if clean:
-                            group_phone_numbers.add(clean)
-                    # Secondary: id field (may be @s.whatsapp.net or @lid)
-                    pid = p.get("id", "")
-                    if pid and "@s.whatsapp.net" in pid:
-                        # Extract number from JID
-                        num = pid.split('@')[0].replace('+', '').strip()
-                        if num:
-                            group_phone_numbers.add(num)
-                elif isinstance(p, str):
-                    # Plain JID string
-                    num = p.split('@')[0].replace('+', '').strip()
+        for p in participants:
+            if isinstance(p, dict):
+                phone = p.get("phoneNumber", "")
+                if phone:
+                    clean = (str(phone).replace('+', '')
+                             .replace(' ', '').replace('-', '').strip())
+                    if clean:
+                        group_numbers.add(clean)
+                pid = p.get("id", "")
+                if pid and "@s.whatsapp.net" in pid:
+                    num = pid.split('@')[0].replace('+', '').strip()
                     if num:
-                        group_phone_numbers.add(num)
+                        group_numbers.add(num)
+            elif isinstance(p, str):
+                num = p.split('@')[0].replace('+', '').strip()
+                if num:
+                    group_numbers.add(num)
 
-            # Check if sender's number is in this group
-            if sender_number in group_phone_numbers:
-                # Extract group metadata
-                group_name = group.get("subject", group.get("name", "Unknown Group"))
-                creation_ts = group.get("creation", group.get("subjectTime", 0))
-                try:
-                    created_at = _dt.datetime.fromtimestamp(
-                        int(creation_ts), tz=_dt.timezone.utc
-                    ).strftime('%Y-%m-%d') if creation_ts else "unknown"
-                except (ValueError, TypeError, OSError):
-                    created_at = "unknown"
+        if sender_number in group_numbers:
+            group_name = group.get("subject", group.get("name", "Unknown Group"))
+            creation_ts = group.get("creation", group.get("subjectTime", 0))
+            try:
+                created_at = (
+                    _dt.datetime.fromtimestamp(
+                        int(creation_ts), tz=_dt.timezone.utc,
+                    ).strftime('%Y-%m-%d')
+                    if creation_ts else "unknown"
+                )
+            except (ValueError, TypeError, OSError):
+                created_at = "unknown"
 
-                shared.append({
-                    "group_jid": group.get("id", ""),
-                    "group_name": group_name,
-                    "created_at": created_at,
-                    "participant_count": len(participants),
-                })
+            shared.append({
+                "group_jid": group.get("id", ""),
+                "group_name": group_name,
+                "created_at": created_at,
+                "participant_count": len(participants),
+            })
 
-        logger.info(
-            f"[AEGIS] 👥 Shared groups for {sender_jid}: "
-            f"{len(shared)} groups found"
-            + (f" — {[g['group_name'] for g in shared]}" if shared else "")
-        )
-        return shared
-
-    except requests.exceptions.Timeout:
-        logger.warning(f"[AEGIS] ⚠️ fetchAllGroups timed out for {instance_name}")
-        return []
-    except Exception as e:
-        logger.error(f"[AEGIS] ❌ Error fetching shared groups: {e}")
-        return []
-
-
+    logger.info(
+        f"[EVO API] 👥 Shared groups for {sender_jid}: "
+        f"{len(shared)} found"
+        + (f" — {[g['group_name'] for g in shared]}" if shared else "")
+    )
+    return shared

@@ -57,6 +57,8 @@ from moderation.views.parent_views import (
     parent_conversations,
     parent_risk_profile,
     parent_digital_citizenship,
+    parent_emotional_heatmap,
+    parent_export_evidence,
 )
 
 # Reports
@@ -104,6 +106,8 @@ __all__ = [
     'parent_conversations',
     'parent_risk_profile',
     'parent_digital_citizenship',
+    'parent_emotional_heatmap',
+    'parent_export_evidence',
     'parent_report_list',
     'admin_report_list',
     'generate_report',

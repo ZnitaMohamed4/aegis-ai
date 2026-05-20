@@ -237,4 +237,14 @@ export class ApiService {
   getDigitalCitizenship(): Observable<any> {
     return this.http.get<any>(`${this.BASE_URL}/parent/digital-citizenship/`);
   }
+
+  /** Fetches emotional pattern heatmap data (day × time slot matrix). */
+  getEmotionalHeatmap(range: number = 30): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/parent/emotional-heatmap/?range=${range}`);
+  }
+
+  /** Fetches forensic evidence export data for legal documentation. */
+  getForensicEvidence(days: number = 30): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/parent/export-evidence/?days=${days}`);
+  }
 }

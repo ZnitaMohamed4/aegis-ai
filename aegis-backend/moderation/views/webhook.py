@@ -121,11 +121,27 @@ def webhook_messages(request):
         
         return JsonResponse({"status": "forwarded_to_n8n", "reason": "audio_message"})
     # 4. Image Message (ViT + OCR Pipeline)
-    elif "imageMessage" in message:
+    is_image = False
+    image_msg = None
+    if "imageMessage" in message:
+        is_image = True
         image_msg = message["imageMessage"]
+    elif "documentMessage" in message and message["documentMessage"].get("mimetype", "").startswith("image/"):
+        is_image = True
+        image_msg = message["documentMessage"]
+    elif "documentWithCaptionMessage" in message:
+        doc_msg = message["documentWithCaptionMessage"].get("message", {}).get("documentMessage", {})
+        if doc_msg.get("mimetype", "").startswith("image/"):
+            is_image = True
+            image_msg = doc_msg
+            # The caption is sometimes at the top level of documentWithCaptionMessage
+            if not image_msg.get("caption"):
+                image_msg["caption"] = message["documentWithCaptionMessage"].get("message", {}).get("caption", "")
+
+    if is_image:
         caption = image_msg.get("caption", "")
         
-        logger.info("Image message detected. Running multimodal analysis...")
+        logger.info("Image (or Document Image) detected. Running multimodal analysis...")
         from ml_pipeline.image_analyzer import analyze_image
         image_result = analyze_image(body.get("instance", "unknown"), inner_data)
         
@@ -133,11 +149,17 @@ def webhook_messages(request):
         nsfw_icon = "🔴" if image_result.get("nsfw") else "🟢"
         violent_icon = "🔴" if image_result.get("violent") else "🟢"
         ocr_preview = image_result.get("ocr_text", "")[:80] or "(none)"
+        metadata_keys = list(image_result.get("metadata", {}).keys())
+        metadata_preview = f"{len(metadata_keys)} tags found" if metadata_keys else "(none stripped)"
+        
         print(f"\n┌──────────────────────────────────────────────┐")
         print(f"│ 📸 IMAGE ANALYSIS RESULTS")
         print(f"│ {nsfw_icon} NSFW:     {image_result.get('nsfw', False)}  (score: {image_result.get('nsfw_score', 0):.4f})")
         print(f"│ {violent_icon} Violence: {image_result.get('violent', False)}  (score: {image_result.get('violent_score', 0):.4f})")
         print(f"│ 📝 OCR:      {ocr_preview}")
+        print(f"│ 🗺️  EXIF:     {metadata_preview}")
+        if metadata_keys:
+            print(f"│   Tags: {', '.join(metadata_keys[:5])}...")
         print(f"└──────────────────────────────────────────────┘\n")
         
         parts = []
@@ -310,8 +332,21 @@ def webhook_messages(request):
     # Grab the image results we saved earlier (if any)
     image_result = getattr(request, '_image_analysis_result', {})
     
+    # Resolve monitoring mode for this instance
+    monitoring_mode = 'child'  # default
+    try:
+        from moderation.models import ParentProfile
+        parent_profile = ParentProfile.objects.filter(
+            evolution_instance_name=instance
+        ).first()
+        if parent_profile:
+            monitoring_mode = getattr(parent_profile, 'monitoring_mode', 'child')
+    except Exception:
+        pass
+
     # Prepare the initial state
     initial_state = {
+        "monitoring_mode": monitoring_mode,
         "raw_text": raw_text,
         "sender_jid": sender_lid_jid,        # ← mapped to true LID
         "sender_phone_jid": sender_phone_jid,
@@ -327,7 +362,8 @@ def webhook_messages(request):
         "image_violent": image_result.get("violent", False),
         "image_nsfw_score": image_result.get("nsfw_score", 0.0),
         "image_violent_score": image_result.get("violent_score", 0.0),
-        "image_ocr_text": image_result.get("ocr_text", "")
+        "image_ocr_text": image_result.get("ocr_text", ""),
+        "image_metadata": image_result.get("metadata", {})
     }
     
     # 🚀 EXECUTE THE GRAPH

@@ -1,6 +1,7 @@
-import { Component, signal, OnDestroy, OnInit } from '@angular/core';
+import { Component, signal, OnDestroy, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { WhatsappService } from '../../../core/services/whatsapp.service';
+import { AuthService } from '../../../core/services/auth.service';
 
 @Component({
   selector: 'app-whatsapp-setup',
@@ -25,10 +26,17 @@ export class WhatsappSetupComponent implements OnInit, OnDestroy {
   });
 
   showDisconnectDialog = signal<boolean>(false);
+  monitoringMode: string = 'child';
+  private authService = inject(AuthService);
 
   constructor(private whatsappService: WhatsappService) {}
 
   ngOnInit() {
+    this.authService.currentUser$.subscribe(user => {
+      if (user && user.monitoring_mode) {
+        this.monitoringMode = user.monitoring_mode;
+      }
+    });
     this.checkCurrentStatus();
   }
 

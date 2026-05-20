@@ -6,12 +6,14 @@
     <div>
       <h1 class="page-title">
         @if (childInfo) {
-          {{ childInfo.name }}'s Dashboard
+          @if (monitoringMode === 'adult') { {{ childInfo.name }}'s Wellness Dashboard } @else { {{ childInfo.name }}'s Dashboard }
         } @else {
-          My Child's Dashboard
+          @if (monitoringMode === 'adult') { My Wellness Dashboard } @else { My Child's Dashboard }
         }
       </h1>
-      <p class="page-subtitle">Real-time monitoring and threat prevention for your child</p>
+      <p class="page-subtitle">
+        @if (monitoringMode === 'adult') { Real-time digital wellness monitoring and self-reflection } @else { Real-time monitoring and threat prevention for your child }
+      </p>
     </div>
     <div class="header-meta">
       <span class="live-indicator">
@@ -131,7 +133,7 @@
           } @else {
             <div class="empty-state">
               <i class="pi pi-check-circle" style="font-size: 2rem; color: var(--low);"></i>
-              <span>No alerts detected — your child is safe</span>
+              <span>No alerts detected — @if (monitoringMode === 'adult') { you are } @else { your child is } safe</span>
             </div>
           }
         } @else {
@@ -189,7 +191,7 @@
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">Harassment Categories</span>
-        <span class="panel-subtitle">Detected threat types for your child</span>
+        <span class="panel-subtitle">Detected threat types @if (monitoringMode === 'adult') { in your messages } @else { for your child }</span>
       </div>
       <div class="chart-wrap">
         @if (harassmentChartData) {
@@ -252,7 +254,7 @@
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">Message Languages</span>
-        <span class="panel-subtitle">Languages detected in your child's messages</span>
+        <span class="panel-subtitle">Languages detected in @if (monitoringMode === 'adult') { your messages } @else { your child's messages }</span>
       </div>
       <div style="height: 180px; margin-top: 1rem;">
         @if (languageChartData) {
@@ -268,6 +270,38 @@
       </div>
     </div>
   </div>
+
+  <!-- Emotional Pattern Heatmap -->
+  @if (heatmapData && monitoringMode === 'adult') {
+    <div class="panel" style="margin-top: 1.5rem;">
+      <div class="panel-header">
+        <span class="panel-title">Emotional Pattern Heatmap</span>
+        <span class="panel-subtitle">When flagged messages occur — last 30 days</span>
+      </div>
+      <div class="heatmap-grid" style="padding: 1rem; overflow-x: auto;">
+        <div style="display: grid; grid-template-columns: 90px repeat(7, 1fr); gap: 3px; min-width: 450px;">
+          <!-- Header row: Day labels -->
+          <div></div>
+          @for (day of heatmapData.days; track day) {
+            <div style="text-align: center; font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 4px 0;">{{ day }}</div>
+          }
+          <!-- Data rows: Time slots -->
+          @for (slot of heatmapData.slots; track slot; let i = $index) {
+            <div style="font-size: 11px; color: var(--text-muted); display: flex; align-items: center; padding-right: 8px;">{{ slot }}</div>
+            @for (cell of heatmapData.matrix[i]; track $index; let j = $index) {
+              <div
+                class="heatmap-cell"
+                [style.background]="getHeatmapColor(cell)"
+                [title]="cell + ' flagged messages on ' + heatmapData.days[j] + ' at ' + heatmapData.slots[i]"
+                style="border-radius: 4px; min-height: 32px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.8); transition: transform 0.15s ease;">
+                @if (cell > 0) { {{ cell }} }
+              </div>
+            }
+          }
+        </div>
+      </div>
+    </div>
+  }
 
 </div>
 

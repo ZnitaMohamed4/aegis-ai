@@ -59,8 +59,28 @@ class ParentProfile(models.Model):
     Extended settings for parent users — alert preferences, Evolution API linkage.
     One parent can monitor multiple children.
     """
+    class MonitoringMode(models.TextChoices):
+        CHILD = 'child', 'Child Protection'
+        ADULT = 'adult', 'Adult Self-Moderation'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(AegisUser, on_delete=models.CASCADE, related_name='parent_profile')
+
+    monitoring_mode = models.CharField(
+        max_length=20,
+        choices=MonitoringMode.choices,
+        default=MonitoringMode.CHILD,
+        help_text="Operating mode: 'child' = protect a minor, 'adult' = self-moderation"
+    )
+
+    trusted_contact_phone = models.CharField(
+        max_length=20, blank=True, default='',
+        help_text="Optional trusted contact for adult self-moderation critical alerts"
+    )
+    trusted_contact_name = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text="Name of the trusted contact"
+    )
 
     # Alert preferences
     alert_threshold = models.FloatField(default=0.65,
@@ -314,6 +334,7 @@ class ModerationResult(models.Model):
         REVISE = 'REVISE', 'Revise'          # Grey zone (0.65 - 0.75)
         HUMAN_REVIEW = 'HUMAN_REVIEW', 'Human Review'  # Too ambiguous — send to human
         EDUCATE = 'EDUCATE', 'Educate'        # Self-moderation — educational DM instead of punitive
+        SELF_WARN = 'SELF_WARN', 'Self Warning'  # Adult self-moderation — gentle reminder
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
@@ -333,6 +354,7 @@ class ModerationResult(models.Model):
     image_nsfw_score = models.FloatField(null=True, blank=True)
     image_violence_score = models.FloatField(null=True, blank=True)
     image_ocr_text = models.TextField(null=True, blank=True)
+    image_metadata = models.JSONField(null=True, blank=True, help_text="EXIF data like GPS, camera info")
     
     # Sender details
     sender_name = models.CharField(max_length=255, null=True, blank=True, help_text="Push name or display name of the sender")

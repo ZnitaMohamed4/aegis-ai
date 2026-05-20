@@ -120,6 +120,77 @@
 
 		<section class="panel section-card">
 			<header class="section-header">
+				<span class="section-label">OPERATING MODE</span>
+				<h2 class="section-title">Monitoring Mode</h2>
+				<p class="section-desc mt-2 text-sm opacity-70">
+					Choose how AEGIS protects the connected WhatsApp device.
+				</p>
+			</header>
+
+			<div class="field-grid">
+				<div class="mode-selector flex flex-col sm:flex-row gap-4 mb-4">
+					<div 
+						class="mode-card p-4 rounded-xl border-2 cursor-pointer transition-all flex-1"
+						[class.border-primary]="parentAccount().monitoringMode === 'child'"
+						[class.border-transparent]="parentAccount().monitoringMode !== 'child'"
+						style="background: var(--surface-b);"
+						(click)="updateParentAccount('monitoringMode', 'child')">
+						<div class="flex items-center gap-3 mb-2">
+							<i class="pi pi-shield text-2xl" [class.text-primary]="parentAccount().monitoringMode === 'child'"></i>
+							<h3 class="font-bold text-lg">Child Protection</h3>
+						</div>
+						<p class="text-sm opacity-80">Strict monitoring. Deletes harmful messages and alerts the dashboard immediately.</p>
+					</div>
+
+					<div 
+						class="mode-card p-4 rounded-xl border-2 cursor-pointer transition-all flex-1"
+						[class.border-primary]="parentAccount().monitoringMode === 'adult'"
+						[class.border-transparent]="parentAccount().monitoringMode !== 'adult'"
+						style="background: var(--surface-b);"
+						(click)="updateParentAccount('monitoringMode', 'adult')">
+						<div class="flex items-center gap-3 mb-2">
+							<i class="pi pi-heart text-2xl" [class.text-primary]="parentAccount().monitoringMode === 'adult'"></i>
+							<h3 class="font-bold text-lg">Digital Wellness</h3>
+						</div>
+						<p class="text-sm opacity-80">Adult self-moderation. No deletion or alarms. Sends gentle self-reflection nudges privately.</p>
+					</div>
+				</div>
+
+				@if (parentAccount().monitoringMode === 'adult') {
+					<div class="adult-contact-section p-4 rounded-xl border mt-2" style="background: var(--surface-b); border-color: var(--surface-border);">
+						<h4 class="font-semibold mb-3 flex items-center gap-2">
+							<i class="pi pi-users"></i> Emergency Trusted Contact
+						</h4>
+						<p class="text-sm opacity-70 mb-4">If AEGIS detects critical distress (e.g., severe harassment), we can automatically notify a trusted friend or partner.</p>
+						
+						<label class="field-row mb-3">
+							<span class="field-label">Contact Name</span>
+							<input
+								type="text"
+								class="input-field w-full"
+								placeholder="e.g., Jane Doe"
+								[ngModel]="parentAccount().trustedContactName"
+								(ngModelChange)="updateParentAccount('trustedContactName', $event)" />
+						</label>
+
+						<label class="field-row">
+							<span class="field-label">Contact Phone</span>
+							<input
+								type="text"
+								class="input-field w-full"
+								placeholder="e.g., +212600000000"
+								[ngModel]="parentAccount().trustedContactPhone"
+								(ngModelChange)="updateParentAccount('trustedContactPhone', $event)" />
+						</label>
+					</div>
+				}
+			</div>
+		</section>
+
+		<div class="section-divider"></div>
+
+		<section class="panel section-card">
+			<header class="section-header">
 				<span class="section-label">PARENT ACCOUNT</span>
 				<h2 class="section-title">Profile & Access</h2>
 			</header>

@@ -71,6 +71,8 @@ urlpatterns = [
     path('parent/conversations/', views.parent_conversations, name='parent-conversations'),
     path('parent/risk-profile/', views.parent_risk_profile, name='parent-risk-profile'),
     path('parent/digital-citizenship/', views.parent_digital_citizenship, name='parent-digital-citizenship'),
+    path('parent/emotional-heatmap/', views.parent_emotional_heatmap, name='parent-emotional-heatmap'),
+    path('parent/export-evidence/', views.parent_export_evidence, name='parent-export-evidence'),
     
     # 9. Reports Endpoints
     path('parent/reports/', views.parent_report_list, name='parent-report-list'),

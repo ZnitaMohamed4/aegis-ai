@@ -7,7 +7,9 @@
         <div class="wa-icon"><i class="pi pi-whatsapp"></i></div>
         <div>
           <h1 class="title">Connect WhatsApp</h1>
-          <p class="subtitle">Link your child's account to begin monitoring.</p>
+          <p class="subtitle">
+            @if (monitoringMode === 'adult') { Link your phone to begin self-monitoring. } @else { Link your child's account to begin monitoring. }
+          </p>
         </div>
       </div>
 
@@ -41,7 +43,9 @@
         <div class="instructions">
           <div class="inst-item">
             <div class="inst-icon"><i class="pi pi-mobile"></i></div>
-            <span>Open WhatsApp on their phone</span>
+            <span>
+              @if (monitoringMode === 'adult') { Open WhatsApp on your phone } @else { Open WhatsApp on their phone }
+            </span>
           </div>
           <i class="pi pi-chevron-right arr"></i>
           <div class="inst-item">
@@ -57,7 +61,9 @@
 
         <div class="info-banner">
           <i class="pi pi-shield"></i>
-          <span>The connection is secure and invisible to your child.</span>
+          <span>
+            @if (monitoringMode === 'adult') { The connection is secure. Only you can see your wellness insights. } @else { The connection is secure and invisible to your child. }
+          </span>
         </div>
 
         <button class="btn-primary" (click)="generateQr()" [disabled]="connectionStatus() === 'loading'">
@@ -122,7 +128,9 @@
   <div class="dialog">
     <div class="dialog-warn-icon"><i class="pi pi-exclamation-triangle"></i></div>
     <h3>Disconnect WhatsApp?</h3>
-    <p>This will stop monitoring your child's messages immediately. You will need their phone to reconnect.</p>
+    <p>
+      @if (monitoringMode === 'adult') { This will stop self-monitoring your messages. You will need to reconnect. } @else { This will stop monitoring your child's messages immediately. You will need their phone to reconnect. }
+    </p>
     <div class="dialog-btns">
       <button class="btn-ghost" (click)="cancelDisconnect()">Cancel</button>
       <button class="btn-danger" (click)="confirmDisconnect()">Yes, Disconnect</button>
