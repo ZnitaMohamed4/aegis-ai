@@ -485,9 +485,12 @@ def _enforce_standard(ctx):
         elif isinstance(warning_result, str) and len(warning_result) > 5:
             warning_msg_key_id = warning_result
 
-        # PARENT ALERT: Notify parent on critical escalations
-        if ctx.decision in ('ESCALATE', 'BLOCK') and ctx.child and ctx.child.parent:
-            parent_phone = ctx.child.parent.user.phone_number
+        # PARENT ALERT: Notify parent on critical escalations or high-toxicity WARNs
+        if ctx.decision in ('ESCALATE', 'BLOCK', 'WARN') and ctx.child and ctx.child.parent:
+            alert_threshold = getattr(ctx.child.parent, 'alert_threshold', 0.65)
+            # BLOCK/ESCALATE always notify. WARN only notifies if toxicity >= threshold.
+            if ctx.decision in ('ESCALATE', 'BLOCK') or (ctx.decision == 'WARN' and ctx.m1_score >= alert_threshold):
+                parent_phone = ctx.child.parent.user.phone_number
             if parent_phone:
                 send_parent_alert(
                     ctx.instance_name, parent_phone,

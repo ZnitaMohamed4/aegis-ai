@@ -83,7 +83,7 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     - Unusual intimacy from sender with days_known < 60
 
     → ALWAYS fetch history first.
-    → If history shows 2+ prior grooming indicators from same sender: BLOCK
+    → If history shows 2+ prior grooming indicators from same sender: ESCALATE
     → If history shows 1 prior grooming indicator: HUMAN_REVIEW
     → If no prior history but message is clearly grooming: HUMAN_REVIEW
     → Toxicity score is IRRELEVANT for grooming. Low toxicity ≠ safe.
@@ -96,6 +96,7 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
 
     RULE 3 — CLEAR HARM:
     Direct threats with real-world intent, sexual content, slurs, or discrimination → BLOCK
+    Extreme immediate physical threats or severe grooming → ESCALATE
 
     RULE 3B — DECISION STRENGTH (CRITICAL):
     - UNKNOWN sender (no history, days_known < 30) + threat or sexual content → BLOCK, NOT HUMAN_REVIEW.
@@ -120,7 +121,7 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     threat | sexual_harassment | discrimination | verbal_harassment | nsfw_image | violent_image | safe
 
     --- OUTPUT (STRICT JSON ONLY, no preamble) ---
-    {{"decision": "BLOCK|WARN|ALLOW|HUMAN_REVIEW", "category": "<category>", "explanation": "<12 words max>"}}"""
+    {{"decision": "ESCALATE|BLOCK|WARN|ALLOW|HUMAN_REVIEW", "category": "<category>", "explanation": "<12 words max>"}}"""
 
     # ── IMAGE CONTEXT INJECTION ──────────────────────────────────────
     # When the message contains an image that was analyzed by ViT classifiers,
@@ -219,7 +220,7 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
             else:
                 parsed = {"decision": "HUMAN_REVIEW", "category": check_class, "explanation": "No JSON found in response"}
 
-        valid  = {"BLOCK", "WARN", "ALLOW", "HUMAN_REVIEW"}
+        valid  = {"ESCALATE", "BLOCK", "WARN", "ALLOW", "HUMAN_REVIEW"}
         if parsed.get("decision", "").upper() not in valid:
             parsed["decision"] = "HUMAN_REVIEW"
 

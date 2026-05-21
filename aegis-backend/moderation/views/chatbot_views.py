@@ -81,25 +81,55 @@ def webhook_chatbot(request):
     
     chatbot = get_chatbot()
     
-    # Step 1: Check for safety escalation keywords
-    is_critical, matched_keyword = chatbot.check_safety_escalation(raw_text)
+    monitor_instance = os.getenv('EVOLUTION_INSTANCE_NAME', instance_name)
+    is_safety_event = False
+    threat_intel = None
     
-    if is_critical:
-        print(f"│ 🚨 SAFETY ESCALATION: '{matched_keyword}'")
-        # Notify parent immediately
-        # Use the monitoring instance to find the child's parent
-        monitor_instance = os.getenv('EVOLUTION_INSTANCE_NAME', instance_name)
-        chatbot.notify_parent_safety(monitor_instance, sender_jid, matched_keyword)
+    # 1. Save child's message to conversation memory
+    chatbot.save_message(sender_jid, 'user', raw_text)
     
-    # Step 2: Generate empathetic response
+    # 2. Static keyword safety check (fast fallback)
+    is_critical_keyword, matched_keyword = chatbot.check_safety_escalation(raw_text)
+    if is_critical_keyword:
+        is_safety_event = True
+        logger.warning(f"[CHATBOT_WEBHOOK] 🚨 Keyword SAFETY ESCALATION: '{matched_keyword}'")
+
+    # 3. Generate LLM response
     t_start = time.time()
-    response_text = chatbot.generate_response(sender_jid, raw_text)
+    raw_response = chatbot.generate_response(sender_jid, raw_text)
     t_elapsed = int((time.time() - t_start) * 1000)
+    
+    # 4. Parse THREAT_INTEL tag from response
+    response_text, threat_intel = chatbot.parse_threat_intel(raw_response)
+    
+    if threat_intel:
+        is_safety_event = True
+        logger.warning(f"[CHATBOT_WEBHOOK] 🚨 THREAT_INTEL extracted: {threat_intel.get('threat_type')} | urgency={threat_intel.get('urgency')}")
+    
+    # 5. Check legacy tag
+    if "[SAFETY_ESCALATE]" in response_text:
+        response_text = response_text.replace("[SAFETY_ESCALATE]", "").strip()
+        is_safety_event = True
+        logger.warning(f"[CHATBOT_WEBHOOK] 🚨 LLM Reasoned SAFETY ESCALATION detected!")
+    
+    # 6. Send parent alert if safety event detected
+    if is_safety_event:
+        if threat_intel:
+            chatbot.notify_parent_safety_detailed(monitor_instance, sender_jid, threat_intel)
+        else:
+            chatbot.notify_parent_safety(monitor_instance, sender_jid, matched_keyword or "LLM Danger Assessment")
     
     print(f"│ 💬 Response ({t_elapsed}ms): '{response_text[:80]}{'...' if len(response_text) > 80 else ''}'")
     
-    # Step 3: Send reply
+    # 7. Send clean response to child
     chatbot.send_reply(sender_jid, response_text)
+    
+    # 8. Save bot's response to conversation memory
+    chatbot.save_message(
+        sender_jid, 'assistant', response_text,
+        is_safety_flagged=is_safety_event,
+        threat_intel=threat_intel,
+    )
     
     print(f"└──────────────────────────────────────────────┘")
     

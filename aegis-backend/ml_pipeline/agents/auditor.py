@@ -117,4 +117,5 @@ def auditor_node(state: ModerationState) -> dict:
         "shadow_reviewed": is_shadow,
         "upward_corrected": upward_corrected,
         "downward_corrected": downward_corrected,
+        "ml_corrected": upward_corrected or downward_corrected,
     }

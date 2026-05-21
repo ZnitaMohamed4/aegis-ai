@@ -238,30 +238,18 @@ class AegisChatbot:
     
     def send_reply(self, child_jid, text):
         """Send a reply from the bot instance back to the child."""
-        if not self.api_key:
-            logger.error("[AEGIS BOT] Evolution API key missing!")
-            return False
-        
-        from moderation.evolution_api import send_aegis_presence
+        from moderation.evolution_api import send_aegis_presence, send_text_message
         
         # Simulate typing
         send_aegis_presence(self.bot_instance, child_jid, "composing", 1500)
         
-        url = f"{self.api_url}/message/sendText/{self.bot_instance}"
-        headers = {"apikey": self.api_key, "Content-Type": "application/json"}
-        payload = {
-            "number": child_jid,
-            "text": text,
-            "delay": 1500
-        }
-        
         try:
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
-            if response.status_code in [200, 201]:
+            result = send_text_message(self.bot_instance, child_jid, text)
+            if result:
                 logger.info(f"[AEGIS BOT] Reply sent to {child_jid}")
                 return True
             else:
-                logger.error(f"[AEGIS BOT] Failed to send reply: {response.status_code}")
+                logger.error(f"[AEGIS BOT] Failed to send reply via Facade")
                 return False
         except Exception as e:
             logger.error(f"[AEGIS BOT] Error sending reply: {e}")
@@ -381,31 +369,18 @@ class AegisChatbot:
             
             alert_text += "\n\n📊 Check your AEGIS Dashboard for full details."
             
-            # Send via Evolution API
-            api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-            api_key = os.getenv('EVOLUTION_API_KEY')
-            
-            if not api_key:
-                return
-            
-            url = f"{api_url}/message/sendText/{instance_name}"
-            headers = {"apikey": api_key, "Content-Type": "application/json"}
-            
+            from moderation.evolution_api import send_text_message
             clean_number = str(child.parent.user.phone_number).replace("+", "").replace("-", "").replace(" ", "")
             
-            payload = {
-                "number": clean_number,
-                "text": alert_text,
-            }
+            result = send_text_message(instance_name, clean_number, alert_text)
             
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
-            if response.status_code in [200, 201]:
+            if result:
                 logger.info(
                     f"[AEGIS BOT] 🚨 Detailed safety alert sent to parent "
                     f"({clean_number}) — {threat_type}, urgency={urgency}"
                 )
             else:
-                logger.error(f"[AEGIS BOT] Failed to send detailed alert: {response.status_code}")
+                logger.error(f"[AEGIS BOT] Failed to send detailed alert via Facade")
                 
         except Exception as e:
             logger.error(f"[AEGIS BOT] Failed to send detailed safety alert: {e}")

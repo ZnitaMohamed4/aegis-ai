@@ -85,6 +85,12 @@ def get_decision_uml(m1_score: float, primary_class: str, confidence: float) -> 
 
 def run_pipeline(raw_text: str) -> PipelineResult:
     """The REAL inference pipeline."""
+    from moderation.cache_utils import get_cached_prediction, set_cached_prediction
+    
+    cached = get_cached_prediction(raw_text)
+    if cached:
+        return PipelineResult(**cached)
+
     pipeline = AEGISPipeline.get_instance()
     if pipeline is None:
         raise RuntimeError("AEGIS pipeline not initialized.")
@@ -114,7 +120,9 @@ def run_pipeline(raw_text: str) -> PipelineResult:
     is_harmful = m1_score >= pipeline.threshold or has_sexual_context
 
     if not is_harmful:
-        return PipelineResult(text, m1_score, False, 'safe', None, None, 'ALLOW', m1_latency_ms=m1_latency, m2_latency_ms=0)
+        result = PipelineResult(text, m1_score, False, 'safe', None, None, 'ALLOW', m1_latency_ms=m1_latency, m2_latency_ms=0)
+        set_cached_prediction(raw_text, result.__dict__)
+        return result
 
     # 2. M2 Fine-Grained Prediction
     t_m2_start = _time.time()
@@ -147,7 +155,9 @@ def run_pipeline(raw_text: str) -> PipelineResult:
 
     decision = get_decision_uml(m1_score, primary_label, confidence)
 
-    return PipelineResult(text, m1_score, True, primary_label, final_secondary, confidence, decision, m1_latency_ms=m1_latency, m2_latency_ms=m2_latency)
+    result = PipelineResult(text, m1_score, True, primary_label, final_secondary, confidence, decision, m1_latency_ms=m1_latency, m2_latency_ms=m2_latency)
+    set_cached_prediction(raw_text, result.__dict__)
+    return result
 
 
 def run_pipeline_stub(raw_text: str) -> PipelineResult:

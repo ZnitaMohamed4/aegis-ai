@@ -45,6 +45,7 @@ class ModerationState(TypedDict):
     image_nsfw_score: Optional[float]
     image_violent_score: Optional[float]
     image_ocr_text: Optional[str]
+    image_metadata: Optional[dict]
 
     # OUTPUTS (Populated by Agents as the graph runs)
     normalized_text: Optional[str]
@@ -64,6 +65,8 @@ class ModerationState(TypedDict):
     llm_explanation: Optional[str]
     shadow_reviewed: Optional[bool]
     ml_corrected: Optional[bool]  # 🔁 Did Agent 3 override the ML?
+    upward_corrected: Optional[bool]
+    downward_corrected: Optional[bool]
     escalation_risk: Optional[float]   # Behavioral escalation gate score
     escalation_reason: Optional[str]   # Why escalation was triggered
 
