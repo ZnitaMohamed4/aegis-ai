@@ -3,8 +3,12 @@
   <!-- Header -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div>
-      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">Risk Profile: {{ childName() }}</h1>
-      <p class="text-sm text-[var(--text-muted)]">Detailed behavioral and threat analysis</p>
+      <h1 class="text-xl sm:text-2xl font-bold text-[var(--text-primary)] mb-1">
+        @if (monitoringMode === 'adult') { Wellness Profile } @else { Risk Profile: {{ childName() }} }
+      </h1>
+      <p class="text-sm text-[var(--text-muted)]">
+        @if (monitoringMode === 'adult') { Detailed communication and reflection analysis } @else { Detailed behavioral and threat analysis }
+      </p>
     </div>
     <div class="flex items-center gap-2">
       <span class="text-xs font-mono px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-surface-2)]">
@@ -16,7 +20,9 @@
   <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
     <!-- Score Card -->
     <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6 flex flex-col items-center justify-center text-center">
-      <div class="text-sm font-semibold text-[var(--text-muted)] mb-4 uppercase tracking-wider">Overall Risk Score</div>
+      <div class="text-sm font-semibold text-[var(--text-muted)] mb-4 uppercase tracking-wider">
+        @if (monitoringMode === 'adult') { Overall Wellness Score } @else { Overall Risk Score }
+      </div>
       <div class="relative w-32 h-32 flex items-center justify-center rounded-full border-[10px]"
            [style.border-color]="getRiskHex(currentRiskLevel())">
         <span class="text-4xl font-bold font-mono text-[var(--text-primary)]">{{ currentRiskScore() | percent:'1.0-0' }}</span>
@@ -24,7 +30,7 @@
       <div class="mt-6 text-xs font-bold px-4 py-1.5 rounded-full uppercase tracking-widest"
            [style.color]="getRiskHex(currentRiskLevel())"
            [style.background]="getRiskHex(currentRiskLevel()) + '22'">
-        {{ currentRiskLevel() }} Risk
+        @if (monitoringMode === 'adult') { {{ getRiskLabel(currentRiskLevel()) }} } @else { {{ currentRiskLevel() }} Risk }
       </div>
       <p class="text-xs text-[var(--text-muted)] mt-4">Based on analysis of recent interactions</p>
     </div>
@@ -32,7 +38,9 @@
     <!-- Trend Chart -->
     <div class="md:col-span-2 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-6 flex flex-col">
       <div class="flex items-center justify-between mb-4">
-        <h3 class="font-bold text-[var(--text-primary)]">Risk Trend (Last 30 Days)</h3>
+        <h3 class="font-bold text-[var(--text-primary)]">
+          @if (monitoringMode === 'adult') { Wellness Trend (Last 30 Days) } @else { Risk Trend (Last 30 Days) }
+        </h3>
         <span class="text-xs text-[var(--low)] flex items-center gap-1 font-semibold">
           <i class="pi pi-arrow-down-right"></i> Improving
         </span>
@@ -60,8 +68,12 @@
   <div class="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl flex flex-col mt-2">
     <div class="p-5 border-b border-[var(--border)] flex justify-between items-end">
       <div>
-        <h3 class="font-bold text-[var(--text-primary)] mb-1">Identified Threat Actors</h3>
-        <p class="text-xs text-[var(--text-muted)]">Contacts communicating with {{ childName() }} exhibiting high-risk behavior</p>
+        <h3 class="font-bold text-[var(--text-primary)] mb-1">
+          @if (monitoringMode === 'adult') { Contacts Who Triggered Reflections } @else { Identified Threat Actors }
+        </h3>
+        <p class="text-xs text-[var(--text-muted)]">
+          @if (monitoringMode === 'adult') { Contacts involved in self-reflection events } @else { Contacts communicating with {{ childName() }} exhibiting high-risk behavior }
+        </p>
       </div>
     </div>
     <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -83,7 +95,9 @@
               </div>
             </div>
             <div class="text-right">
-              <div class="text-xs font-black tracking-widest" [style.color]="getRiskHex(actor.level)">{{ actor.level | uppercase }} RISK</div>
+              <div class="text-xs font-black tracking-widest" [style.color]="getRiskHex(actor.level)">
+                @if (monitoringMode === 'adult') { {{ getRiskLabel(actor.level) }} } @else { {{ actor.level | uppercase }} RISK }
+              </div>
             </div>
           </div>
           
@@ -92,7 +106,7 @@
               <i class="pi" [ngClass]="actor.child_initiated ? 'pi-arrow-up-right text-[var(--low)]' : 'pi-arrow-down-left text-[var(--critical)]'"></i>
               <div class="text-sm">
                 @if (actor.child_initiated) {
-                  <span class="text-[var(--text-primary)]">Your child sent the first message.</span>
+                  <span class="text-[var(--text-primary)]">@if (monitoringMode === 'adult') { You } @else { Your child } sent the first message.</span>
                 } @else {
                   <span class="text-[var(--critical)] font-medium">This contact reached out first.</span>
                 }

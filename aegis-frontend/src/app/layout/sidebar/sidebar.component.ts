@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { Router, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs/operators';
+import { AuthService } from '@core/services/auth.service';
 
 
 interface NavItem {
@@ -28,6 +29,17 @@ export class SidebarComponent {
   collapsed = input<boolean>(false);
   
   private router = inject(Router);
+  private authService = inject(AuthService);
+
+  monitoringMode = 'child';
+
+  constructor() {
+    this.authService.currentUser$.subscribe(user => {
+      if (user && user.monitoring_mode) {
+        this.monitoringMode = user.monitoring_mode;
+      }
+    });
+  }
 
   /**
    * We convert router events to a signal to trigger reactivity in our computed signals.
@@ -43,41 +55,44 @@ export class SidebarComponent {
     return this.router.url.startsWith('/parent');
   });
 
-  parentNav: NavGroup[] = [
-    {
-      title: 'Overview',
-      items: [
-        { label: 'Dashboard', icon: 'pi-home', route: '/parent/dashboard' },
-      ]
-    },
-    {
-      title: 'Surveillance',
-      items: [
-        { label: 'Live Alerts', icon: 'pi-bell', route: '/parent/alerts', dot: 'pulse' },
-        { label: 'Risk Profile', icon: 'pi-chart-line', route: '/parent/risk-profile' },
-      ]
-    },
-    {
-      title: 'Management',
-      items: [
-        { label: 'Reports', icon: 'pi-file', route: '/parent/reports' },
-      ]
-    },
-    {
-      title: 'Configuration',
-      items: [
-        { label: 'WhatsApp Setup', icon: 'pi-whatsapp', route: '/parent/whatsapp-setup' },
-        { label: 'Settings', icon: 'pi-sliders-h', route: '/parent/settings' },
-      ]
-    },
-    {
-      title: 'Education',
-      items: [
-        { label: 'Chatbot', icon: 'pi-graduation-cap', route: '/parent/chatbot' },
-        { label: 'Digital Citizenship', icon: 'pi-book', route: '/parent/digital-citizenship' },
-      ]
-    }
-  ];
+  get parentNav(): NavGroup[] {
+    const isAdult = this.monitoringMode === 'adult';
+    return [
+      {
+        title: 'Overview',
+        items: [
+          { label: 'Dashboard', icon: 'pi-home', route: '/parent/dashboard' },
+        ]
+      },
+      {
+        title: isAdult ? 'Self-Monitoring' : 'Surveillance',
+        items: [
+          { label: isAdult ? 'Self-Reflections' : 'Live Alerts', icon: 'pi-bell', route: '/parent/alerts', dot: 'pulse' },
+          { label: isAdult ? 'Wellness Profile' : 'Risk Profile', icon: 'pi-chart-line', route: '/parent/risk-profile' },
+        ]
+      },
+      {
+        title: 'Management',
+        items: [
+          { label: 'Reports', icon: 'pi-file', route: '/parent/reports' },
+        ]
+      },
+      {
+        title: 'Configuration',
+        items: [
+          { label: 'WhatsApp Setup', icon: 'pi-whatsapp', route: '/parent/whatsapp-setup' },
+          { label: 'Settings', icon: 'pi-sliders-h', route: '/parent/settings' },
+        ]
+      },
+      {
+        title: isAdult ? 'Growth' : 'Education',
+        items: [
+          { label: 'Chatbot', icon: 'pi-graduation-cap', route: '/parent/chatbot' },
+          { label: isAdult ? 'Reflection Journey' : 'Digital Citizenship', icon: 'pi-book', route: '/parent/digital-citizenship' },
+        ]
+      }
+    ];
+  }
 
   adminNav: NavGroup[] = [
     {

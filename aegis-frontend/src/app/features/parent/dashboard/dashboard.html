@@ -18,7 +18,7 @@
     <div class="header-meta">
       <span class="live-indicator">
         <span class="live-dot"></span>
-        Surveillance Active
+        @if (monitoringMode === 'adult') { Self-Monitoring Active } @else { Surveillance Active }
       </span>
     </div>
   </div>
@@ -37,13 +37,22 @@
       </div>
       <div class="child-banner-right">
         <span class="child-risk-badge" [style.background]="getRiskHex(childInfo.risk_level) + '22'" [style.color]="getRiskHex(childInfo.risk_level)" [style.border-color]="getRiskHex(childInfo.risk_level) + '44'">
-          <i class="pi pi-shield"></i>
-          Risk: {{ getRiskLabel(childInfo.risk_level) }}
+          @if (monitoringMode === 'adult') {
+            <i class="pi pi-heart"></i>
+            Wellness: {{ getRiskLabel(childInfo.risk_level) }}
+          } @else {
+            <i class="pi pi-shield"></i>
+            Risk: {{ getRiskLabel(childInfo.risk_level) }}
+          }
         </span>
         @if (childInfo.is_monitored) {
           <span class="monitoring-badge">
             <span class="monitoring-dot"></span>
-            Protected
+            @if (monitoringMode === 'adult') {
+              Self-Monitoring
+            } @else {
+              Protected
+            }
           </span>
         }
       </div>
@@ -109,7 +118,7 @@
     <!-- Recent Alerts -->
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">Recent Alerts</span>
+        <span class="panel-title">@if (monitoringMode === 'adult') { Recent Reflections } @else { Recent Alerts }</span>
         <a class="panel-link" routerLink="/parent/alerts">View all →</a>
       </div>
       <div class="alert-list">
@@ -147,8 +156,8 @@
     <!-- Risky Contacts Panel -->
     <div class="panel" style="display: flex; flex-direction: column;">
       <div class="panel-header">
-        <span class="panel-title">Flagged Contacts</span>
-        <span class="panel-subtitle">People who sent harmful messages</span>
+        <span class="panel-title">@if (monitoringMode === 'adult') { Your Communication Patterns } @else { Flagged Contacts }</span>
+        <span class="panel-subtitle">@if (monitoringMode === 'adult') { Contacts that triggered your reflections } @else { People who sent harmful messages }</span>
       </div>
       <div class="contacts-list" style="flex: 1;">
         @if (riskyContacts && riskyContacts.length > 0) {
@@ -159,7 +168,7 @@
               </div>
               <div class="contact-info">
                 <span class="contact-name">{{ contact.name }}</span>
-                <span class="contact-blocked mono">{{ contact.blocked_total }} blocked</span>
+                <span class="contact-blocked mono">{{ contact.blocked_total }} @if (monitoringMode === 'adult') { flagged } @else { blocked }</span>
               </div>
               <div class="contact-risk">
                 <span class="risk-score-value mono" [style.color]="getRiskHex(contact.risk_level)">
@@ -177,7 +186,7 @@
         } @else {
           <div class="empty-state">
             <i class="pi pi-users" style="font-size: 2rem; color: var(--text-muted);"></i>
-            <span>No flagged contacts yet</span>
+            <span>@if (monitoringMode === 'adult') { No stressful contacts yet } @else { No flagged contacts yet }</span>
           </div>
         }
       </div>
@@ -190,7 +199,7 @@
     <!-- Harassment Breakdown -->
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">Harassment Categories</span>
+        <span class="panel-title">@if (monitoringMode === 'adult') { Communication Patterns } @else { Harassment Categories }</span>
         <span class="panel-subtitle">Detected threat types @if (monitoringMode === 'adult') { in your messages } @else { for your child }</span>
       </div>
       <div class="chart-wrap">
@@ -211,7 +220,7 @@
     <div class="panel">
       <div class="panel-header">
         <span class="panel-title">Weekly Activity</span>
-        <span class="panel-subtitle">Blocked vs Warned — last 7 days</span>
+        <span class="panel-subtitle">@if (monitoringMode === 'adult') { Flagged vs Reflected } @else { Blocked vs Warned } — last 7 days</span>
       </div>
       <div class="weekly-chart-wrap">
         @if (weeklyChartData) {
@@ -233,8 +242,8 @@
     <!-- Hourly Threat Detection -->
     <div class="panel">
       <div class="panel-header">
-        <span class="panel-title">Threat Detection by Hour</span>
-        <span class="panel-subtitle">Today — Threats vs Safe messages</span>
+        <span class="panel-title">@if (monitoringMode === 'adult') { Flagging Patterns by Hour } @else { Threat Detection by Hour }</span>
+        <span class="panel-subtitle">Today — @if (monitoringMode === 'adult') { Flagged vs Cleared messages } @else { Threats vs Safe messages }</span>
       </div>
       <div class="weekly-chart-wrap">
         @if (hourlyChartData) {

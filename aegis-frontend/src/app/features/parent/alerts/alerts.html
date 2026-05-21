@@ -4,9 +4,11 @@
   <!-- Header -->
   <div class="flex items-start justify-between mb-6">
     <div>
-      <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-1">My Child's Alerts</h1>
+      <h1 class="text-2xl font-bold text-[var(--text-primary)] mb-1">
+        @if (monitoringMode === 'adult') { Self-Reflection History } @else { My Child's Alerts }
+      </h1>
       <p class="text-sm text-[var(--text-muted)]">
-        Detected harassment events targeting your child — 
+        @if (monitoringMode === 'adult') { Messages flagged for self-reflection — } @else { Detected harassment events targeting your child — }
         <span class="font-semibold text-[var(--text-primary)]">{{ totalAlerts }} total</span>
       </p>
     </div>
@@ -34,16 +36,21 @@
       </div>
       <h3 class="text-lg font-bold text-[var(--text-primary)]">All Clear!</h3>
       <p class="text-sm text-[var(--text-muted)] text-center max-w-md">
-        No harassment events have been detected for your child. AEGIS is actively monitoring all incoming messages in real-time.
+        @if (monitoringMode === 'adult') {
+          No self-reflection events have been recorded. Your communication patterns look healthy!
+        } @else {
+          No harassment events have been detected for your child. AEGIS is actively monitoring all incoming messages in real-time.
+        }
       </p>
       <div class="flex items-center gap-2 text-xs font-semibold text-[var(--low)] bg-green-500/10 border border-green-500/20 px-4 py-2 rounded-full mt-2">
-        <i class="pi pi-shield"></i>
-        Protection Active
+        <i class="pi" [class.pi-heart]="monitoringMode === 'adult'" [class.pi-shield]="monitoringMode !== 'adult'"></i>
+        @if (monitoringMode === 'adult') { Wellness Active } @else { Protection Active }
       </div>
     </div>
   } @else {
     <app-alerts-table
       [alerts]="alerts()"
+      [monitoringMode]="monitoringMode"
       (resolve)="onResolve($event)">
     </app-alerts-table>
   }

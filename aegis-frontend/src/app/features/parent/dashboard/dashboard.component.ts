@@ -154,13 +154,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       // Live update recent alerts
       if (this.recentAlerts && alert.type === 'alert') {
+        const dec = (alert.decision || '').toUpperCase();
         this.recentAlerts = [{
           id: alert.id,
           preview: alert.text.length > 50 ? alert.text.substring(0, 50) + "..." : alert.text,
           severity: alert.severity,
           category: alert.primary_class,
           time: 'Just now',
-          decision: alert.decision.toUpperCase()
+          decision: dec === 'SELF_WARN' ? 'REFLECTION' : dec
         }, ...this.recentAlerts].slice(0, 5);
       }
 
@@ -280,6 +281,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 feedText = `🎓 Aegis guided your child toward better digital habits`;
                 feedIcon = 'pi-book';
                 break;
+              case 'SELF_WARN':
+                feedText = `💭 Self-reflection nudge for ${(a.primary_class || '').replace(/_/g, ' ')}`;
+                feedIcon = 'pi-heart';
+                break;
               default:
                 feedText = `Message analyzed from ${shortSender}`;
             }
@@ -317,14 +322,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // ── Fetch parent-scoped alerts ──
     this.apiService.getParentAlerts().subscribe({
       next: (alerts) => {
-        this.recentAlerts = alerts.slice(0, 5).map((a: any) => ({
-          id: a.id,
-          preview: a.raw_text.substring(0, 40) + '...',
-          severity: a.severity || (a.decision === 'ESCALATE' ? 'critical' : a.decision === 'BLOCK' ? 'high' : a.decision === 'WARN' ? 'medium' : 'low'),
-          category: a.primary_class || 'Unknown',
-          time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          decision: (a.decision || '').toUpperCase()
-        }));
+        this.recentAlerts = alerts.slice(0, 5).map((a: any) => {
+          const dec = (a.decision || '').toUpperCase();
+          return {
+            id: a.id,
+            preview: a.raw_text.substring(0, 40) + '...',
+            severity: a.severity || (dec === 'ESCALATE' ? 'critical' : dec === 'BLOCK' ? 'high' : dec === 'WARN' ? 'medium' : 'low'),
+            category: a.primary_class || 'Unknown',
+            time: new Date(a.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            decision: dec === 'SELF_WARN' ? 'REFLECTION' : dec
+          };
+        });
         this.cdr.detectChanges();
       },
       error: (err) => console.error('[AEGIS] Failed to load parent alerts:', err)
@@ -367,7 +375,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           },
           {
             label: isAdult ? 'Wellness Score' : 'Risk Level',
-            value: data.child?.risk_level?.toUpperCase() || 'LOW',
+            value: this.getRiskLabel(data.child?.risk_level || 'LOW'),
             icon: isAdult ? 'pi-heart-fill' : 'pi-chart-line',
             trend: isAdult ? 'Self-monitoring Active' : (data.child?.is_monitored ? 'Monitoring Active' : (data.child ? 'Not Monitoring' : 'No child linked')),
             trendUp: (data.child?.risk_level || 'low').toLowerCase() === 'low',
@@ -417,7 +425,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             labels: data.weekly_activity.map(w => w.day),
             datasets: [
               {
-                label: 'Blocked',
+                label: isAdult ? 'Flagged' : 'Blocked',
                 data: data.weekly_activity.map(w => w.blocked),
                 backgroundColor: 'rgba(239, 68, 68, 0.75)',
                 borderColor: '#EF4444',
@@ -425,7 +433,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 borderRadius: 4,
               },
               {
-                label: 'Warned',
+                label: isAdult ? 'Reflected' : 'Warned',
                 data: data.weekly_activity.map(w => w.warned),
                 backgroundColor: 'rgba(234, 179, 8, 0.65)',
                 borderColor: '#EAB308',
@@ -433,7 +441,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 borderRadius: 4,
               },
               {
-                label: 'Safe',
+                label: isAdult ? 'Cleared' : 'Safe',
                 data: data.weekly_activity.map(w => w.safe),
                 backgroundColor: 'rgba(16, 217, 160, 0.65)',
                 borderColor: '#10D9A0',
@@ -450,7 +458,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             labels: data.hourly_activity.labels,
             datasets: [
               {
-                label: 'Threats',
+                label: isAdult ? 'Flagged' : 'Threats',
                 data: data.hourly_activity.threats,
                 fill: true,
                 backgroundColor: 'rgba(255,77,77,0.12)',
@@ -461,7 +469,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 pointBackgroundColor: '#FF4D4D',
               },
               {
-                label: 'Safe',
+                label: isAdult ? 'Cleared' : 'Safe',
                 data: data.hourly_activity.safe,
                 fill: true,
                 backgroundColor: 'rgba(16,217,160,0.08)',
@@ -553,11 +561,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   getRiskLabel(level: string): string {
-    return (level || 'LOW').toUpperCase();
+    const l = (level || 'LOW').toUpperCase();
+    if (this.monitoringMode === 'adult') {
+      if (l === 'CRITICAL') return 'STRESSED';
+      if (l === 'HIGH') return 'ELEVATED';
+      if (l === 'MEDIUM') return 'AWARE';
+      return 'BALANCED';
+    }
+    return l;
   }
 
   getHeatmapColor(count: number): string {
     if (count === 0) return 'var(--surface-b)';
+    if (this.monitoringMode === 'adult') {
+      if (count <= 1) return 'rgba(167, 139, 250, 0.35)';   // light purple
+      if (count <= 3) return 'rgba(139, 92, 246, 0.55)';    // medium purple
+      if (count <= 5) return 'rgba(124, 58, 237, 0.7)';     // dark purple
+      return 'rgba(109, 40, 217, 0.9)';                     // very dark purple
+    }
     if (count <= 1) return 'rgba(234, 179, 8, 0.35)';    // light amber
     if (count <= 3) return 'rgba(249, 115, 22, 0.55)';   // orange
     if (count <= 5) return 'rgba(239, 68, 68, 0.7)';     // red

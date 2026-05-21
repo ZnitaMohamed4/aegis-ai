@@ -90,7 +90,9 @@ def current_user(request):
                     updated = True
                 if updated:
                     profile.save()
-
+            
+            # Ensure the serializer fetches the updated profile
+            request.user.refresh_from_db()
             return Response(AegisUserSerializer(request.user).data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

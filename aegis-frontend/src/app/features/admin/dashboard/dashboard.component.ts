@@ -76,7 +76,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       } else {
         switch(alert.decision.toUpperCase()) {
           case 'ALLOW':
-            feedText = `Processed safely in background: "${cleanText}"`;
+            feedText = `Message from ${shortSender} passed safely`;
             feedIcon = 'pi-verified';
             break;
           case 'WARN':
@@ -88,8 +88,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
             feedText = `ACTIVE SHIELD Blocked [${(alert.primary_class || '').toUpperCase()}] with ${Math.round(alert.m1_score * 100)}% severity`;
             feedIcon = 'pi-ban';
             break;
+          case 'REVISE':
+            feedText = `Grey-zone message from ${shortSender} under review`;
+            feedIcon = 'pi-eye';
+            break;
+          case 'HUMAN_REVIEW':
+            feedText = `Message from ${shortSender} sent to review`;
+            feedIcon = 'pi-user';
+            break;
           default:
-            feedText = `Analyzed new incoming stream payload...`;
+            feedText = `Analyzed incoming message from ${shortSender}`;
         }
       }
 
@@ -99,7 +107,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
         type: alert.decision.toLowerCase() as any,
         icon: feedIcon,
         text: feedText,
-        fullText: alert.llm_explanation ? `Text: ${alert.text}\n\nLLM Explanation:\n${alert.llm_explanation}` : alert.text
+        fullText: (() => {
+          if (alert.decision.toUpperCase() === 'ALLOW' || !alert.text) {
+            return '\u2705 This message was analyzed and cleared. Content is not stored to protect user privacy.';
+          }
+          return alert.llm_explanation ? `Text: ${alert.text}\n\nLLM Explanation:\n${alert.llm_explanation}` : alert.text;
+        })()
       };
 
       this.feedEvents.update(list => {
@@ -294,7 +307,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
           } else {
             switch (decision) {
               case 'ALLOW':
-                feedText = `Processed safely in background: "${cleanText}"`;
+                feedText = `Message from ${shortSender} passed safely`;
                 feedIcon = 'pi-verified';
                 break;
               case 'WARN':
@@ -307,11 +320,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 feedIcon = 'pi-ban';
                 break;
               case 'REVISE':
-                feedText = `Grey-zone message flagged for review: "${cleanText}"`;
+                feedText = `Grey-zone message from ${shortSender} under review`;
                 feedIcon = 'pi-eye';
                 break;
               case 'HUMAN_REVIEW':
-                feedText = `Flagged for human review: "${cleanText}"`;
+                feedText = `Message from ${shortSender} sent to review`;
                 feedIcon = 'pi-user';
                 break;
               default:
@@ -325,7 +338,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
             type: decision.toLowerCase() as any,
             icon: feedIcon,
             text: feedText,
-            fullText: a.llm_explanation ? `Text: ${a.raw_text}\n\nLLM Explanation:\n${a.llm_explanation}` : a.raw_text
+            fullText: (() => {
+              if (decision === 'ALLOW' || !a.raw_text) {
+                return '\u2705 This message was analyzed and cleared. Content is not stored to protect user privacy.';
+              }
+              return a.llm_explanation ? `Text: ${a.raw_text}\n\nLLM Explanation:\n${a.llm_explanation}` : a.raw_text;
+            })()
           };
         });
 
