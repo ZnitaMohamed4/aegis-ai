@@ -1,25 +1,42 @@
 <div align="center">
   <img src="./aegis-frontend/public/Aegis.png" alt="AEGIS Logo" width="128" height="128">
   <h1>AEGIS AI — Automated Enforcement & Guardian Intelligence System</h1>
-  <p><strong>A Real-Time WhatsApp Moderation Platform to Protect Children from Online Harassment</strong></p>
+  <p><strong>A Real-Time Omnichannel Digital Moderation & Wellness Platform</strong></p>
   
-  [![Angular](https://img.shields.io/badge/Angular-21+-red.svg)](https://angular.io/)
-  [![Django](https://img.shields.io/badge/Django-5.2+-green.svg)](https://www.djangoproject.com/)
-  [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
-  [![PyTorch](https://img.shields.io/badge/PyTorch-2.11+-ee4c2c.svg)](https://pytorch.org/)
+  [![Angular](https://img.shields.io/badge/Angular-21+-DD0031.svg?style=flat&logo=angular&logoColor=white)](https://angular.io/)
+  [![Django](https://img.shields.io/badge/Django-5.2+-092E20.svg?style=flat&logo=django&logoColor=white)](https://www.djangoproject.com/)
+  [![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg?style=flat&logo=python&logoColor=white)](https://www.python.org/)
+  [![PyTorch](https://img.shields.io/badge/PyTorch-2.11+-EE4C2C.svg?style=flat&logo=pytorch&logoColor=white)](https://pytorch.org/)
+  [![Llama 3](https://img.shields.io/badge/Meta_Llama_3-0466C8?style=flat&logo=meta&logoColor=white)](https://llama.meta.com/)
+  [![ChromaDB](https://img.shields.io/badge/ChromaDB-FF4E00?style=flat)](https://www.trychroma.com/)
 </div>
 
 <hr>
 
-**AEGIS** is an intelligent, real-time cyberbullying prevention platform built as a *Projet de Fin d'Études (PFE)*. It actively intercepts, analyzes, and moderates WhatsApp conversations, providing automated enforcement (Active Shield) and comprehensive parental monitoring.
+> **AEGIS** is an intelligent, real-time cyberbullying prevention and digital wellness platform built as a *Projet de Fin d'Études (PFE)*. 
+> Going beyond simple keyword filtering, AEGIS actively intercepts, analyzes, and moderates digital conversations across various messaging channels (using WhatsApp as its initial integration node), providing automated enforcement (**Active Shield**), comprehensive parental monitoring, and adult self-moderation capabilities.
 
-Designed with a robust **5-Agent AI Architecture**, AEGIS supports **French**, **Arabic**, and **Darija (Moroccan Arabic)** to address specific regional moderation challenges.
+Designed with a robust **5-Agent AI Architecture**, AEGIS natively supports **French**, **Arabic**, and **Darija (Moroccan Arabic)**, addressing complex regional moderation challenges while complying with Moroccan data privacy regulations (Law 09-08).
+
+<div align="center">
+  <img src="./aegis-frontend/public/dashboard_preview_real.png" alt="AEGIS Dashboard UI" width="800" style="border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+</div>
+
+---
+
+## 📑 Table of Contents
+- [System Architecture](#-system-architecture)
+- [Multi-Agent AI Pipeline](#-multi-agent-ai-pipeline)
+- [Key Features](#-key-features)
+- [Performance & Optimizations](#-performance--optimizations)
+- [Technology Stack](#-technology-stack)
+- [Getting Started](#-getting-started)
 
 ---
 
 ## 🏗️ System Architecture
 
-AEGIS employs an asynchronous pipeline where specialized AI agents cooperate to deliver rapid, accurate moderation:
+AEGIS employs an asynchronous, event-driven pipeline where specialized AI agents cooperate using the **Strategy** and **Facade** design patterns to deliver rapid, accurate moderation:
 
 ```mermaid
 graph TD
@@ -28,18 +45,19 @@ graph TD
     classDef django fill:#092E20,stroke:#44B78B,color:#fff,font-weight:bold;
     classDef agent fill:#1E293B,stroke:#6366F1,color:#fff,stroke-width:2px;
     classDef action fill:#ef4444,stroke:#fff,color:#fff,font-weight:bold;
+    classDef ext fill:#F59E0B,stroke:#fff,color:#fff,font-weight:bold;
     
     %% Nodes
-    WA((WhatsApp Node)):::wp
-    Evo["Evolution API <br> Webhook Event"]:::wp
+    WA((Digital Channel Node <br> e.g. WhatsApp)):::wp
+    Evo["Channel Gateway API <br> Webhook Event"]:::wp
     
-    subgraph AEGIS Backend [AEGIS Django Backend & ML Pipeline]
+    subgraph AEGIS Backend [AEGIS Core Engine]
         Router[Webhook Router]:::django
         
-        A1["Agent 1: Gatekeeper <br> Binary Toxicity"]:::agent
+        A1["Agent 1: Gatekeeper <br> Binary Toxicity & Multimodal"]:::agent
         A2["Agent 2: Specialist <br> 6-Class Categorization"]:::agent
-        A3["Agent 3: Auditor <br> Groq LLM Grey Zone"]:::agent
-        A4["Agent 4: Profiler <br> User Risk Scoring"]:::agent
+        A3["Agent 3: Auditor <br> Llama 3.3 Grey Zone Analysis"]:::agent
+        A4["Agent 4: Profiler <br> Bayesian Network Scoring"]:::agent
         A5["Agent 5: Orchestrator <br> Policy Enforcer"]:::agent
         
         Router --> A1
@@ -50,10 +68,11 @@ graph TD
         A4 --> A5
     end
     
-    subgraph Outcomes [Real-Time Enforcement]
-        UI["Angular Dashboard <br> Parent/Admin UI"]:::django
-        ActDel["Active Shield <br> (Delete Message)"]:::action
-        ActWarn["Auto-Reply <br> (Warn Sender)"]:::action
+    subgraph Enforcement [Real-Time Enforcement]
+        UI["Angular Dashboard UI"]:::django
+        ActDel["Active Shield <br> (Delete Message via API)"]:::action
+        ActWarn["Twilio Voice Call <br> & Auto-Reply"]:::ext
+        n8n["n8n Workflows <br> (Weekly Reports)"]:::ext
     end
     
     %% Flow
@@ -62,17 +81,39 @@ graph TD
     A5 -.-> ActDel
     A5 -.-> ActWarn
     A5 -.-> UI
+    A5 -.-> n8n
 ```
 
 ---
 
 ## 🧠 Multi-Agent AI Pipeline
 
-1. **Agent 1 (Gatekeeper)**: An optimized BERT model that scans incoming text for general toxicity. Fast and lightweight ($<50$ms).
-2. **Agent 2 (Specialist)**: A secondary NLP model that categorizes harmful content into 6 distinct specific classes (e.g., *Sexual Harassment*, *Threats*).
-3. **Agent 3 (Auditor)**: A Large Language Model (Groq Llama 3) invoked only for "Grey Zone" ambiguity or "Shadow Review" (auditing borderline safe texts).
-4. **Agent 4 (Profiler)**: An algorithmic module tracking historical metadata to assign dynamic **Behavioral Risk Scores** to senders.
-5. **Agent 5 (Orchestrator)**: The final decision-maker managing side effects: triggering WebSockets, issuing DB commits, and dispatching WhatsApp Webhook deletion requests.
+1. **Agent 1 (Gatekeeper)**: An optimized BERT model that scans incoming text and a multimodal pipeline for images to detect general toxicity. Highly optimized for microsecond latency ($<50$ms).
+2. **Agent 2 (Specialist)**: A secondary NLP model that categorizes harmful content into 6 distinct specific classes (e.g., *Sexual Harassment*, *Threats*), trained using **Focal Loss** to handle severe class imbalances.
+3. **Agent 3 (Auditor)**: A Large Language Model (Groq Llama 3.3) invoked only for "Grey Zone" ambiguity or "Shadow Review" (auditing borderline safe texts).
+4. **Agent 4 (Profiler)**: Powered by a **Bayesian Network** to track historical metadata and assign dynamic Behavioral Risk Scores to senders over time.
+5. **Agent 5 (Orchestrator)**: The final decision-maker managing cross-channel side effects (WebSockets, channel-agnostic API deletion requests, and Twilio Emergency calls).
+
+---
+
+## 🛡️ Key Features
+
+* **Digital Wellness (Adult Mode)**: A non-punitive, privacy-centric monitoring mode for adults focused on digital well-being, featuring a polished Light Mode UI and tracking "Digital Fatigue" rather than enforcing strict blocks.
+* **Omnichannel Moderation**: While initially integrated with WhatsApp via the Evolution API, the system architecture is channel-agnostic, capable of supporting Telegram, Discord, and other digital communication platforms.
+* **Interactive RAG Chatbot**: An embedded AI assistant for parents and admins that answers legal and wellness questions using a local **ChromaDB** knowledge base, complete with **conversational memory** and a **SerpAPI Web Search fallback**.
+* **Active Shield Response**: If a message is classified as `BLOCK` or `ESCALATE`, AEGIS instantly commands the messaging platform to delete the message for everyone *before* the recipient sees it.
+* **Self-Moderation Assistant**: An empathetic, in-app chatbot operating directly within the messaging platform to support users dealing with online harassment.
+* **Multi-Tenant Security**: Dedicated boundaries between Global Administrators and Parents, ensuring strict compliance with data privacy standards.
+* **Automated Workflows**: Deep integration with **n8n** for scheduled weekly report generation and automated transcriptions.
+
+---
+
+## ⚡ Performance & Optimizations
+
+To meet the rigorous demands of real-time messaging, AEGIS incorporates advanced performance strategies:
+- **Focal Loss & Synthetic Data**: Training models with synthetic Moroccan Darija data injections and Focal Loss to drastically improve recall on minority classes (e.g., severe threats).
+- **Semantic Caching**: Integration of a Redis-backed semantic caching strategy that intercepts conceptually identical queries, bypassing redundant ML inferences and reducing end-to-end latency to $<500$ms.
+- **Architectural Patterns**: Refactored backend utilizing the **Facade Pattern** to decouple API endpoints and the **Strategy Pattern** to cleanly manage Agent 5's enforcement actions.
 
 ---
 
@@ -82,10 +123,10 @@ graph TD
 |-------|------------------|
 | **Frontend UI** | Angular 21, TypeScript, TailwindCSS, PrimeNG, Chart.js |
 | **Backend API** | Django 5.2, Django REST Framework, Channels (WebSockets) |
-| **AI / NLP** | PyTorch, HuggingFace Transformers, Built-in Tokenizers |
-| **LLM Provider** | Groq Cloud API (Llama 3.3 70B Versatile) |
-| **WhatsApp Engine**| Evolution API v2 |
-| **Data Persistence**| PostgreSQL (Core Data), Redis (Cache & WebSockets) |
+| **AI Engine** | PyTorch, HuggingFace Transformers, Built-in Tokenizers |
+| **Knowledge Base (RAG)** | ChromaDB, LangChain, Groq Cloud API (Llama 3.3), SerpAPI |
+| **External Integrations**| Evolution API v2, Twilio, n8n |
+| **Data Persistence**| PostgreSQL (Core Data), Redis (Semantic Cache & WebSockets) |
 
 ---
 
@@ -94,27 +135,21 @@ graph TD
 ### 1. Prerequisites
 - **Node.js v20+** & **Angular CLI**
 - **Python 3.12+**
-- **Evolution API** running locally on port `5002`
-- **PostgreSQL** & **Redis**
+- **Channel API Gateway** (e.g. Evolution API for WhatsApp running locally on port `5002`)
+- **PostgreSQL**, **Redis**, and **ChromaDB**
 
 ### 2. Backend Setup
 The backend requires the HuggingFace `.safetensors` model weights to be placed in `aegis-backend/ml_pipeline/models/`.
 
 ```bash
 cd aegis-backend
-
-# Initialize virtual environment
 python3 -m venv venv
 source venv/bin/activate
-
-# Install dependencies (from generated requirements.txt)
 pip install -r requirements.txt
 
-# Configure Environment Variables
 cp .env.example .env
-# Open .env and insert your GROQ_API_KEY, EVOLUTION_API_KEY, and DB URLs.
+# Open .env and insert your GROQ_API_KEY, EVOLUTION_API_KEY, SERPAPI_KEY, and DB URLs.
 
-# Run migrations and start the ASGI dev server
 python manage.py migrate
 python manage.py runserver
 ```
@@ -122,11 +157,7 @@ python manage.py runserver
 ### 3. Frontend Setup
 ```bash
 cd aegis-frontend
-
-# Install node modules
 npm install
-
-# Start the Angular development server
 ng serve
 ```
 
@@ -134,16 +165,6 @@ Access the dashboard at `http://localhost:4200`.
 
 ---
 
-## 🛡️ Key Features
-
-- **Multi-Tenant Security**: Dedicated boundaries between Global Administrators and Parents monitoring their registered children.
-- **Microsecond Latency**: Heavily optimized PyTorch pipeline and Redis caching ensures messages are intercepted $<500$ms.
-- **Active Shield Response**: If a message is classified as `BLOCK` or `ESCALATE`, AEGIS commands WhatsApp to delete the message for everyone before the recipient sees it.
-- **Shadow Review Protocol**: Borderline safe messages are silently forwarded to an LLM for secondary auditing, minimizing false negatives.
-- **QR Device Pairing**: Parents can seamlessly link their child's WhatsApp directly from the dashboard using secure WebSocket QR-code generation based on Baileys.
-
----
-
-## Authors
-
-- **Mohamed ZNITA** — PFE Student
+<div align="center">
+  <p>Built with ❤️ by <b>Mohamed ZNITA</b> — PFE Student</p>
+</div>
