@@ -220,12 +220,37 @@ def review_queue_stats(request):
     })
 
 
-@api_view(['DELETE'])
+@api_view(['DELETE', 'PUT'])
 @permission_classes([IsAuthenticated, IsAdminUser])
 def admin_user_detail(request, user_id):
-    """DELETE /api/v1/admin/users/<id>/ - Admin deletes a parent account"""
+    """DELETE /api/v1/admin/users/<id>/ - Admin deletes a parent account
+       PUT /api/v1/admin/users/<id>/ - Admin updates parent/child status"""
     try:
         user = AegisUser.objects.get(id=user_id, role=AegisUser.Role.PARENT)
+        
+        if request.method == 'PUT':
+            data = request.data
+            updated = False
+            
+            # 1. Handle user status (is_active)
+            if 'is_active' in data:
+                user.is_active = bool(data['is_active'])
+                user.save(update_fields=['is_active'])
+                updated = True
+                
+            # 2. Handle child monitoring status (is_monitored)
+            if 'is_monitored' in data:
+                profile = getattr(user, 'parent_profile', None)
+                if profile:
+                    child = profile.children.first()
+                    if child:
+                        child.is_monitored = bool(data['is_monitored'])
+                        child.save(update_fields=['is_monitored'])
+                        updated = True
+                        
+            return Response({"status": "success", "updated": updated}, status=200)
+
+        # Handle DELETE
         user.delete()
         return Response({"status": "success"}, status=200)
     except AegisUser.DoesNotExist:
@@ -297,13 +322,14 @@ def admin_user_list(request):
         child_data = None
         
         if profile:
-            child = profile.children.filter(is_monitored=True).first()
+            child = profile.children.first()
             if child:
                 child_data = {
                     "identifier": child.full_name,
                     "whatsapp_number": child.whatsapp_display_number or child.whatsapp_jid,
                     "risk_level": child.get_risk_level().lower(),
-                    "whatsapp_connected": profile.evolution_connected
+                    "whatsapp_connected": profile.evolution_connected,
+                    "is_monitored": child.is_monitored
                 }
             elif profile.evolution_connected or profile.evolution_instance_name:
                 instance_risk = 'low'
@@ -345,8 +371,8 @@ def admin_user_list(request):
             "full_name": user.get_full_name() or user.username,
             "email": user.email,
             "phone": user.phone_number,
-            "status": "active",
-            "monitoring_active": True if child_data else False,
+            "status": "active" if user.is_active else "inactive",
+            "monitoring_active": child_data.get("is_monitored", False) if child_data else False,
             "alert_threshold": profile.alert_threshold if profile else 0.75,
             "sms_notifications": profile.receive_sms_alerts if profile else True,
             "email_notifications": profile.receive_email_alerts if profile else True,

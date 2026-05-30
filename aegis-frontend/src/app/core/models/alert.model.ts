@@ -1,4 +1,4 @@
-export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical' | 'observation' | 'gentle_nudge' | 'deep_reflection' | 'urgent_reflection';
 export type AlertChannel = 'push' | 'email' | 'sms' | 'call';
 
 export interface Alert {

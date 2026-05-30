@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ChartModule } from 'primeng/chart';
 import { getRiskHex } from '@shared/utils/severity.utils';
 import { ApiService } from '@core/services/api.service';
+import { AuthService } from '@core/services/auth.service';
 
 @Component({
   selector: 'app-risk-profile',
@@ -21,11 +22,19 @@ export class RiskProfileComponent implements OnInit {
 
   riskChartData: any;
   riskChartOptions: any;
+  monitoringMode: string = 'child';
 
   getRiskHex = getRiskHex;
   private apiService = inject(ApiService);
+  private authService = inject(AuthService);
 
   ngOnInit() {
+    this.authService.currentUser$.subscribe(user => {
+      if (user && user.monitoring_mode) {
+        this.monitoringMode = user.monitoring_mode;
+      }
+    });
+
     this.initChartOptions();
     this.apiService.getParentRiskProfile().subscribe({
       next: (data: any) => {
@@ -123,6 +132,17 @@ export class RiskProfileComponent implements OnInit {
             }
         }
     };
+  }
+
+  getRiskLabel(level: string): string {
+    const l = (level || 'LOW').toUpperCase();
+    if (this.monitoringMode === 'adult') {
+      if (l === 'CRITICAL') return 'STRESSED';
+      if (l === 'HIGH') return 'ELEVATED';
+      if (l === 'MEDIUM') return 'AWARE';
+      return 'BALANCED';
+    }
+    return l;
   }
 }
 

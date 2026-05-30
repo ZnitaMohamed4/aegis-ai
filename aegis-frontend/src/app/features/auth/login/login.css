@@ -552,3 +552,178 @@ body {
     padding: 1.75rem 1.25rem;
   }
 }
+
+/* ════════════════════════════
+   EXACT 1:1 LIGHT MODE TRANSLATION
+════════════════════════════ */
+::ng-deep body:not(.dark) {
+  --login-primary:     #7C6DFA;
+  --login-primary-2:   #6C5EFA;
+  --login-primary-3:   #4A3DD4;
+  --login-glow:        rgba(124, 109, 250, 0.25);
+  --login-glow-soft:   rgba(124, 109, 250, 0.08);
+  --login-bg-dark:     #F3F4F6;
+  --login-bg-dark2:    #F9FAFB;
+  --login-bg-panel:    #FFFFFF;
+  --login-border:      rgba(124, 109, 250, 0.25);
+  --login-border-sub:  rgba(0, 0, 0, 0.08);
+  --login-text:        #111827;
+  --login-muted:       #4B5563;
+  --login-muted2:      #9CA3AF;
+}
+
+/* Base backgrounds */
+::ng-deep body:not(.dark) .login-wrapper {
+  background: var(--login-bg-dark);
+}
+::ng-deep body:not(.dark) .login-hero {
+  background: var(--login-bg-dark2);
+}
+::ng-deep body:not(.dark) .login-panel {
+  background: var(--login-bg-panel);
+  border-left: 1px solid rgba(124, 109, 250, 0.15);
+  box-shadow: none;
+}
+::ng-deep body:not(.dark) .login-card {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Orbs: exact same purple colors but lighter opacity for white bg */
+::ng-deep body:not(.dark) .login-hero .orb-1 {
+  background: radial-gradient(circle, rgba(92, 70, 220, 0.25) 0%, rgba(60, 40, 180, 0.1) 60%, transparent 100%);
+}
+::ng-deep body:not(.dark) .login-hero .orb-2 {
+  background: radial-gradient(circle, rgba(124, 109, 250, 0.2) 0%, rgba(80, 60, 200, 0.08) 60%, transparent 100%);
+}
+::ng-deep body:not(.dark) .login-hero .orb-3 {
+  background: radial-gradient(circle, rgba(160, 140, 255, 0.15) 0%, transparent 70%);
+}
+
+/* Grid & Vignette */
+::ng-deep body:not(.dark) .login-hero::after {
+  background-image:
+    linear-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+}
+::ng-deep body:not(.dark) .login-hero::before {
+  background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(243, 244, 246, 0.8) 100%);
+}
+
+/* Typography */
+::ng-deep body:not(.dark) .hero-title,
+::ng-deep body:not(.dark) .login-title,
+::ng-deep body:not(.dark) .hero-brand-name {
+  color: var(--login-text);
+}
+::ng-deep body:not(.dark) .hero-title span {
+  background: linear-gradient(135deg, #a599ff, #7C6DFA, #5648d6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+::ng-deep body:not(.dark) .hero-subtitle,
+::ng-deep body:not(.dark) .login-subtitle {
+  color: var(--login-muted);
+}
+
+/* Features */
+::ng-deep body:not(.dark) .feature-item {
+  background: rgba(124, 109, 250, 0.04);
+  border: 1px solid var(--login-border);
+  box-shadow: none;
+  backdrop-filter: blur(12px);
+}
+::ng-deep body:not(.dark) .feature-item:hover {
+  background: rgba(124, 109, 250, 0.08);
+  border-color: rgba(124, 109, 250, 0.4);
+  box-shadow: none;
+}
+::ng-deep body:not(.dark) .feature-item span {
+  color: var(--login-text);
+  font-weight: 500;
+}
+::ng-deep body:not(.dark) .feature-item-icon {
+  background: linear-gradient(135deg, rgba(124, 109, 250, 0.15), rgba(80, 60, 200, 0.1));
+  border: 1px solid rgba(124, 109, 250, 0.3);
+  color: var(--login-primary);
+  box-shadow: none;
+}
+
+/* Logos */
+::ng-deep body:not(.dark) .logo-ring {
+  border-color: rgba(124, 109, 250, 0.2);
+  background: conic-gradient(from 0deg, transparent 70%, rgba(124, 109, 250, 0.3) 100%);
+}
+::ng-deep body:not(.dark) .logo-ring-2 {
+  border-color: rgba(124, 109, 250, 0.15);
+}
+::ng-deep body:not(.dark) .logo-core {
+  background: linear-gradient(135deg, var(--login-primary), var(--login-primary-3));
+  box-shadow: 0 0 24px var(--login-glow), 0 0 48px rgba(124, 109, 250, 0.1);
+  color: #fff;
+}
+::ng-deep body:not(.dark) .hero-brand-icon {
+  background: linear-gradient(135deg, var(--login-primary), var(--login-primary-3));
+  box-shadow: 0 0 16px var(--login-glow);
+  color: #fff;
+}
+
+/* Form Inputs */
+::ng-deep body:not(.dark) .form-group label {
+  color: var(--login-muted);
+  font-weight: 500;
+}
+::ng-deep body:not(.dark) .form-control {
+  background: #F9FAFB;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  color: var(--login-text);
+  box-shadow: none;
+}
+::ng-deep body:not(.dark) .form-control::placeholder {
+  color: var(--login-muted2);
+}
+::ng-deep body:not(.dark) .form-control:focus {
+  background: #FFFFFF;
+  border-color: var(--login-primary);
+  box-shadow: 0 0 0 3px rgba(124, 109, 250, 0.18), inset 0 1px 0 rgba(124, 109, 250, 0.1);
+}
+::ng-deep body:not(.dark) .input-icon {
+  color: var(--login-muted2);
+}
+::ng-deep body:not(.dark) .input-wrapper:focus-within .input-icon {
+  color: var(--login-primary);
+}
+
+/* Links & Options */
+::ng-deep body:not(.dark) .forgot-password {
+  color: var(--login-primary);
+}
+::ng-deep body:not(.dark) .forgot-password:hover {
+  color: var(--login-primary-3);
+}
+::ng-deep body:not(.dark) .remember-me {
+  color: var(--login-muted);
+}
+
+/* Primary Button */
+::ng-deep body:not(.dark) .primary-btn {
+  background: linear-gradient(135deg, #8a7dff 0%, #6C5EFA 50%, #4A3DD4 100%);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(108, 94, 250, 0.25);
+}
+::ng-deep body:not(.dark) .primary-btn:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(108, 94, 250, 0.4);
+  transform: translateY(-2px);
+}
+
+/* Divider & Footer */
+::ng-deep body:not(.dark) .login-divider {
+  background: linear-gradient(90deg, transparent, rgba(124, 109, 250, 0.2), transparent);
+}
+::ng-deep body:not(.dark) .security-note {
+  color: var(--login-muted2);
+}
+::ng-deep body:not(.dark) .security-note i {
+  color: var(--login-primary);
+}

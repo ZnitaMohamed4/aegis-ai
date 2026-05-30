@@ -4,20 +4,30 @@ import { AlertsTableComponent } from '@shared/components/alerts-table/alerts-tab
 import { MockAlert } from '@core/models';
 import { ApiService } from '@core/services/api.service';
 import { AlertService, WebSocketAlertPayload } from '@core/services/alert.service';
+import { AuthService } from '@core/services/auth.service';
 import { MessageService } from 'primeng/api';
 import { ToastModule } from 'primeng/toast';
 import { SkeletonModule } from 'primeng/skeleton';
 import { Subscription } from 'rxjs';
 
+import { AlertSeverity } from '@core/models';
+
 /**
- * Maps a raw decision string to a UI severity level.
+ * Maps a raw decision string to a UI severity level based on mode.
  */
-function mapSeverity(decision: string): 'low' | 'medium' | 'high' | 'critical' {
+function mapSeverity(decision: string, mode: string = 'child'): AlertSeverity {
   const d = (decision || '').toUpperCase();
-  if (d === 'ESCALATE') return 'critical';
-  if (d === 'BLOCK' || d === 'REVISE') return 'high';
-  if (d === 'WARN') return 'medium';
-  return 'low';
+  if (mode === 'adult') {
+    if (d === 'ESCALATE') return 'urgent_reflection';
+    if (d === 'BLOCK' || d === 'REVISE') return 'deep_reflection';
+    if (d === 'WARN' || d === 'SELF_WARN') return 'gentle_nudge';
+    return 'observation';
+  } else {
+    if (d === 'ESCALATE') return 'critical';
+    if (d === 'BLOCK' || d === 'REVISE') return 'high';
+    if (d === 'WARN') return 'medium';
+    return 'low';
+  }
 }
 
 @Component({
@@ -31,38 +41,49 @@ export class AlertsComponent implements OnInit, OnDestroy {
   alerts = signal<MockAlert[]>([]);
   isLoading = true;
   totalAlerts = 0;
+  monitoringMode: string = 'child';
 
   private apiService = inject(ApiService);
   private alertService = inject(AlertService);
   private messageService = inject(MessageService);
+  private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
   private alertSub?: Subscription;
 
   ngOnInit() {
+    this.authService.currentUser$.subscribe(user => {
+      if (user && user.monitoring_mode) {
+        this.monitoringMode = user.monitoring_mode;
+      }
+    });
+
     // Load historical alerts from parent-scoped endpoint
     this.apiService.getParentAlerts().subscribe({
       next: (data: any[]) => {
-        const history = data.map(a => ({
-          id: a.id,
-          sent_at: a.created_at,
-          category: (a.primary_class || 'unknown').replace(/_/g, ' '),
-          severity: (a.severity as 'low' | 'medium' | 'high' | 'critical') || mapSeverity(a.decision),
-          is_resolved: false,
-          preview: a.raw_text,
-          decision: (a.decision || '').toUpperCase(),
-          toxicity_score: a.toxicity_score ?? 0,
-          confidence_score: a.confidence_score ?? 0,
-          llm_triggered: a.llm_triggered ?? false,
-          llm_explanation: a.llm_explanation ?? null,
-          language: a.language || 'unknown'
-        }));
+        const history = data.map(a => {
+          const dec = (a.decision || '').toUpperCase();
+          return {
+            id: a.id,
+            sent_at: a.created_at,
+            category: (a.primary_class || 'unknown').replace(/_/g, ' '),
+            severity: (a.severity as AlertSeverity) || mapSeverity(dec, this.monitoringMode),
+            is_resolved: false,
+            preview: a.raw_text,
+            decision: dec === 'SELF_WARN' ? 'REFLECTION' : dec,
+            toxicity_score: a.toxicity_score ?? 0,
+            confidence_score: a.confidence_score ?? 0,
+            llm_triggered: a.llm_triggered ?? false,
+            llm_explanation: a.llm_explanation ?? null,
+            language: a.language || 'unknown'
+          };
+        });
         this.alerts.set(history);
         this.totalAlerts = history.length;
         this.isLoading = false;
         this.messageService.add({
           severity: 'success',
           summary: 'Alerts Synced',
-          detail: 'Your child\'s security alerts are loaded.',
+          detail: this.monitoringMode === 'adult' ? 'Your reflection history is loaded.' : 'Your child\'s security alerts are loaded.',
           life: 3000
         });
 
@@ -78,14 +99,15 @@ export class AlertsComponent implements OnInit, OnDestroy {
     // Listen for real-time WebSocket alerts
     this.alertSub = this.alertService.alerts$.subscribe((alert: WebSocketAlertPayload) => {
       if (alert.type === 'alert') {
+        const dec = (alert.decision || '').toUpperCase();
         const newAlert: MockAlert = {
           id: alert.id,
           sent_at: alert.timestamp,
           category: (alert.primary_class || 'unknown').replace(/_/g, ' '),
-          severity: mapSeverity(alert.decision),
+          severity: mapSeverity(dec, this.monitoringMode),
           is_resolved: false,
           preview: alert.text,
-          decision: (alert.decision || '').toUpperCase(),
+          decision: dec === 'SELF_WARN' ? 'REFLECTION' : dec,
           toxicity_score: alert.m1_score || 0,
           confidence_score: alert.m2_confidence || 0,
           llm_triggered: alert.llm_triggered || false,

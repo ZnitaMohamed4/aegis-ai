@@ -136,5 +136,5 @@ def webhook_chatbot(request):
     return JsonResponse({
         "status": "success",
         "response_length": len(response_text),
-        "safety_escalation": is_critical,
+        "safety_escalation": is_safety_event,
     })

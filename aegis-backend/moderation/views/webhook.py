@@ -409,8 +409,20 @@ def webhook_messages(request):
     print(f"└────────────────────────────────────────────────────────────┘")
 
     t_end = time.time()
-    t_orch = (t_end - t_start) - (t_ml_end - t_ml_start)
-    log_latency('agent_5', int(max(0, t_orch) * 1000))
+    t_orch = int((t_end - t_start) * 1000)
+    
+    # Extract agent latencies from state or fallback to defaults/orchestrator time
+    a1_2_lat = final_state.get("agent_1_2_latency_ms", int((t_ml_end - t_ml_start) * 1000))
+    a3_lat = final_state.get("agent_3_latency_ms", 0)
+    a4_lat = final_state.get("agent_4_latency_ms", 0)
+    a5_lat = final_state.get("agent_5_latency_ms", max(1, t_orch - a1_2_lat - a3_lat - a4_lat))
+
+    log_latency('agent_1', a1_2_lat // 2)
+    log_latency('agent_2', a1_2_lat // 2)
+    if final_state.get("llm_triggered") or final_state.get("shadow_reviewed"):
+        log_latency('agent_3', a3_lat)
+    log_latency('agent_4', a4_lat)
+    log_latency('agent_5', a5_lat)
 
     # 7. Return 200 OK so Evolution API knows we received it
     return JsonResponse({

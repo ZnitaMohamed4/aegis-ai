@@ -32,6 +32,9 @@ def profiler_node(state: ModerationState) -> dict:
     AGENT 4: Profiler 
     Calculates behavioral risk score and updates the Digital Twin profile.
     """
+    import time as _time
+    _t_start = _time.time()
+
     from moderation.models import UserBehaviorProfile, ModerationResult
 
     sender_jid = state["sender_jid"]
@@ -356,7 +359,9 @@ def profiler_node(state: ModerationState) -> dict:
     )
     
     # Update the LangGraph state
+    _t_elapsed = int((_time.time() - _t_start) * 1000)
     return {
         "risk_score": profile.risk_score,
-        "risk_level": profile.risk_level
+        "risk_level": profile.risk_level,
+        "agent_4_latency_ms": _t_elapsed,
     }

@@ -8,8 +8,10 @@
         <i class="pi pi-shield header-icon-behind"></i>
       </div>
       <div>
-        <h1 class="page-title">Digital Citizenship</h1>
-        <p class="page-subtitle">Moments where Aegis helped your child grow as a digital citizen</p>
+        <h1 class="page-title">@if (monitoringMode === 'adult') { Self-Reflection Journey } @else { Digital Citizenship }</h1>
+        <p class="page-subtitle">
+          @if (monitoringMode === 'adult') { Moments where you paused to reflect on your communication } @else { Moments where Aegis helped your child grow as a digital citizen }
+        </p>
       </div>
     </div>
     <a routerLink="/parent/dashboard" class="back-link">
@@ -22,7 +24,13 @@
     <i class="pi pi-lock-open philosophy-icon"></i>
     <div>
       <strong>Privacy-first reporting</strong>
-      <span>You can see what category of message was intercepted and what Aegis told your child — but never the exact words. This preserves trust between you and your child.</span>
+      <span>
+        @if (monitoringMode === 'adult') {
+          This dashboard shows categories and patterns, but hides exact message content to protect your privacy.
+        } @else {
+          You can see what category of message was intercepted and what Aegis told your child — but never the exact words. This preserves trust between you and your child.
+        }
+      </span>
     </div>
   </div>
 
@@ -88,8 +96,16 @@
         <div class="empty-icon-wrap">
           <i class="pi pi-check-circle empty-icon"></i>
         </div>
-        <h3 class="empty-title">All clear — your child is doing well!</h3>
-        <p class="empty-subtitle">No self-moderation events or bot sessions have been recorded. Aegis is monitoring, and your child's digital behavior looks great.</p>
+        <h3 class="empty-title">
+          @if (monitoringMode === 'adult') { Healthy Communication Patterns! } @else { All clear — your child is doing well! }
+        </h3>
+        <p class="empty-subtitle">
+          @if (monitoringMode === 'adult') {
+            No self-reflection events have been recorded. Your communication looks great.
+          } @else {
+            No self-moderation events or bot sessions have been recorded. Aegis is monitoring, and your child's digital behavior looks great.
+          }
+        </p>
       </div>
     }
 
@@ -97,7 +113,9 @@
     @if (timeline.length > 0) {
       <div class="events-section">
         <div class="events-header">
-          <span class="events-title">Growth & Support Timeline</span>
+          <span class="events-title">
+            @if (monitoringMode === 'adult') { Reflection & Wellness Timeline } @else { Growth & Support Timeline }
+          </span>
           <span class="events-count mono">{{ timeline.length }} records</span>
         </div>
         <div class="events-list">
@@ -142,7 +160,7 @@
                   <!-- Parenting Tip -->
                   <button class="tip-toggle" (click)="toggleTip(item.id)">
                     <i class="pi pi-lightbulb tip-icon"></i>
-                    <span>Parenting tip</span>
+                    <span>@if (monitoringMode === 'adult') { Wellness tip } @else { Parenting tip }</span>
                     <i class="pi" [class.pi-chevron-down]="expandedTip !== item.id" [class.pi-chevron-up]="expandedTip === item.id"></i>
                   </button>
                   @if (expandedTip === item.id) {
@@ -170,8 +188,13 @@
                   </div>
 
                   <div class="bot-session-summary">
-                    Child reached out to Aegis Assistant. 
-                    They exchanged <strong class="mono">{{ item.message_count }}</strong> messages during this session.
+                    @if (monitoringMode === 'adult') {
+                      You reached out to the Aegis Assistant. 
+                      You exchanged <strong class="mono">{{ item.message_count }}</strong> messages during this session.
+                    } @else {
+                      Child reached out to Aegis Assistant. 
+                      They exchanged <strong class="mono">{{ item.message_count }}</strong> messages during this session.
+                    }
                   </div>
 
                   @if (item.has_safety_alert && item.threat_intel) {
@@ -203,7 +226,12 @@
                     </div>
                   } @else if (!item.has_safety_alert) {
                     <div class="privacy-note">
-                      <i class="pi pi-lock"></i> Chat logs remain private to preserve child's trust in the Assistant.
+                      <i class="pi pi-lock"></i> 
+                      @if (monitoringMode === 'adult') {
+                        Chat logs remain private.
+                      } @else {
+                        Chat logs remain private to preserve child's trust in the Assistant.
+                      }
                     </div>
                   }
                 </div>

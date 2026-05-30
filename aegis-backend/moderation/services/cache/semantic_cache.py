@@ -39,7 +39,7 @@ def initialize_semantic_cache():
     try:
         logger.info("[SEMANTIC CACHE] Loading Embedding Model...")
         hf_token = os.getenv("HF_TOKEN")
-        embedder = SentenceTransformer('all-MiniLM-L6-v2', token=hf_token)
+        embedder = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2', token=hf_token)
     except Exception as e:
         logger.error(f"[SEMANTIC CACHE] Error loading embedding model: {e}")
         embedder = None
@@ -58,7 +58,7 @@ def initialize_semantic_cache():
         
     _is_initialized = True
 
-SIMILARITY_THRESHOLD = float(os.getenv('AEGIS_SEMANTIC_THRESHOLD', '0.82'))
+SIMILARITY_THRESHOLD = float(os.getenv('AEGIS_SEMANTIC_THRESHOLD', '0.92'))
 
 def search_semantic_cache(text):
     """

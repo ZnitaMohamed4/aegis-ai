@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ApiService } from '@core/services/api.service';
+import { AuthService } from '@core/services/auth.service';
 
 interface CitizenshipEvent {
   type: 'intervention';
@@ -58,6 +59,9 @@ export class DigitalCitizenshipComponent implements OnInit {
   timeline: TimelineItem[] = [];
   summary: CitizenshipSummary | null = null;
   expandedTip: string | null = null;  // ID of the event whose tip is expanded
+  monitoringMode: string = 'child';
+
+  private authService = inject(AuthService);
 
   readonly CATEGORY_ICONS: Record<string, string> = {
     verbal_harassment: 'pi-comment',
@@ -88,6 +92,12 @@ export class DigitalCitizenshipComponent implements OnInit {
   };
 
   ngOnInit() {
+    this.authService.currentUser$.subscribe(user => {
+      if (user && user.monitoring_mode) {
+        this.monitoringMode = user.monitoring_mode;
+      }
+    });
+
     this.apiService.getDigitalCitizenship().subscribe({
       next: (data: any) => {
         this.summary = data.summary;

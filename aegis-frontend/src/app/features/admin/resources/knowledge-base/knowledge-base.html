@@ -56,17 +56,17 @@
         </div>
       </div>
     </div>
-    <div class="stat-card relative overflow-hidden group">
-      <div
-        class="absolute inset-0 bg-gradient-to-br from-[var(--accent)] to-teal-800 opacity-90"
-      ></div>
-      <div class="relative z-10 flex flex-col h-full justify-between">
-        <p class="text-white/80 text-xs font-bold tracking-wider">FAISS INDEX STATUS</p>
+    <div class="stat-card">
+      <div class="flex items-center gap-3">
+        <div class="stat-icon bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+          <i class="pi pi-check-circle"></i>
+        </div>
         <div>
-          <p class="text-white font-bold text-lg leading-tight flex items-center gap-2">
-            <i class="pi pi-check-circle text-emerald-400"></i> Healthy
+          <p class="text-[var(--text-muted)] text-xs font-bold tracking-wider">VECTOR STORE STATUS</p>
+          <p class="text-[var(--text-primary)] text-xl font-bold font-mono leading-none mt-1">
+            Healthy
           </p>
-          <p class="text-white/70 text-[10px] mt-1">
+          <p class="text-[var(--text-muted)] text-[10px] mt-1 font-mono">
             Last update: {{ formatDate(metrics().lastUpdate) }}
           </p>
         </div>
@@ -215,9 +215,7 @@
       <div class="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 flex gap-3">
         <i class="pi pi-info-circle text-blue-500 mt-0.5"></i>
         <p class="text-xs text-[var(--text-primary)] leading-relaxed">
-          <strong>Tip:</strong> These metrics reflect the health of your RAG pipeline. If Context
-          Precision drops, consider reviewing your chunking strategy or adding more specific
-          documents.
+          <strong>Pro Tip:</strong> These metrics reflect the overall health of the RAG pipeline. A decrease in Context Precision generally indicates that the document chunking strategy requires review or that more highly specific source materials must be indexed.
         </p>
       </div>
     </div>

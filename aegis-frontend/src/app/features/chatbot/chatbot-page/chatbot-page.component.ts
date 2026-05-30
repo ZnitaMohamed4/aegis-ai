@@ -1,6 +1,7 @@
-import { Component, signal, effect, inject } from '@angular/core';
+import { Component, signal, effect, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ApiService } from '../../../core/services/api.service';
 
 export interface Source {
   name: string;
@@ -42,40 +43,48 @@ export class ChatbotPageComponent {
   agentModeEnabled = signal(false);
   activeLanguage = signal<'fr' | 'ar' | 'en'>(this.getSystemLanguage());
   
-  // Chat Data
-  conversations = signal<Conversation[]>([
-    {
-      id: '1',
-      title: 'Loi 103-13 et protection des données',
-      updatedAt: new Date(),
-      messages: [
-        {
-          id: '101',
-          role: 'bot',
-          text: 'Bonjour ! Comment puis-je vous aider avec la base de connaissance AEGIS aujourd\'hui ?',
-          timestamp: new Date(Date.now() - 1000000),
-        }
-      ]
-    },
-    {
-      id: '2',
-      title: 'Signalement cyberharcèlement DGSN',
-      updatedAt: new Date(Date.now() - 86400000),
-      messages: []
-    }
-  ]);
-  
-  activeConversationId = signal<string>('1');
+  conversations = signal<Conversation[]>([]);
+  activeConversationId = signal<string>('');
   inputText = '';
   isTyping = signal(false);
 
   activeConversation = signal<Conversation | undefined>(undefined);
+
+  private apiService = inject(ApiService);
 
   constructor() {
     effect(() => {
       const conv = this.conversations().find(c => c.id === this.activeConversationId());
       this.activeConversation.set(conv);
     }, { allowSignalWrites: true });
+  }
+
+  ngOnInit() {
+    this.loadSessions();
+  }
+
+  loadSessions() {
+    this.apiService.getChatSessions().subscribe({
+      next: (sessions) => {
+        // Convert API dates back to Date objects
+        const formattedSessions = sessions.map(s => ({
+          ...s,
+          updatedAt: new Date(s.updatedAt),
+          messages: s.messages.map((m: any) => ({
+            ...m,
+            timestamp: new Date(m.timestamp)
+          }))
+        }));
+        
+        this.conversations.set(formattedSessions);
+        if (formattedSessions.length > 0 && !this.activeConversationId()) {
+          this.activeConversationId.set(formattedSessions[0].id);
+        } else if (formattedSessions.length === 0) {
+          this.newChat();
+        }
+      },
+      error: (err) => console.error('Failed to load chat sessions', err)
+    });
   }
 
   private getSystemLanguage(): 'fr' | 'ar' | 'en' {
@@ -104,6 +113,31 @@ export class ChatbotPageComponent {
     };
     this.conversations.update(prev => [newConv, ...prev]);
     this.activeConversationId.set(newConv.id);
+  }
+
+  deleteConversation(id: string, event?: Event) {
+    if (event) event.stopPropagation();
+    
+    // Optimistically update UI
+    this.conversations.update(prev => prev.filter(c => c.id !== id));
+    
+    // If we deleted the active conversation, switch to the first available one or create new
+    if (this.activeConversationId() === id) {
+      const remaining = this.conversations();
+      if (remaining.length > 0) {
+        this.activeConversationId.set(remaining[0].id);
+      } else {
+        this.activeConversationId.set('');
+        this.newChat();
+      }
+    }
+
+    // Call API (only if it's a real UUID from the backend, not a temporary new chat ID)
+    if (id.length > 10) {
+      this.apiService.deleteChatSession(id).subscribe({
+        error: (err) => console.error('Failed to delete session', err)
+      });
+    }
   }
 
   sendMessage() {
@@ -140,10 +174,9 @@ export class ChatbotPageComponent {
   private simulateResponse(query: string) {
     this.isTyping.set(true);
     
-    const steps: ThinkingStep[] = [
-      { label: 'Recherche dans la base de connaissance...', status: 'running' },
-      { label: 'Croisement avec les textes de loi...', status: 'pending' },
-      { label: 'Génération de la réponse finale...', status: 'pending' }
+    // Default fallback steps
+    let steps: ThinkingStep[] = [
+      { label: 'Recherche dans la base de connaissance...', status: 'running' }
     ];
 
     const botMsgId = crypto.randomUUID();
@@ -157,59 +190,43 @@ export class ChatbotPageComponent {
 
     this.updateMessages(botMsg);
 
-    if (this.agentModeEnabled()) {
-      this.runThinkingCycle(botMsgId, steps);
-    } else {
-      setTimeout(() => {
-        this.finalizeBotMessage(botMsgId);
-      }, 1500);
-    }
-  }
+    const isNewSession = this.activeConversation()?.messages.length === 2; // only the welcome msg + user's new query
+    const sessionId = isNewSession ? undefined : this.activeConversationId();
+    
+    // Call the actual API
+    this.apiService.askChatbot(query, sessionId, this.activeLanguage()).subscribe({
+      next: (res) => {
+        // Only update session ID if it was a new session (and we just got a real UUID)
+        if (isNewSession && res.session_id) {
+            this.conversations.update(prev => prev.map(c => 
+                c.id === this.activeConversationId() ? { ...c, id: res.session_id } : c
+            ));
+            this.activeConversationId.set(res.session_id);
+        }
 
-  private runThinkingCycle(msgId: string, steps: ThinkingStep[]) {
-    setTimeout(() => {
-      this.updateStep(msgId, 0, 'done');
-      this.setStepRunning(msgId, 1);
-      
-      setTimeout(() => {
-        this.updateStep(msgId, 1, 'done');
-        this.setStepRunning(msgId, 2);
-        
-        setTimeout(() => {
-          this.updateStep(msgId, 2, 'done');
-          this.finalizeBotMessage(msgId);
-        }, 1000);
-      }, 1200);
-    }, 1000);
-  }
+        // Use backend thinking steps if provided, else keep default
+        if (res.thinking_steps && this.agentModeEnabled()) {
+           this.conversations.update(prev => prev.map(c => {
+             if (c.id === this.activeConversationId()) {
+               return {
+                 ...c,
+                 messages: c.messages.map(m => m.id === botMsgId ? {...m, thinkingSteps: res.thinking_steps} : m)
+               };
+             }
+             return c;
+           }));
+        }
 
-  private updateStep(msgId: string, stepIdx: number, status: 'pending' | 'running' | 'done') {
-    this.conversations.update(prev => prev.map(c => {
-      if (c.id === this.activeConversationId()) {
-        const msgs = c.messages.map(m => {
-          if (m.id === msgId && m.thinkingSteps) {
-            const newSteps = [...m.thinkingSteps];
-            newSteps[stepIdx] = { ...newSteps[stepIdx], status };
-            return { ...m, thinkingSteps: newSteps };
-          }
-          return m;
-        });
-        return { ...c, messages: msgs };
+        this.finalizeBotMessage(botMsgId, res.answer, res.sources);
+      },
+      error: (err) => {
+        console.error(err);
+        this.finalizeBotMessage(botMsgId, "Erreur de connexion au serveur RAG. Veuillez réessayer.", []);
       }
-      return c;
-    }));
+    });
   }
 
-  private setStepRunning(msgId: string, stepIdx: number) {
-    this.updateStep(msgId, stepIdx, 'running');
-  }
-
-  private finalizeBotMessage(msgId: string) {
-    const responseText = "D'après les documents indexés, la Loi 103-13 (article 503-1-1) définit le harcèlement comme des actes, paroles ou gestes à caractère sexuel ou destinés à harceler la victime.";
-    const sources: Source[] = [
-      { name: 'Loi 103-13.pdf', score: 0.92 },
-      { name: 'Guide_UNICEF_Signalement.docx', score: 0.78 }
-    ];
+  private finalizeBotMessage(msgId: string, responseText: string, sources: Source[]) {
 
     // Start streaming words
     let currentText = '';

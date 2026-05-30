@@ -19,6 +19,7 @@ const PAGE_SIZE = 20;
 })
 export class AlertsTableComponent implements OnInit {
   alerts = input.required<MockAlert[]>();
+  monitoringMode = input<string>('child');
   resolve = output<MockAlert>();
 
   isLoading = signal(true);
@@ -34,8 +35,17 @@ export class AlertsTableComponent implements OnInit {
   skeletonItems = [1, 2, 3, 4, 5];
 
   // No 'low' (ALLOW is not in the alerts list) and no 'ALLOW' in decisions
-  severityFilters = ['all', 'critical', 'high', 'medium'];
-  decisionFilters = ['all', 'BLOCK', 'ESCALATE', 'WARN', 'REVISE'];
+  // No 'low' (ALLOW is not in the alerts list) and no 'ALLOW' in decisions
+  severityFilters = computed(() => {
+    return this.monitoringMode() === 'adult'
+      ? ['all', 'urgent_reflection', 'deep_reflection', 'gentle_nudge', 'observation']
+      : ['all', 'critical', 'high', 'medium'];
+  });
+  decisionFilters = computed(() => {
+    return this.monitoringMode() === 'adult' 
+      ? ['all', 'REFLECTION'] 
+      : ['all', 'BLOCK', 'ESCALATE', 'WARN', 'REVISE'];
+  });
   categoryFilters = [
     { label: 'All', value: 'all' },
     { label: 'Threat', value: 'threat' },
@@ -43,7 +53,11 @@ export class AlertsTableComponent implements OnInit {
     { label: 'Discrimination', value: 'discrimination' },
     { label: 'Verbal', value: 'verbal_harassment' },
   ];
-  statusFilters = ['all', 'open', 'resolved'];
+  statusFilters = computed(() => {
+    return this.monitoringMode() === 'adult'
+      ? ['all', 'pending', 'reflected']
+      : ['all', 'open', 'resolved'];
+  });
 
   filteredAlerts = computed(() => {
     const q = this.searchQuery().toLowerCase();
@@ -56,7 +70,9 @@ export class AlertsTableComponent implements OnInit {
       const matchesSeverity = sev === 'all' || alert.severity === sev;
       const matchesDecision = dec === 'all' || alert.decision === dec;
       const matchesCategory = cat === 'all' || (alert.category || '').replace(/ /g, '_') === cat;
-      const matchesStatus = stat === 'all' || (stat === 'open' && !alert.is_resolved) || (stat === 'resolved' && alert.is_resolved);
+      const matchesStatus = stat === 'all' 
+        || ((stat === 'open' || stat === 'pending') && !alert.is_resolved) 
+        || ((stat === 'resolved' || stat === 'reflected') && alert.is_resolved);
       const matchesSearch = !q
         || alert.preview.toLowerCase().includes(q)
         || (alert.category || '').toLowerCase().includes(q);

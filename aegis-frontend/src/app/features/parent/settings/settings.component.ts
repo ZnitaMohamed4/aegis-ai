@@ -12,7 +12,9 @@ import { PageHeaderComponent } from '@shared/index';
 import { SelectModule } from 'primeng/select';
 import { ToggleSwitchModule } from 'primeng/toggleswitch';
 import { ToastModule } from 'primeng/toast';
-import { MessageService } from 'primeng/api';
+import { MessageService, ConfirmationService } from 'primeng/api';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-parent-settings',
@@ -23,17 +25,20 @@ import { MessageService } from 'primeng/api';
     PageHeaderComponent, 
     SelectModule, 
     ToggleSwitchModule, 
-    ToastModule
+    ToastModule,
+    ConfirmDialogModule
   ],
-  providers: [MessageService],
+  providers: [MessageService, ConfirmationService],
   templateUrl: './settings.html',
   styleUrls: ['./settings.css']
 })
 export class SettingsComponent implements OnInit {
   private themeService = inject(ThemeService);
   private messageService = inject(MessageService);
+  private confirmationService = inject(ConfirmationService);
   private authService = inject(AuthService);
   private apiService = inject(ApiService);
+  private router = inject(Router);
 
   // Theme State
   themePresets = THEME_PRESETS;
@@ -108,6 +113,24 @@ export class SettingsComponent implements OnInit {
     this.parentAccount.update(p => ({ ...p, [key]: value }));
   }
 
+  confirmModeSwitch(mode: string) {
+    if (this.parentAccount().monitoringMode === mode) return;
+    
+    const isAdult = mode === 'adult';
+    this.confirmationService.confirm({
+      header: isAdult ? 'Switch to Digital Wellness?' : 'Switch to Child Protection?',
+      message: isAdult 
+        ? 'You are about to switch to adult self-moderation. AEGIS will stop deleting messages and will instead send you private reflection nudges. This mode is designed for personal growth.'
+        : 'You are about to switch to child protection. AEGIS will actively delete harmful messages and send immediate alerts to your dashboard.',
+      acceptIcon: 'pi pi-check mr-2',
+      rejectIcon: 'pi pi-times mr-2',
+      rejectButtonStyleClass: 'p-button-text',
+      accept: () => {
+        this.updateParentAccount('monitoringMode', mode);
+      }
+    });
+  }
+
   togglePasswordForm() {
     this.showPasswordForm.update(v => !v);
     if (!this.showPasswordForm()) {
@@ -166,6 +189,8 @@ export class SettingsComponent implements OnInit {
           summary: 'Settings Saved', 
           detail: 'Your preferences have been updated successfully.' 
         });
+        // Navigate to dashboard
+        this.router.navigate(['/parent/dashboard']);
       },
       error: () => {
         this.messageService.add({ 

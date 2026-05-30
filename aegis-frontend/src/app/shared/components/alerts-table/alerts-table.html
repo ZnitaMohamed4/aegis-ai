@@ -1,8 +1,14 @@
 <!-- ── Severity Summary Bar ── -->
 <div class="flex flex-wrap items-center gap-2 mb-4 text-xs font-semibold">
-  <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('critical')" [style.background]="getRiskHex('critical') + '18'">Critical: {{ alerts().filter(a => a.severity === 'critical').length }}</span>
-  <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('high')"     [style.background]="getRiskHex('high') + '18'"    >High: {{ alerts().filter(a => a.severity === 'high').length }}</span>
-  <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('medium')"   [style.background]="getRiskHex('medium') + '18'"  >Medium (Warn): {{ alerts().filter(a => a.severity === 'medium').length }}</span>
+  @if (monitoringMode() === 'adult') {
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('urgent_reflection')" [style.background]="getRiskHex('urgent_reflection') + '18'">Urgent Reflection: {{ alerts().filter(a => a.severity === 'urgent_reflection').length }}</span>
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('deep_reflection')"     [style.background]="getRiskHex('deep_reflection') + '18'"    >Deep Reflection: {{ alerts().filter(a => a.severity === 'deep_reflection').length }}</span>
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('gentle_nudge')"   [style.background]="getRiskHex('gentle_nudge') + '18'"  >Gentle Nudge: {{ alerts().filter(a => a.severity === 'gentle_nudge').length }}</span>
+  } @else {
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('critical')" [style.background]="getRiskHex('critical') + '18'">Critical: {{ alerts().filter(a => a.severity === 'critical').length }}</span>
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('high')"     [style.background]="getRiskHex('high') + '18'"    >High: {{ alerts().filter(a => a.severity === 'high').length }}</span>
+    <span class="px-2.5 py-1 rounded-full" [style.color]="getRiskHex('medium')"   [style.background]="getRiskHex('medium') + '18'"  >Medium (Warn): {{ alerts().filter(a => a.severity === 'medium').length }}</span>
+  }
   <span class="ml-auto text-[var(--text-muted)]">{{ alerts().length }} total alerts</span>
 </div>
 
@@ -22,7 +28,7 @@
 
   <!-- Severity Filter -->
   <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
-    @for (s of severityFilters; track s) {
+    @for (s of severityFilters(); track s) {
       <button
         class="px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all"
         [class.active-filter]="selectedSeverity() === s"
@@ -35,7 +41,7 @@
 
   <!-- Decision Filter -->
   <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
-    @for (d of decisionFilters; track d) {
+    @for (d of decisionFilters(); track d) {
       <button
         class="px-3 py-1.5 rounded-md text-xs font-semibold transition-all"
         [class.active-filter]="selectedDecision() === d"
@@ -48,7 +54,7 @@
 
   <!-- Status Filter -->
   <div class="flex items-center gap-1 bg-[var(--bg-surface)] border border-[var(--border)] rounded-lg p-1">
-    @for (st of statusFilters; track st) {
+    @for (st of statusFilters(); track st) {
       <button
         class="px-3 py-1.5 rounded-md text-xs font-semibold capitalize transition-all"
         [class.active-filter]="selectedStatus() === st"
@@ -189,9 +195,9 @@
           <!-- Status -->
           <td class="px-4 py-3">
             @if (alert.is_resolved) {
-              <span class="text-xs font-semibold text-[var(--low)] bg-green-500/10 px-2 py-0.5 rounded-full">Resolved</span>
+              <span class="text-xs font-semibold text-[var(--low)] bg-green-500/10 px-2 py-0.5 rounded-full">@if (monitoringMode() === 'adult') { Reflected } @else { Resolved }</span>
             } @else {
-              <span class="text-xs font-semibold text-[var(--medium)] bg-yellow-500/10 px-2 py-0.5 rounded-full">Open</span>
+              <span class="text-xs font-semibold text-[var(--medium)] bg-yellow-500/10 px-2 py-0.5 rounded-full">@if (monitoringMode() === 'adult') { Pending } @else { Open }</span>
             }
           </td>
 
@@ -201,7 +207,7 @@
               <button
                 class="text-xs text-[var(--accent)] hover:underline font-semibold"
                 (click)="markResolved(alert)">
-                Resolve
+                @if (monitoringMode() === 'adult') { Mark Reflected } @else { Resolve }
               </button>
             }
           </td>
@@ -231,10 +237,14 @@
 @if (alerts().length === 0) {
   <div class="hidden sm:flex bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl overflow-hidden py-24 flex-col items-center justify-center text-center px-4">
     <div class="w-16 h-16 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center mb-4">
-      <i class="pi pi-bell text-2xl text-[var(--accent)]"></i>
+      <i class="pi" [class.pi-bell]="monitoringMode() !== 'adult'" [class.pi-heart]="monitoringMode() === 'adult'" class="text-2xl text-[var(--accent)]"></i>
     </div>
-    <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">No alerts yet</h3>
-    <p class="text-sm text-[var(--text-muted)] max-w-md">When Aegis AI detects a potential issue requiring your attention, it will appear here for your review.</p>
+    <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">
+      @if (monitoringMode() === 'adult') { No reflection events } @else { No alerts yet }
+    </h3>
+    <p class="text-sm text-[var(--text-muted)] max-w-md">
+      @if (monitoringMode() === 'adult') { When Aegis AI detects a potential area for personal growth, it will appear here. } @else { When Aegis AI detects a potential issue requiring your attention, it will appear here for your review. }
+    </p>
   </div>
 }
 
@@ -333,10 +343,14 @@
 @if (alerts().length === 0) {
   <div class="sm:hidden flex flex-col items-center justify-center text-center py-16 px-4 bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl mt-3">
     <div class="w-14 h-14 rounded-2xl bg-[var(--accent)]/10 flex items-center justify-center mb-4">
-      <i class="pi pi-bell text-2xl text-[var(--accent)]"></i>
+      <i class="pi" [class.pi-bell]="monitoringMode() !== 'adult'" [class.pi-heart]="monitoringMode() === 'adult'" class="text-2xl text-[var(--accent)]"></i>
     </div>
-    <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">No alerts yet</h3>
-    <p class="text-sm text-[var(--text-muted)]">When Aegis AI detects a potential issue, it will appear here.</p>
+    <h3 class="text-lg font-bold text-[var(--text-primary)] mb-2">
+      @if (monitoringMode() === 'adult') { No reflection events } @else { No alerts yet }
+    </h3>
+    <p class="text-sm text-[var(--text-muted)]">
+      @if (monitoringMode() === 'adult') { When Aegis AI detects a potential area for personal growth, it will appear here. } @else { When Aegis AI detects a potential issue, it will appear here. }
+    </p>
   </div>
 }
 
@@ -355,7 +369,7 @@
         <span class="text-sm font-bold capitalize px-3 py-1 rounded-full"
               [style.color]="getRiskHex(selectedAlert()!.severity)"
               [style.background]="getRiskHex(selectedAlert()!.severity) + '22'">
-          {{ selectedAlert()!.severity }} severity
+          @if (monitoringMode() === 'adult') { {{ selectedAlert()!.severity.replace('_', ' ') }} } @else { {{ selectedAlert()!.severity }} severity }
         </span>
         <span class="text-xs font-bold font-mono px-2 py-1 rounded"
               [ngClass]="getDecisionClass(selectedAlert()!.decision)">
@@ -437,11 +451,11 @@
         <button
           class="w-full py-2.5 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 transition-opacity"
           (click)="markResolved(selectedAlert()!)">
-          Mark as Resolved
+          @if (monitoringMode() === 'adult') { Mark as Reflected } @else { Mark as Resolved }
         </button>
       } @else {
         <div class="w-full py-2.5 rounded-lg bg-green-500/10 text-[var(--low)] text-sm font-semibold text-center">
-          ✓ Resolved
+          ✓ @if (monitoringMode() === 'adult') { Reflected } @else { Resolved }
         </div>
       }
 

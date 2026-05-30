@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PageHeaderComponent } from '@shared/index';
 import { TableModule } from 'primeng/table';
-import { MOCK_INDEXED_DOCS, MOCK_RAG_METRICS, IndexedDocument } from '../resources.data';
+import { MOCK_RAG_METRICS, IndexedDocument } from '../resources.data';
+import { ApiService } from '../../../../core/services/api.service';
 
 @Component({
   selector: 'app-knowledge-base',
@@ -13,11 +14,42 @@ import { MOCK_INDEXED_DOCS, MOCK_RAG_METRICS, IndexedDocument } from '../resourc
   styleUrl: './knowledge-base.css',
 })
 export class KnowledgeBaseComponent {
-  docs = signal<IndexedDocument[]>(MOCK_INDEXED_DOCS);
+  docs = signal<IndexedDocument[]>([]);
   metrics = signal(MOCK_RAG_METRICS);
 
+  constructor(private apiService: ApiService) {}
+
+  ngOnInit() {
+    this.loadData();
+  }
+
+  loadData() {
+    this.apiService.getKnowledgeDocuments().subscribe({
+      next: (docs) => {
+        // Parse dates
+        this.docs.set(docs.map(d => ({...d, dateAdded: new Date(d.dateAdded)})));
+      },
+      error: (err) => console.error('Failed to load docs', err)
+    });
+
+    this.apiService.getKnowledgeStats().subscribe({
+      next: (stats) => {
+        this.metrics.set({
+          ...stats,
+          lastUpdate: new Date(stats.lastUpdate || new Date())
+        });
+      },
+      error: (err) => console.error('Failed to load stats', err)
+    });
+  }
+
   deleteDoc(id: string) {
-    this.docs.update((current) => current.filter((d) => d.id !== id));
+    this.apiService.deleteKnowledgeDocument(id).subscribe({
+      next: () => {
+        this.docs.update((current) => current.filter((d) => d.id !== id));
+      },
+      error: (err) => console.error('Failed to delete doc', err)
+    });
   }
 
   // Helper formatting methods

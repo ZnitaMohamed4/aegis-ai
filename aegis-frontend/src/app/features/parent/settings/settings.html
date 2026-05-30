@@ -1,4 +1,5 @@
 <p-toast position="top-right" />
+<p-confirmDialog />
 <div class="settings-page p-4 sm:p-6 w-full">
 	<app-page-header
 		title="Surveillance Settings"
@@ -134,7 +135,7 @@
 						[class.border-primary]="parentAccount().monitoringMode === 'child'"
 						[class.border-transparent]="parentAccount().monitoringMode !== 'child'"
 						style="background: var(--surface-b);"
-						(click)="updateParentAccount('monitoringMode', 'child')">
+						(click)="confirmModeSwitch('child')">
 						<div class="flex items-center gap-3 mb-2">
 							<i class="pi pi-shield text-2xl" [class.text-primary]="parentAccount().monitoringMode === 'child'"></i>
 							<h3 class="font-bold text-lg">Child Protection</h3>
@@ -147,7 +148,7 @@
 						[class.border-primary]="parentAccount().monitoringMode === 'adult'"
 						[class.border-transparent]="parentAccount().monitoringMode !== 'adult'"
 						style="background: var(--surface-b);"
-						(click)="updateParentAccount('monitoringMode', 'adult')">
+						(click)="confirmModeSwitch('adult')">
 						<div class="flex items-center gap-3 mb-2">
 							<i class="pi pi-heart text-2xl" [class.text-primary]="parentAccount().monitoringMode === 'adult'"></i>
 							<h3 class="font-bold text-lg">Digital Wellness</h3>
@@ -191,7 +192,7 @@
 
 		<section class="panel section-card">
 			<header class="section-header">
-				<span class="section-label">PARENT ACCOUNT</span>
+				<span class="section-label">@if (parentAccount().monitoringMode === 'adult') { YOUR ACCOUNT } @else { PARENT ACCOUNT }</span>
 				<h2 class="section-title">Profile & Access</h2>
 			</header>
 
