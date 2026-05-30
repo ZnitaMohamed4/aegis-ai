@@ -27,7 +27,6 @@ import { WhatsappJidPipe } from '@shared/pipes/whatsapp-jid.pipe';
   styleUrl: './dashboard.css'
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  @ViewChildren(UIChart) charts!: QueryList<UIChart>;
 
   stats: any[] | null = null;
   latencies: any = null;
@@ -238,10 +237,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.languageChartData = { ...this.languageChartData, labels, datasets };
       }
 
-      // Refresh all chart instances smoothly!
-      if (this.charts) {
-        this.charts.forEach(chart => chart.refresh());
-      }
+
 
       // Update Top At-Risk Children dynamically!
       if (this.atRiskChildren) {

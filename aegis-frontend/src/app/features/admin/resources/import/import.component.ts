@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { PageHeaderComponent } from '@shared/index';
 import { SelectModule } from 'primeng/select';
 import { DOCUMENT_CATEGORIES, UploadTask } from '../resources.data';
+import { ApiService } from '../../../../core/services/api.service';
 
 @Component({
   selector: 'app-import',
@@ -14,6 +15,8 @@ import { DOCUMENT_CATEGORIES, UploadTask } from '../resources.data';
 })
 export class ImportComponent {
   categories = DOCUMENT_CATEGORIES;
+  
+  constructor(private apiService: ApiService) {}
 
   selectedLang = signal<'fr' | 'ar' | 'en'>('fr');
   selectedCategory = signal<string>(this.categories[0].value);
@@ -81,12 +84,20 @@ export class ImportComponent {
     setTimeout(() => {
       updateTask({ progress: 80, status: 'embedding' });
     }, 2800);
-    setTimeout(() => {
-      updateTask({ progress: 100, status: 'indexing' });
-    }, 4000);
-    setTimeout(() => {
-      updateTask({ status: 'completed' });
-    }, 4500);
+    
+    // Call real API
+    this.apiService.uploadKnowledgeDocument(task.file, task.language, task.category).subscribe({
+      next: (res) => {
+        updateTask({ progress: 100, status: 'indexing' });
+        setTimeout(() => {
+          updateTask({ status: 'completed' });
+        }, 500);
+      },
+      error: (err) => {
+        console.error(err);
+        updateTask({ progress: 0, status: 'failed' });
+      }
+    });
   }
 
   formatSize(bytes: number) {

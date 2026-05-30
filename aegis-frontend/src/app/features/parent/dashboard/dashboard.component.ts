@@ -28,7 +28,6 @@ import { WhatsappJidPipe } from '@shared/pipes/whatsapp-jid.pipe';
   styleUrl: './dashboard.css'
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  @ViewChildren(UIChart) charts!: QueryList<UIChart>;
 
   // Child info from backend
   childInfo: ParentChildInfo | null = null;
@@ -223,10 +222,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.hourlyChartData = { ...this.hourlyChartData, datasets };
       }
 
-      // Refresh charts
-      if (this.charts) {
-        this.charts.forEach(chart => chart.refresh());
-      }
+
 
       // Show toast for harmful alerts
       if (alert.type === 'alert' && alert.decision.toUpperCase() !== 'ALLOW') {

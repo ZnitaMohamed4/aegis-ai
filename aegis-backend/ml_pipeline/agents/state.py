@@ -72,8 +72,15 @@ class ModerationState(TypedDict):
 
     risk_score: Optional[float]
     risk_level: Optional[str]
+    detected_language: Optional[str]
 
     decision: Optional[str] # ALLOW, WARN, BLOCK, ESCALATE, REVISE, HUMAN_REVIEW
+
+    # PER-AGENT LATENCY (ms) — for dashboard metrics
+    agent_1_2_latency_ms: Optional[int]
+    agent_3_latency_ms: Optional[int]
+    agent_4_latency_ms: Optional[int]
+    agent_5_latency_ms: Optional[int]
 
     # AGENT 5: ENFORCER outputs
     moderation_id: Optional[str]        # ID of saved ModerationResult

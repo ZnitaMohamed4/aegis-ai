@@ -27,6 +27,18 @@ urlpatterns = [
     # 6. Activity Feed (ALL decisions including ALLOW — for dashboard persistence)
     path('activity/', views.activity_feed, name='activity-feed'),
 
+    # RAG Chatbot
+    path('chatbot/ask/', views.ask_chatbot, name='chatbot-ask'),
+    path('chatbot/sessions/', views.get_chat_sessions, name='chatbot-sessions'),
+    path('chatbot/sessions/<str:session_id>/', views.get_chat_session_detail, name='chatbot-session-detail'),
+    path('chatbot/sessions/<str:session_id>/delete/', views.delete_chat_session, name='chatbot-session-delete'),
+
+    # Knowledge Base
+    path('knowledge/upload/', views.upload_knowledge_document, name='knowledge-upload'),
+    path('knowledge/documents/', views.get_knowledge_documents, name='knowledge-documents'),
+    path('knowledge/documents/<str:doc_id>/', views.delete_knowledge_document, name='knowledge-document-delete'),
+    path('knowledge/stats/', views.get_rag_stats, name='knowledge-stats'),
+
     # Admin Users endpoint
     path('admin/users/', views.admin_user_list, name='admin-user-list'),
     path('admin/users/<str:user_id>/', views.admin_user_detail, name='admin-user-detail'),

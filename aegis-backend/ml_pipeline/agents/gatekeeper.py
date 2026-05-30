@@ -22,6 +22,9 @@ def ml_pipeline_node(state: ModerationState) -> dict:
     """
     AGENT 1 & 2: Gatekeeper + Classifier
     """
+    import time as _time
+    _t_start = _time.time()
+
     raw_text = state["raw_text"]
 
     # Resolve the correct pipeline at runtime (respects AEGIS_STUB_MODE).
@@ -90,6 +93,8 @@ def ml_pipeline_node(state: ModerationState) -> dict:
         audit_reason = "image-flagged-violence"
         logger.info("[GATEKEEPER] 📸 Image violence override → BLOCK / violent_image")
 
+    _t_elapsed = int((_time.time() - _t_start) * 1000)
+
     return {
         "normalized_text": result.normalized_text,
         "m1_score": result.m1_score,
@@ -104,4 +109,5 @@ def ml_pipeline_node(state: ModerationState) -> dict:
         "ml_corrected": False,
         "escalation_risk": escalation_risk,
         "escalation_reason": escalation_reason,
+        "agent_1_2_latency_ms": _t_elapsed,
     }

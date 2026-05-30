@@ -87,6 +87,9 @@ class _EnforcementContext:
 
 def enforcer_node(state: ModerationState) -> dict:
     """AGENT 5: The Enforcer — routes to the appropriate enforcement strategy."""
+    import time as _time
+    _t_start = _time.time()
+
     # Lazy imports to avoid circular dependencies at module load time
     from moderation.models import (
         ModerationResult, SecurityAlert, HarassmentCategory,
@@ -256,10 +259,13 @@ def enforcer_node(state: ModerationState) -> dict:
         f"moderation_id={ctx.moderation.id}"
     )
 
+    _t_elapsed = int((_time.time() - _t_start) * 1000)
+
     return {
         "moderation_id": str(ctx.moderation.id),
         "alert_severity": ctx.alert_severity,
         "enforcement_actions": ctx.enforcement_actions,
+        "agent_5_latency_ms": _t_elapsed,
     }
 
 
@@ -320,11 +326,12 @@ def _enforce_adult_self_moderation(ctx):
 
 
 def _enforce_child_self_moderation(ctx):
-    """Child's own toxic message: delete + educational DM."""
+    """Child's own toxic message: delete + educational DM + constructive parent alert."""
     from moderation.models import SecurityAlert, SelfModerationEvent
     from moderation.services.formatters import SEVERITY_MAP
     from moderation.evolution_api import (
         delete_message_from_whatsapp, send_educational_dm,
+        send_constructive_parent_alert,
     )
 
     ctx.alert_severity = SEVERITY_MAP.get(ctx.decision, 'low')
@@ -368,8 +375,24 @@ def _enforce_child_self_moderation(ctx):
             "Bot instance or child JID missing."
         )
 
-    # Step 3: Record the SelfModerationEvent
+    # Step 3: Send constructive parent notification ("Growth Moment")
     parent_notified = False
+    if ctx.child and ctx.child.parent:
+        parent_phone = ctx.child.parent.user.phone_number
+        if parent_phone:
+            try:
+                send_constructive_parent_alert(
+                    ctx.instance_name, parent_phone,
+                    ctx.child.full_name, ctx.primary_class,
+                )
+                parent_notified = True
+                ctx.enforcement_actions.append("constructive_parent_alert")
+            except Exception as e:
+                logger.warning(
+                    f"[AGENT 5: ENFORCER] Constructive parent alert failed: {e}"
+                )
+
+    # Step 4: Record the SelfModerationEvent
     try:
         SelfModerationEvent.objects.create(
             moderation_result=ctx.moderation,
@@ -486,6 +509,7 @@ def _enforce_standard(ctx):
             warning_msg_key_id = warning_result
 
         # PARENT ALERT: Notify parent on critical escalations or high-toxicity WARNs
+        parent_phone = None
         if ctx.decision in ('ESCALATE', 'BLOCK', 'WARN') and ctx.child and ctx.child.parent:
             alert_threshold = getattr(ctx.child.parent, 'alert_threshold', 0.65)
             # BLOCK/ESCALATE always notify. WARN only notifies if toxicity >= threshold.

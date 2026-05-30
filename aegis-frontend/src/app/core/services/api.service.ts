@@ -140,6 +140,16 @@ export class ApiService {
     return this.http.delete<any>(`${this.BASE_URL}/admin/users/${userId}/`);
   }
 
+  /** Toggles parent user status (active/inactive). */
+  toggleUserStatus(userId: string, isActive: boolean): Observable<any> {
+    return this.http.put<any>(`${this.BASE_URL}/admin/users/${userId}/`, { is_active: isActive });
+  }
+
+  /** Toggles child monitoring status. */
+  toggleMonitoringStatus(userId: string, isMonitored: boolean): Observable<any> {
+    return this.http.put<any>(`${this.BASE_URL}/admin/users/${userId}/`, { is_monitored: isMonitored });
+  }
+
   /** Fetches all conversations across the entire platform. */
   getAdminConversations(): Observable<{contacts: any[], messages: Record<string, any[]>}> {
     return this.http.get<{contacts: any[], messages: Record<string, any[]>}>(`${this.BASE_URL}/admin/conversations/`);
@@ -246,5 +256,53 @@ export class ApiService {
   /** Fetches forensic evidence export data for legal documentation. */
   getForensicEvidence(days: number = 30): Observable<any> {
     return this.http.get<any>(`${this.BASE_URL}/parent/export-evidence/?days=${days}`);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // RAG CHATBOT ENDPOINTS
+  // ════════════════════════════════════════════════════════════════
+
+  askChatbot(message: string, sessionId?: string, language?: string): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/chatbot/ask/`, {
+      message,
+      session_id: sessionId,
+      language
+    });
+  }
+
+  getChatSessions(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.BASE_URL}/chatbot/sessions/`);
+  }
+
+  getChatSessionDetail(sessionId: string): Observable<any[]> {
+    return this.http.get<any[]>(`${this.BASE_URL}/chatbot/sessions/${sessionId}/`);
+  }
+
+  deleteChatSession(sessionId: string): Observable<any> {
+    return this.http.delete<any>(`${this.BASE_URL}/chatbot/sessions/${sessionId}/delete/`);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // RAG KNOWLEDGE BASE ENDPOINTS
+  // ════════════════════════════════════════════════════════════════
+
+  uploadKnowledgeDocument(file: File, language: string, category: string): Observable<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('language', language);
+    formData.append('category', category);
+    return this.http.post<any>(`${this.BASE_URL}/knowledge/upload/`, formData);
+  }
+
+  getKnowledgeDocuments(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.BASE_URL}/knowledge/documents/`);
+  }
+
+  deleteKnowledgeDocument(docId: string): Observable<any> {
+    return this.http.delete<any>(`${this.BASE_URL}/knowledge/documents/${docId}/`);
+  }
+
+  getKnowledgeStats(): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/knowledge/stats/`);
   }
 }

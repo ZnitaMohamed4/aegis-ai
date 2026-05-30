@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
+import { ApiService } from '../../../core/services/api.service';
 
 export interface ChatMessage {
   id: string;
@@ -22,6 +23,9 @@ export interface ChatMessage {
 export class ChatbotWidgetComponent implements OnDestroy {
   private router = inject(Router);
   private elRef = inject(ElementRef);
+  private apiService = inject(ApiService);
+
+  sessionId?: string;
 
   isOpen = signal(false);
   showPulse = signal(true);
@@ -144,40 +148,53 @@ export class ChatbotWidgetComponent implements OnDestroy {
     const typingId = crypto.randomUUID();
     this.messages.update((m) => [...m, { id: typingId, role: 'bot', text: '', isTyping: true }]);
 
-    // Final response content
-    const fullText = "D'après la loi 103-13 et le guide UNICEF, le cyberharcèlement est défini comme tout comportement répété portant atteinte à la dignité d'un mineur via des moyens numériques.";
-    const sources = ['Loi 103-13', 'Guide UNICEF'];
-
-    setTimeout(() => {
-      // Remove typing indicator and add a placeholder bot message
-      const botMsgId = crypto.randomUUID();
-      this.messages.update((m) => [
-        ...m.filter((msg) => msg.id !== typingId),
-        { id: botMsgId, role: 'bot', text: '', sources: [] },
-      ]);
-      this.isTyping.set(false);
-
-      // Start streaming characters
-      let currentText = '';
-      const words = fullText.split(' ');
-      let i = 0;
-
-      const interval = setInterval(() => {
-        if (i < words.length) {
-          currentText += (i === 0 ? '' : ' ') + words[i];
-          this.updateBotMessage(botMsgId, currentText);
-          this.scrollToBottom();
-          i++;
-        } else {
-          clearInterval(interval);
-          // Add sources at the end
-          this.updateBotMessage(botMsgId, currentText, sources);
-          this.scrollToBottom();
+    this.apiService.askChatbot(text, this.sessionId, this.chatLanguage()).subscribe({
+      next: (res) => {
+        if (!this.sessionId && res.session_id) {
+          this.sessionId = res.session_id;
         }
-      }, 40);
-    }, 1000);
+
+        const fullText = res.answer;
+        const sources = res.sources.map((s: any) => s.name);
+
+        this.startStreamingResponse(typingId, fullText, sources);
+      },
+      error: (err) => {
+        console.error(err);
+        this.startStreamingResponse(typingId, "Erreur de connexion au serveur RAG. Veuillez réessayer.", []);
+      }
+    });
 
     this.scrollToBottom();
+  }
+
+  private startStreamingResponse(typingId: string, fullText: string, sources: string[]) {
+    // Remove typing indicator and add a placeholder bot message
+    const botMsgId = crypto.randomUUID();
+    this.messages.update((m) => [
+      ...m.filter((msg) => msg.id !== typingId),
+      { id: botMsgId, role: 'bot', text: '', sources: [] },
+    ]);
+    this.isTyping.set(false);
+
+    // Start streaming characters
+    let currentText = '';
+    const words = fullText.split(' ');
+    let i = 0;
+
+    const interval = setInterval(() => {
+      if (i < words.length) {
+        currentText += (i === 0 ? '' : ' ') + words[i];
+        this.updateBotMessage(botMsgId, currentText);
+        this.scrollToBottom();
+        i++;
+      } else {
+        clearInterval(interval);
+        // Add sources at the end
+        this.updateBotMessage(botMsgId, currentText, sources);
+        this.scrollToBottom();
+      }
+    }, 40);
   }
 
   private updateBotMessage(id: string, text: string, sources?: string[]) {

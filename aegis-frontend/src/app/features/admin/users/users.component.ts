@@ -201,20 +201,44 @@ export class UsersComponent implements OnInit {
   }
 
   toggleMonitoring(user: ParentUser) {
-    this.messageService.add({
-      severity: 'info',
-      summary: 'Not Available Yet',
-      detail: 'Monitoring toggle requires a backend endpoint that is under development.',
-      life: 3000
+    const newStatus = !user.monitoring_active;
+    this.apiService.toggleMonitoringStatus(user.id, newStatus).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Monitoring Updated',
+          detail: `Monitoring has been ${newStatus ? 'resumed' : 'paused'} for ${user.linked_child?.identifier || 'this child'}.`
+        });
+        this.ngOnInit(); // Refresh list
+      },
+      error: (err) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Update Failed',
+          detail: err.error?.error || 'Could not update monitoring status.'
+        });
+      }
     });
   }
 
   toggleStatus(user: ParentUser) {
-    this.messageService.add({
-      severity: 'info',
-      summary: 'Not Available Yet',
-      detail: 'Account status toggle requires a backend endpoint that is under development.',
-      life: 3000
+    const newStatus = user.status === 'active' ? false : true;
+    this.apiService.toggleUserStatus(user.id, newStatus).subscribe({
+      next: () => {
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Account Status Updated',
+          detail: `${user.full_name}'s account is now ${newStatus ? 'active' : 'inactive'}.`
+        });
+        this.ngOnInit(); // Refresh list
+      },
+      error: (err) => {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Update Failed',
+          detail: err.error?.error || 'Could not update account status.'
+        });
+      }
     });
   }
 
