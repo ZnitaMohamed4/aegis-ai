@@ -12,15 +12,7 @@ Extracted during Phase 2 audit refactoring (2026-04-21).
 # ── Severity Mapping ─────────────────────────────────────────────────
 # Maps AI decision codes to human-readable severity labels for the UI.
 
-SEVERITY_MAP = {
-    'WARN': 'medium',
-    'REVISE': 'high',
-    'BLOCK': 'high',
-    'ESCALATE': 'critical',
-    'HUMAN_REVIEW': 'high',
-    'EDUCATE': 'low',      # Self-moderation — educational, not punitive
-    'ALLOW': 'none',
-}
+from moderation.constants import SEVERITY_MAP
 
 
 def get_severity(decision: str, alert_obj=None) -> str:
