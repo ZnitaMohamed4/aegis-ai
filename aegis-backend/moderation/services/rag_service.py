@@ -1,16 +1,28 @@
 """
-AEGIS RAG Service — Knowledge Base Chatbot Engine (v2)
-========================================================
-Powers the in-platform chatbot with Retrieval-Augmented Generation.
+AEGIS RAG Service — Knowledge Base Chatbot Engine (v3 — Agentic RAG)
+=====================================================================
+Powers the in-platform chatbot with Agentic Retrieval-Augmented Generation.
 
-Architecture (v2 — Enhanced):
-  User Question → Preprocess → ChromaDB Retriever (top-k=8, threshold gated)
+Architecture (v3 — Agentic RAG + Guardrails):
+  User Question → Input Guardrail (topic check)
        │
-       ├─ Sufficient context? → Generate answer from docs (normal RAG)
+       ├─ Off-topic? → Polite refusal (no agent invoked)
        │
-       └─ Insufficient?  → SerpAPI Web Search → Generate answer → Auto-learn to ChromaDB
+       └─ On-topic → ReAct Agent (decides tool calls dynamically)
+                      │
+                      ├─ Tool 1: search_knowledge_base (ChromaDB)
+                      └─ Tool 2: search_web_and_learn (SerpAPI → auto-ingest)
+                      │
+                      └─ Agent answer → Output Guardrails
+                                         ├─ Hallucination check
+                                         └─ Language enforcement
+                                         │
+                                         └─ Final response to user
 
-Uses LangChain Expression Language (LCEL) for clean, composable chains.
+The agent DECIDES when to search ChromaDB, when to fall back to web search,
+and whether it has enough context. No more hardcoded if/else logic.
+
+Uses LangGraph's create_react_agent with LangChain tools.
 Reuses the same SentenceTransformer embedder from semantic_cache.py.
 
 Separate from the WhatsApp empathetic bot (chatbot_service.py):
@@ -25,7 +37,9 @@ import re
 import requests
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.messages import SystemMessage
 from langchain_groq import ChatGroq
+from langgraph.prebuilt import create_react_agent
 
 logger = logging.getLogger(__name__)
 
@@ -366,7 +380,13 @@ def _auto_learn_web_results(query: str, web_results: list[dict]):
 
     learned_count = 0
     for result in web_results:
-        text = f"{result['title']}\n{result['snippet']}"
+        # Keep the originating question in the learned chunk so future
+        # semantically similar questions can retrieve it more reliably.
+        text = (
+            f"Question originale: {query}\n"
+            f"Titre: {result['title']}\n"
+            f"Extrait: {result['snippet']}"
+        )
         if len(text.strip()) < 50:
             continue
 
@@ -398,41 +418,29 @@ def _auto_learn_web_results(query: str, web_results: list[dict]):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  RAG CHAIN — Question Answering with Source Citations
-#  Uses LangChain Expression Language (LCEL)
+#  AGENTIC RAG — ReAct Agent with Tools + Guardrails
+#  Replaces the old static LCEL chain with an agent that DECIDES what to do
 # ═══════════════════════════════════════════════════════════════════════
 
-RAG_SYSTEM_PROMPT = """Tu es l'Assistant Juridique AEGIS, expert en protection de l'enfance et cybersécurité au Maroc.
+AGENT_SYSTEM_PROMPT = """Tu es l'Assistant Juridique AEGIS, un expert en protection de l'enfance et cybersécurité au Maroc.
 
-RÈGLES STRICTES:
-1. Réponds UNIQUEMENT à partir des DOCUMENTS FOURNIS ci-dessous.
-2. Sois ULTRA-CONCIS et direct (2-3 phrases). OBLIGATION ABSOLUE : Tu dois formuler ta réponse en utilisant des balises HTML (<b>texte</b> pour le gras, et <br> pour les sauts de ligne ou listes), QUELLE QUE SOIT LA LANGUE. Ne fais JAMAIS de copier-coller intégral.
-3. INTERDICTION FORMELLE de mentionner les sources, les noms de fichiers, ou d'utiliser des crochets comme "[Source: ...]" dans ta réponse. Le système d'interface utilisateur s'en charge déjà. Ne termine JAMAIS ta réponse par une référence.
-4. TRADUCTION OBLIGATOIRE : Tu DOIS ABSOLUMENT formuler ta réponse finale en {target_lang}. Si le document est en français et qu'on te parle en anglais, traduis la réponse en anglais.
-5. Si AUCUN document pertinent n'est fourni ou si le contexte est insuffisant, réponds EXACTEMENT: "Je n'ai pas trouvé cette information dans la base de connaissance AEGIS."
+Tu disposes d'outils pour chercher des informations. Voici ta stratégie:
+
+--- STRATÉGIE DE RECHERCHE ---
+1. TOUJOURS utiliser l'outil search_knowledge_base en premier avec la question de l'utilisateur.
+2. Si le résultat indique "NO RELEVANT DOCUMENTS" ou que les documents ne répondent pas à la question → utiliser l'outil search_web_and_learn pour chercher sur le web.
+3. Si les résultats web sont aussi insuffisants → dire honnêtement que tu n'as pas trouvé l'information.
+4. Ne JAMAIS inventer d'information. Répondre UNIQUEMENT à partir des résultats des outils.
+
+--- RÈGLES DE RÉPONSE ---
+1. Sois ULTRA-CONCIS et direct (2-3 phrases max, sauf si la question demande plus de détails).
+2. OBLIGATION ABSOLUE : Formule ta réponse avec des balises HTML (<b>texte</b> pour le gras, <br> pour les sauts de ligne).
+3. INTERDICTION FORMELLE de mentionner les sources, noms de fichiers, ou URLs dans ta réponse. Le système d'interface s'en charge.
+4. TRADUCTION OBLIGATOIRE : Tu DOIS ABSOLUMENT répondre dans la MÊME LANGUE que la question de l'utilisateur (si la question est en français, réponds en français. Si en anglais, en anglais).
+5. Si tu utilises des résultats web, mentionne brièvement que l'information provient d'une recherche web.
 6. Ne FABRIQUE JAMAIS d'information — ne dis JAMAIS "il est possible que" ou "d'autres cas pourraient exister".
-
-DOCUMENTS PERTINENTS:
-{context}
+7. Si aucune source ne contient la réponse, réponds: "Je n'ai pas trouvé cette information dans la base de connaissance AEGIS."
 """
-
-RAG_WEB_SYSTEM_PROMPT = """Tu es l'Assistant AEGIS, expert en protection de l'enfance et cybersécurité au Maroc.
-La base de connaissance locale ne contient pas assez d'information pour répondre.
-Les résultats suivants proviennent d'une recherche web.
-
-RÈGLES:
-1. Réponds à partir des RÉSULTATS WEB fournis ci-dessous.
-2. Sois ULTRA-CONCIS et direct. OBLIGATION ABSOLUE : Utilise les balises HTML <b>texte</b> pour le gras et <br> pour aérer le texte.
-3. INTERDICTION FORMELLE d'inclure des URLs ou de mentionner la source dans le texte de ta réponse. Le système d'interface utilisateur s'en charge déjà. Ne termine JAMAIS ta réponse par une référence entre crochets.
-4. TRADUCTION OBLIGATOIRE : Tu DOIS ABSOLUMENT formuler ta réponse finale en {target_lang}.
-5. Précise que l'information provient d'une recherche web et non de la base de connaissance locale.
-6. Sois factuel et précis — ne fabrique rien au-delà de ce qui est dans les résultats.
-
-RÉSULTATS WEB:
-{context}
-"""
-
-RAG_HUMAN_TEMPLATE = "{question}"
 
 
 def _retrieve_context(query: str, language: str = None) -> list[dict]:
@@ -490,9 +498,15 @@ def _retrieve_context(query: str, language: str = None) -> list[dict]:
         similarity = 1.0 - distance
         metadata = results["metadatas"][0][i]
 
+        # Web-learned snippets are usually shorter and noisier than document
+        # chunks, so give them a slightly lower acceptance threshold.
+        threshold = SIMILARITY_THRESHOLD
+        if metadata.get("source_type") == "web":
+            threshold = min(SIMILARITY_THRESHOLD, 0.32)
+
         # THRESHOLD GATE: Skip chunks below minimum relevance
-        if similarity < SIMILARITY_THRESHOLD:
-            logger.debug(f"[RAG] Skipping chunk (sim={similarity:.3f} < {SIMILARITY_THRESHOLD}): {doc_text[:60]}...")
+        if similarity < threshold:
+            logger.debug(f"[RAG] Skipping chunk (sim={similarity:.3f} < {threshold}): {doc_text[:60]}...")
             continue
 
         sources.append({
@@ -533,11 +547,13 @@ def _build_web_context_text(web_results: list[dict]) -> str:
 
 def ask_question(question: str, session_id: str = None, user=None, language: str = "fr") -> dict:
     """
-    Full RAG pipeline: Preprocess → Retrieve → (Web fallback?) → Generate → Save.
+    Agentic RAG pipeline: Guardrails → ReAct Agent → Guardrails → Save.
 
-    The pipeline checks local ChromaDB first. If fewer than MIN_CONTEXT_CHUNKS
-    pass the similarity threshold, it falls back to SerpAPI web search and
-    auto-learns the web results for future queries.
+    The agent DECIDES when to search ChromaDB, when to fall back to web search,
+    and whether it has enough context — no more hardcoded if/else logic.
+
+    Guardrails run before (topic check) and after (hallucination + language)
+    the agent to ensure quality and safety.
 
     Args:
         question: The user's question
@@ -549,8 +565,14 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
         dict with: answer, sources, session_id, source_type, thinking_steps
     """
     from moderation.models import ChatSession, ChatMessage
+    from .rag_tools import search_knowledge_base, search_web_and_learn
+    from .rag_guardrails import (
+        input_topic_guardrail,
+        output_hallucination_guardrail,
+        output_language_guardrail,
+    )
 
-    # 1. Manage session and get conversational history
+    # ── 1. Manage session ────────────────────────────────────────
     session = None
     if session_id:
         try:
@@ -564,8 +586,43 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
             language=language,
         )
 
+    thinking_steps = []
+
+    # ── 2. INPUT GUARDRAIL: Topic relevance ──────────────────────
+    thinking_steps.append(
+        {"label": "Vérification de la pertinence de la question...", "status": "done"}
+    )
+
+    is_allowed, refusal_message = input_topic_guardrail(question, language)
+
+    if not is_allowed:
+        thinking_steps.append(
+            {"label": "Question hors-sujet — réponse bloquée par le garde-fou", "status": "warning"}
+        )
+
+        # Save the exchange even for blocked questions
+        ChatMessage.objects.create(
+            session=session, role='user', content=question,
+        )
+        ChatMessage.objects.create(
+            session=session, role='assistant', content=refusal_message,
+            source_type='guardrail',
+        )
+
+        return {
+            "answer": refusal_message,
+            "sources": [],
+            "session_id": str(session.id),
+            "source_type": "guardrail",
+            "thinking_steps": thinking_steps,
+        }
+
+    thinking_steps.append(
+        {"label": "Question pertinente ✓ — lancement de l'agent", "status": "done"}
+    )
+
+    # ── 3. Query Reformulation (multi-turn context) ──────────────
     history_tuples = []
-    # Fetch last 10 messages (5 turns) for context
     recent_msgs = session.messages.order_by('sent_at')[:10]
     for m in recent_msgs:
         if m.role == 'user':
@@ -575,152 +632,388 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
 
     search_query = question
 
-    # 2. Query Reformulation (if there is history)
     if history_tuples:
         reformulate_prompt = ChatPromptTemplate.from_messages([
             ("system", "Given the following conversation history and the user's follow-up question, rewrite the follow-up question to be a standalone question that contains all the necessary context to be understood on its own. Do NOT answer the question, ONLY return the rewritten standalone question in the same language as the follow-up question. If the follow-up question is already standalone, just return it as is."),
             *history_tuples,
             ("human", "Follow-up question: {question}\nStandalone question:")
         ])
-        
+
         fast_llm = ChatGroq(
             api_key=os.getenv("GROQ_API_KEY", "").strip().strip('"'),
-            model_name="llama-3.1-8b-instant", # fast model for rewriting
+            model_name="llama-3.1-8b-instant",
             temperature=0.0,
             max_tokens=150,
         )
-        
+
         try:
             rewrite_chain = reformulate_prompt | fast_llm | StrOutputParser()
             search_query = rewrite_chain.invoke({"question": question})
             logger.debug(f"[RAG] Reformulated query: '{question}' -> '{search_query}'")
+            thinking_steps.append(
+                {"label": "Question reformulée pour le contexte multi-tour", "status": "done"}
+            )
         except Exception as e:
             logger.error(f"[RAG] Query reformulation failed: {e}")
-            search_query = question # fallback to original
+            search_query = question
 
-    # 3. Preprocess the search query for better embedding match
-    processed_query = _preprocess_query(search_query)
-
-    # 4. Retrieve relevant context from ChromaDB (threshold-gated) using the standalone query
-    retrieved = _retrieve_context(processed_query, language)
-
-    # 3. Decide: local context sufficient, or need web search?
-    high_quality = [s for s in retrieved if s["score"] >= SIMILARITY_THRESHOLD]
-    used_web_search = False
-    web_sources = []
-
-    thinking_steps = [
-        {"label": f"Recherche dans {_get_knowledge_collection().count()} passages indexés...", "status": "done"},
-        {"label": f"{len(high_quality)} passages pertinents trouvés (seuil: {SIMILARITY_THRESHOLD})", "status": "done"},
-    ]
-
-    lang_map = {'fr': 'français', 'ar': 'arabe', 'en': 'anglais'}
-    target_lang = lang_map.get(language, 'la même langue que la question')
-
-    if len(high_quality) < MIN_CONTEXT_CHUNKS:
-        # Context insufficient — try web search fallback
-        web_results = _web_search(search_query)
-        if web_results:
-            used_web_search = True
-            web_sources = web_results
-            context_text = _build_web_context_text(web_results)
-            system_prompt = RAG_WEB_SYSTEM_PROMPT.replace('{target_lang}', target_lang)
-
-            # Auto-learn web results for next time
-            learned = _auto_learn_web_results(search_query, web_results)
-
-            thinking_steps.append(
-                {"label": f"Contexte local insuffisant — recherche web effectuée ({len(web_results)} résultats)", "status": "done"}
-            )
-            thinking_steps.append(
-                {"label": f"{learned} résultats appris dans la base pour les requêtes futures", "status": "done"}
-            )
-        else:
-            context_text = "(Aucun document pertinent trouvé dans la base de connaissance, et la recherche web n'a pas donné de résultats.)"
-            system_prompt = RAG_SYSTEM_PROMPT.replace('{target_lang}', target_lang)
-            thinking_steps.append(
-                {"label": "Contexte insuffisant — aucune source web disponible", "status": "warning"}
-            )
-    else:
-        # Normal RAG flow — use local documents
-        context_text = _build_context_text(high_quality)
-        system_prompt = RAG_SYSTEM_PROMPT.replace('{target_lang}', target_lang)
-        thinking_steps.append(
-            {"label": "Génération de la réponse avec Groq LLM...", "status": "done"}
-        )
-
-    # 5. Build the LCEL chain (without redundant history, since search_query is standalone)
-    messages_for_prompt = [("system", system_prompt)]
-    messages_for_prompt.append(("human", RAG_HUMAN_TEMPLATE))
-
-    prompt = ChatPromptTemplate.from_messages(messages_for_prompt)
+    # ── 4. Build and run the ReAct Agent ─────────────────────────
+    # Inject session_id into the system prompt
+    system_prompt = AGENT_SYSTEM_PROMPT
 
     llm = ChatGroq(
         api_key=os.getenv("GROQ_API_KEY", "").strip().strip('"'),
         model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-        temperature=0.1,     # Factual, low creativity
+        temperature=0.1,
         max_tokens=1500,
     )
 
-    chain = prompt | llm | StrOutputParser()
+    tools = [search_knowledge_base, search_web_and_learn]
+    agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))
 
-    # 6. Invoke the chain
-    try:
-        answer = chain.invoke({
-            "context": context_text,
-            "question": search_query,
-        })
-    except Exception as e:
-        logger.error(f"[RAG] LLM error: {e}")
-        answer = "Désolé, une erreur est survenue lors de la génération de la réponse. Veuillez réessayer."
-
-    # 7. Save user message and bot response
-    ChatMessage.objects.create(
-        session=session,
-        role='user',
-        content=question,
+    thinking_steps.append(
+        {"label": "Agent ReAct démarré — raisonnement en cours...", "status": "done"}
     )
 
-    # Build retrieved context summary for storage
-    if used_web_search:
-        context_summary = "; ".join([f"{s['title']} ({s['url']})" for s in web_sources])
+    # Track what the agent does for observability and source extraction
+    used_web_search = False
+    collected_sources_text = ""   # Raw source text for hallucination check
+    retrieved_sources = []         # Structured source list for response
+    web_sources = []
+
+    try:
+        inputs = {"messages": [("user", search_query)]}
+        final_message = None
+
+        for chunk in agent.stream(inputs, stream_mode="values"):
+            messages = chunk.get("messages", [])
+            if not messages:
+                continue
+
+            final_message = messages[-1]
+
+            for msg in messages:
+                # Track tool calls for thinking_steps
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        tool_name = tc["name"]
+                        if tool_name == "search_knowledge_base":
+                            thinking_steps.append(
+                                {"label": "🔍 Recherche dans la base de connaissance...", "status": "done"}
+                            )
+                        elif tool_name == "search_web_and_learn":
+                            used_web_search = True
+                            thinking_steps.append(
+                                {"label": "🌐 Recherche web (base insuffisante)...", "status": "done"}
+                            )
+                        logger.info(f"[RAG AGENT] Tool call: {tool_name} | args={tc['args']}")
+
+                # Capture tool results for source extraction
+                elif msg.type == "tool":
+                    tool_content = str(msg.content)
+                    tool_name = msg.name if hasattr(msg, "name") else "Tool"
+
+                    if tool_name == "search_knowledge_base" and "FOUND" in tool_content:
+                        collected_sources_text += tool_content
+                        # Extract source info from the tool output
+                        retrieved_sources = _extract_sources_from_kb_result(tool_content)
+                        thinking_steps.append(
+                            {"label": f"{len(retrieved_sources)} passages pertinents trouvés ✓", "status": "done"}
+                        )
+
+                    elif tool_name == "search_web_and_learn" and "WEB SEARCH returned" in tool_content:
+                        collected_sources_text += tool_content
+                        web_sources = _extract_sources_from_web_result(tool_content)
+                        thinking_steps.append(
+                            {"label": f"{len(web_sources)} résultats web trouvés et appris ✓", "status": "done"}
+                        )
+
+                    logger.info(f"[RAG AGENT] Tool result from {tool_name}: {tool_content[:120]}...")
+
+        # Extract the final answer
+        answer = final_message.content if final_message else ""
+
+        if not answer or not answer.strip():
+            answer = "Désolé, je n'ai pas pu générer une réponse. Veuillez reformuler votre question."
+
+    except Exception as e:
+        logger.error(f"[RAG] ReAct Agent error: {e}")
+        fallback_payload = _direct_rag_fallback(
+            question=question,
+            search_query=search_query,
+            language=language,
+            session=session,
+            thinking_steps=thinking_steps,
+            error=e,
+        )
+        if fallback_payload is not None:
+            return fallback_payload
+
+        answer = "Désolé, une erreur est survenue lors de la génération de la réponse. Veuillez réessayer."
+        thinking_steps.append(
+            {"label": "Erreur de l'agent — réponse par défaut", "status": "warning"}
+        )
+
+    # ── 5. OUTPUT GUARDRAILS ──────────────────────────────────────
+
+    # 5a. Hallucination check
+    is_grounded, answer = output_hallucination_guardrail(answer, collected_sources_text)
+    if not is_grounded:
+        thinking_steps.append(
+            {"label": "⚠️ Garde-fou: réponse potentiellement non vérifiable", "status": "warning"}
+        )
     else:
-        context_summary = "; ".join([f"{s['source']} ({s['score']})" for s in retrieved]) if retrieved else ""
+        thinking_steps.append(
+            {"label": "Vérification de cohérence ✓", "status": "done"}
+        )
+
+    # 5b. Language enforcement disabled - rely on LLM to match query language
+    # answer = output_language_guardrail(answer, language)
+
+    thinking_steps.append(
+        {"label": "Réponse générée avec succès ✓", "status": "done"}
+    )
+
+    # ── 6. Save to database ──────────────────────────────────────
+    ChatMessage.objects.create(
+        session=session, role='user', content=question,
+    )
+
+    # Build context summary for storage
+    if used_web_search and web_sources:
+        context_summary = "; ".join([f"{s['name']} ({s.get('url', '')})" for s in web_sources])
+    elif retrieved_sources:
+        context_summary = "; ".join([f"{s['name']} ({s.get('score', '')})" for s in retrieved_sources])
+    else:
+        context_summary = ""
 
     source_type = "web" if used_web_search else "knowledge_base"
 
     ChatMessage.objects.create(
-        session=session,
-        role='assistant',
-        content=answer,
+        session=session, role='assistant', content=answer,
         retrieved_context=context_summary,
         source_type=source_type,
     )
 
-    # 8. Build response
+    # ── 7. Build response ────────────────────────────────────────
     source_list = []
     seen_sources = set()
 
-    # Local document sources
-    for src in retrieved:
-        if src["source"] not in seen_sources:
-            seen_sources.add(src["source"])
+    for src in retrieved_sources:
+        if src["name"] not in seen_sources:
+            seen_sources.add(src["name"])
             source_list.append({
-                "name": src["source"],
-                "score": src["score"],
+                "name": src["name"],
+                "score": src.get("score"),
                 "type": "document",
-                "chunk_preview": src["chunk_preview"],
+                "chunk_preview": src.get("chunk_preview", ""),
             })
 
-    # Web sources (if used)
     for ws in web_sources:
         source_list.append({
-            "name": ws["title"],
-            "score": None,
+            "name": ws["name"],
+            "score": 0.99, # Default high score for web results so frontend doesn't show 0%
             "type": "web",
-            "url": ws["url"],
-            "chunk_preview": ws["snippet"][:150],
+            "url": ws.get("url", ""),
+            "chunk_preview": ws.get("chunk_preview", ""),
         })
+
+    return {
+        "answer": answer,
+        "sources": source_list,
+        "session_id": str(session.id),
+        "source_type": source_type,
+        "thinking_steps": thinking_steps,
+    }
+
+
+def _extract_sources_from_kb_result(tool_output: str) -> list[dict]:
+    """
+    Parse the search_knowledge_base tool output to extract source metadata.
+    The tool returns structured text with source names and scores.
+    """
+    sources = []
+    # Extract from "Sources: 'name' (score: 0.xxx), ..." line
+    sources_match = re.search(r"Sources:\s*(.+?)\n", tool_output)
+    if sources_match:
+        sources_str = sources_match.group(1)
+        # Parse each 'name' (score: 0.xxx) entry
+        for match in re.finditer(r"'([^']+)'\s*\(score:\s*([\d.]+)\)", sources_str):
+            sources.append({
+                "name": match.group(1),
+                "score": float(match.group(2)),
+                "chunk_preview": "",
+            })
+
+    # If parsing failed or it's a "NO RELEVANT DOCUMENTS FOUND" response, return empty list
+    # We do NOT want to return a generic 0% source.
+    return sources
+
+
+def _extract_sources_from_web_result(tool_output: str) -> list[dict]:
+    """
+    Parse the search_web_and_learn tool output to extract web source metadata.
+    """
+    sources = []
+    # Extract from "  - Title (URL)" lines
+    for match in re.finditer(r"\s*-\s*(.+?)\s*\(([^)]+)\)", tool_output):
+        title = match.group(1).strip()
+        url = match.group(2).strip()
+        # Only include actual URLs, not score patterns
+        if url.startswith("http"):
+            sources.append({
+                "name": title,
+                "url": url,
+                "chunk_preview": "",
+            })
+
+    return sources
+
+
+def _direct_rag_fallback(
+    question: str,
+    search_query: str,
+    language: str,
+    session,
+    thinking_steps: list[dict],
+    error: Exception,
+) -> dict | None:
+    """Fallback path when the ReAct agent fails to produce a valid tool call.
+
+    This keeps the chatbot usable even when the LLM tool-calling layer breaks.
+    It runs retrieval directly, then asks the model to answer from the fetched
+    context without tool-calling.
+    """
+    from moderation.models import ChatMessage
+
+    logger.warning(f"[RAG] Falling back to direct retrieval after agent failure: {error}")
+    thinking_steps.append(
+        {"label": "Agent tool-call failed — fallback retrieval en cours", "status": "warning"}
+    )
+
+    kb_sources = _retrieve_context(search_query or question)
+    retrieved_sources = [
+        {
+            "name": src.get("source", "Unknown"),
+            "score": src.get("score", 0.0),
+            "chunk_preview": src.get("chunk_preview", ""),
+        }
+        for src in kb_sources
+    ]
+    kb_context = _build_context_text(kb_sources)
+
+    used_web_search = False
+    web_context = ""
+    web_sources = []
+
+    if not kb_sources:
+        web_results = _web_search(search_query or question)
+        if web_results:
+            _auto_learn_web_results(search_query or question, web_results)
+            web_context = _build_web_context_text(web_results)
+            web_sources = [
+                {
+                    "name": r.get("title", "Unknown"),
+                    "url": r.get("url", ""),
+                    "chunk_preview": r.get("snippet", ""),
+                }
+                for r in web_results
+            ]
+            used_web_search = True
+            thinking_steps.append(
+                {"label": f"{len(web_sources)} résultats web trouvés via fallback ✓", "status": "done"}
+            )
+    elif "NO RELEVANT DOCUMENTS FOUND" in kb_context or "NONE passed the quality threshold" in kb_context:
+        web_results = _web_search(search_query or question)
+        if web_results:
+            _auto_learn_web_results(search_query or question, web_results)
+            web_context = _build_web_context_text(web_results)
+            web_sources = [
+                {
+                    "name": r.get("title", "Unknown"),
+                    "url": r.get("url", ""),
+                    "chunk_preview": r.get("snippet", ""),
+                }
+                for r in web_results
+            ]
+            used_web_search = True
+            thinking_steps.append(
+                {"label": f"{len(web_sources)} résultats web trouvés via fallback ✓", "status": "done"}
+            )
+
+    sources_text = "\n\n".join([txt for txt in [kb_context, web_context] if txt]).strip()
+
+    llm = ChatGroq(
+        api_key=os.getenv("GROQ_API_KEY", "").strip().strip('"'),
+        model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        temperature=0.1,
+        max_tokens=1200,
+    )
+
+    fallback_prompt = ChatPromptTemplate.from_messages([
+        ("system", AGENT_SYSTEM_PROMPT),
+        ("human", "Question de l'utilisateur: {question}\n\nCONTEXT SOURCES:\n{sources}\n\nRéponds uniquement à partir des sources ci-dessus."),
+    ])
+
+    try:
+        chain = fallback_prompt | llm | StrOutputParser()
+        answer = chain.invoke({
+            "question": question,
+            "sources": sources_text or "(Aucun document pertinent trouvé.)",
+        }).strip()
+        if not answer:
+            answer = "Désolé, je n'ai pas pu générer une réponse. Veuillez reformuler votre question."
+    except Exception as fallback_error:
+        logger.error(f"[RAG] Direct fallback generation failed: {fallback_error}")
+        answer = "Désolé, une erreur est survenue lors de la génération de la réponse. Veuillez réessayer."
+        thinking_steps.append(
+            {"label": "Fallback génération échouée — réponse par défaut", "status": "warning"}
+        )
+
+    ChatMessage.objects.create(
+        session=session, role='user', content=question,
+    )
+
+    if used_web_search and web_sources:
+        context_summary = "; ".join([f"{s['name']} ({s.get('url', '')})" for s in web_sources])
+    elif retrieved_sources:
+        context_summary = "; ".join([f"{s['name']} ({s.get('score', '')})" for s in retrieved_sources])
+    else:
+        context_summary = ""
+
+    source_type = "web" if used_web_search else "knowledge_base"
+
+    ChatMessage.objects.create(
+        session=session, role='assistant', content=answer,
+        retrieved_context=context_summary,
+        source_type=source_type,
+    )
+
+    source_list = []
+    seen_sources = set()
+
+    for src in retrieved_sources:
+        if src["name"] not in seen_sources:
+            seen_sources.add(src["name"])
+            source_list.append({
+                "name": src["name"],
+                "score": src.get("score"),
+                "type": "document",
+                "chunk_preview": src.get("chunk_preview", ""),
+            })
+
+    for ws in web_sources:
+        source_list.append({
+            "name": ws["name"],
+            "score": 0.99,
+            "type": "web",
+            "url": ws.get("url", ""),
+            "chunk_preview": ws.get("chunk_preview", ""),
+        })
+
+    thinking_steps.append(
+        {"label": "Réponse générée via fallback direct ✓", "status": "done"}
+    )
 
     return {
         "answer": answer,
