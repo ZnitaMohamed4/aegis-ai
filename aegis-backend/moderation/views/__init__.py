@@ -73,6 +73,7 @@ from moderation.views.report_views import (
 # RAG Knowledge Base + Chatbot
 from moderation.views.rag_views import (
     ask_chatbot,
+    suggested_questions,
     get_chat_sessions,
     get_chat_session_detail,
     delete_chat_session,
@@ -126,6 +127,7 @@ __all__ = [
     'report_complete_webhook',
     'download_report',
     'ask_chatbot',
+    'suggested_questions',
     'get_chat_sessions',
     'get_chat_session_detail',
     'delete_chat_session',

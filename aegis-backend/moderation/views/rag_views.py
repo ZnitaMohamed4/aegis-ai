@@ -5,7 +5,10 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 
 from moderation.models import ChatSession, ChatMessage, IndexedDocument
-from moderation.services.rag_service import ask_question, ingest_document, delete_document, get_knowledge_stats
+from moderation.services.rag_service import ask_question
+from moderation.services.rag_ingest import ingest_document, delete_document
+from moderation.services.rag_retrieval import get_knowledge_stats
+from moderation.services.rag_config import SUGGESTED_QUESTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,19 @@ def ask_chatbot(request):
     except Exception as e:
         logger.error(f"[RAG API] Error in ask_chatbot: {e}")
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def suggested_questions(request):
+    """GET /api/v1/chatbot/suggested-questions/
+
+    Returns curated starter questions for the chatbot UI based on
+    the requested language.
+    """
+    language = request.query_params.get('language', 'fr')
+    questions = SUGGESTED_QUESTIONS.get(language, SUGGESTED_QUESTIONS.get('fr', []))
+    return Response(questions)
 
 
 def _parse_sources(m):

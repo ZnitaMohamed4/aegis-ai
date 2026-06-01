@@ -9,15 +9,15 @@ Architecture (v3 — Agentic RAG + Guardrails):
        ├─ Off-topic? → Polite refusal (no agent invoked)
        │
        └─ On-topic → ReAct Agent (decides tool calls dynamically)
-                      │
-                      ├─ Tool 1: search_knowledge_base (ChromaDB)
-                      └─ Tool 2: search_web_and_learn (SerpAPI → auto-ingest)
-                      │
-                      └─ Agent answer → Output Guardrails
-                                         ├─ Hallucination check
-                                         └─ Language enforcement
-                                         │
-                                         └─ Final response to user
+                       │
+                       ├─ Tool 1: search_knowledge_base (ChromaDB)
+                       └─ Tool 2: search_web_and_learn (SerpAPI → auto-ingest)
+                       │
+                       └─ Agent answer → Output Guardrails
+                                          ├─ Hallucination check
+                                          └─ Language enforcement
+                                          │
+                                          └─ Final response to user
 
 The agent DECIDES when to search ChromaDB, when to fall back to web search,
 and whether it has enough context. No more hardcoded if/else logic.
@@ -28,522 +28,55 @@ Reuses the same SentenceTransformer embedder from semantic_cache.py.
 Separate from the WhatsApp empathetic bot (chatbot_service.py):
   - This serves ADULTS (admins/parents) with legal/educational knowledge
   - The WhatsApp bot serves CHILDREN with empathetic conversation
+
+Module Structure (v3.1 — Refactored):
+  rag_config.py      → Constants, prompts, suggested questions
+  rag_retrieval.py   → Embedder, ChromaDB, query processing, similarity search
+  rag_web.py         → SerpAPI search, auto-learn into ChromaDB
+  rag_ingest.py      → Document upload, text extraction, chunking
+  rag_fallback.py    → Direct retrieval when agent tool-calling fails
+  rag_tools.py       → LangChain tool definitions for the ReAct agent
+  rag_guardrails.py  → Input/output safety checks
+  rag_service.py     → This file: ask_question() orchestrator only
 """
 import os
-import uuid
-import logging
 import re
+import logging
 
-import requests
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import SystemMessage
 from langchain_groq import ChatGroq
 from langgraph.prebuilt import create_react_agent
 
+# Import from refactored modules
+from .rag_config import AGENT_SYSTEM_PROMPT
+from .rag_retrieval import _reformulate_query
+from .rag_fallback import _direct_rag_fallback
+
+# Re-export commonly used functions for backward compatibility.
+# Code that does `from moderation.services.rag_service import ingest_document`
+# will continue to work.
+from .rag_config import SIMILARITY_THRESHOLD, SUGGESTED_QUESTIONS  # noqa: F401
+from .rag_retrieval import (  # noqa: F401
+    _retrieve_context,
+    _preprocess_query,
+    _build_context_text,
+    _get_embedder,
+    _get_knowledge_collection,
+    get_knowledge_stats,
+)
+from .rag_web import (  # noqa: F401
+    _web_search,
+    _auto_learn_web_results,
+    _build_web_context_text,
+)
+from .rag_ingest import ingest_document, delete_document  # noqa: F401
+
 logger = logging.getLogger(__name__)
 
-# ── ChromaDB Collection Name (separate from moderation cache!) ──────────
-KNOWLEDGE_COLLECTION = "aegis_knowledge_base"
-
-# ── Retrieval Configuration ─────────────────────────────────────────────
-CHUNK_SIZE = 3000       # Larger chunks to keep legal articles intact
-CHUNK_OVERLAP = 400     # More overlap to catch split articles
-TOP_K = 8               # Retrieve 8 candidates, filter by threshold
-SIMILARITY_THRESHOLD = 0.45   # Below this = irrelevant noise, skip
-MIN_CONTEXT_CHUNKS = 1        # Minimum high-quality chunks before trusting local context
-
-
-def _get_embedder():
-    """Reuse the SentenceTransformer already loaded by semantic_cache.py."""
-    from moderation.semantic_cache import embedder, initialize_semantic_cache
-    if embedder is None:
-        initialize_semantic_cache()
-    from moderation.semantic_cache import embedder as loaded_embedder
-    return loaded_embedder
-
-
-def _get_knowledge_collection():
-    """Get or create the knowledge base ChromaDB collection."""
-    import chromadb
-
-    chroma_path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-        'chroma_storage'
-    )
-    client = chromadb.PersistentClient(path=chroma_path)
-    collection = client.get_or_create_collection(
-        name=KNOWLEDGE_COLLECTION,
-        metadata={"hnsw:space": "cosine"}
-    )
-    return collection
-
 
 # ═══════════════════════════════════════════════════════════════════════
-#  QUERY PREPROCESSING
-#  Expand abbreviations and normalize French queries for better embedding
+#  ASK_QUESTION — The Orchestrator
 # ═══════════════════════════════════════════════════════════════════════
-
-# Static expansions for common legal query patterns
-_QUERY_EXPANSIONS = {
-    "c'est quoi": "qu'est-ce que",
-    "c quoi": "qu'est-ce que",
-    "cest quoi": "qu'est-ce que",
-    "loi 09-08": "loi numéro 09-08 protection des données personnelles",
-    "loi 103-13": "loi numéro 103-13 violences faites aux femmes",
-    "loi 05-20": "loi numéro 05-20 cybersécurité",
-    "loi 07-03": "loi numéro 07-03 infractions informatiques cybercrime",
-}
-
-
-def _preprocess_query(query: str) -> str:
-    """
-    Expand common French abbreviations and clean query for better embedding match.
-    Does NOT alter the meaning — only enriches with synonyms/full forms.
-    """
-    expanded = query.lower().strip()
-    for abbr, full in _QUERY_EXPANSIONS.items():
-        if abbr in expanded:
-            expanded = expanded.replace(abbr, full)
-    return expanded
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  DOCUMENT INGESTION PIPELINE
-#  Upload → Extract Text → Chunk → Embed → Store in ChromaDB
-# ═══════════════════════════════════════════════════════════════════════
-
-def _extract_text_from_file(file_obj, filename: str) -> str:
-    """Extract raw text from an uploaded file (PDF or TXT)."""
-    ext = os.path.splitext(filename)[1].lower()
-
-    if ext == '.txt':
-        content = file_obj.read()
-        if isinstance(content, bytes):
-            content = content.decode('utf-8', errors='replace')
-        return content
-
-    elif ext == '.pdf':
-        try:
-            import fitz  # PyMuPDF
-            content = file_obj.read()
-            doc = fitz.open(stream=content, filetype="pdf")
-            text_parts = []
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                text_parts.append(page.get_text())
-            doc.close()
-            return "\n\n".join(text_parts)
-        except ImportError:
-            logger.error("[RAG] PyMuPDF (fitz) not installed. Install with: pip install PyMuPDF")
-            raise ValueError("PDF support requires PyMuPDF. Install with: pip install PyMuPDF")
-
-    elif ext in ('.md', '.markdown'):
-        content = file_obj.read()
-        if isinstance(content, bytes):
-            content = content.decode('utf-8', errors='replace')
-        return content
-
-    else:
-        raise ValueError(f"Unsupported file format: {ext}. Supported: .pdf, .txt, .md")
-
-
-def _chunk_text(text: str, source_name: str, category: str, language: str) -> list[dict]:
-    """
-    Split text into overlapping chunks using Recursive Character Splitting.
-
-    Strategy: Article-aware splitting for legal texts.
-    - Tries to split at "Article" boundaries first to keep legal articles intact
-    - Falls back to chapter/section/paragraph boundaries
-    - 3000 chars per chunk with 400 char overlap
-    """
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        separators=[
-            "\nArticle ",     # Split at article boundaries first (legal texts)
-            "\nChapitre ",    # Then chapter boundaries
-            "\nSection ",     # Then section boundaries
-            "\n\n",           # Double newline (paragraph)
-            "\n",             # Single newline
-            ". ",             # Sentence boundary
-            " ",              # Word boundary
-            "",               # Character boundary (last resort)
-        ],
-        length_function=len,
-    )
-
-    raw_chunks = splitter.split_text(text)
-
-    chunks = []
-    for i, chunk_text in enumerate(raw_chunks):
-        # Skip chunks that are too small to be useful
-        if len(chunk_text.strip()) < 50:
-            continue
-        chunks.append({
-            "id": str(uuid.uuid4()),
-            "text": chunk_text.strip(),
-            "metadata": {
-                "source": source_name,
-                "source_type": "document",   # vs "web" for auto-learned
-                "category": category,
-                "language": language,
-                "chunk_index": i,
-                "total_chunks": len(raw_chunks),
-            }
-        })
-
-    return chunks
-
-
-def ingest_document(file_obj, filename: str, category: str, language: str, uploaded_by=None) -> dict:
-    """
-    Full ingestion pipeline: Upload → Extract → Chunk → Embed → Store.
-
-    Returns:
-        dict with keys: doc_id, name, chunk_count, status
-    """
-    from moderation.models import IndexedDocument
-
-    # 1. Extract raw text
-    logger.info(f"[RAG] Ingesting document: {filename}")
-    raw_text = _extract_text_from_file(file_obj, filename)
-
-    if not raw_text or len(raw_text.strip()) < 100:
-        raise ValueError("Document is empty or too short to index.")
-
-    # 2. Chunk the text
-    chunks = _chunk_text(raw_text, filename, category, language)
-    if not chunks:
-        raise ValueError("No valid chunks could be extracted from this document.")
-
-    # 3. Embed all chunks
-    embedder = _get_embedder()
-    if embedder is None:
-        raise RuntimeError("Embedding model not available. Check server startup logs.")
-
-    texts = [c["text"] for c in chunks]
-    embeddings = embedder.encode(texts).tolist()
-
-    # 4. Store in ChromaDB
-    collection = _get_knowledge_collection()
-
-    doc_id = str(uuid.uuid4())
-
-    # Tag all chunks with the parent document ID for bulk deletion later
-    for chunk in chunks:
-        chunk["metadata"]["document_id"] = doc_id
-
-    collection.add(
-        ids=[c["id"] for c in chunks],
-        embeddings=embeddings,
-        documents=texts,
-        metadatas=[c["metadata"] for c in chunks],
-    )
-
-    # 5. Save record in Django DB
-    file_size = 0
-    if hasattr(file_obj, 'size'):
-        file_size = file_obj.size
-    elif hasattr(file_obj, 'seek') and hasattr(file_obj, 'tell'):
-        pos = file_obj.tell()
-        file_obj.seek(0, 2)
-        file_size = file_obj.tell()
-        file_obj.seek(pos)
-
-    doc_record = IndexedDocument.objects.create(
-        id=doc_id,
-        name=filename,
-        category=category,
-        language=language,
-        chunk_count=len(chunks),
-        file_size=file_size,
-        status='indexed',
-        uploaded_by=uploaded_by,
-    )
-
-    logger.info(f"[RAG] ✅ Indexed '{filename}': {len(chunks)} chunks stored in ChromaDB")
-
-    return {
-        "doc_id": str(doc_record.id),
-        "name": filename,
-        "chunk_count": len(chunks),
-        "status": "indexed",
-    }
-
-
-def delete_document(doc_id: str):
-    """Remove a document and all its chunks from ChromaDB + Django DB."""
-    from moderation.models import IndexedDocument
-
-    # 1. Remove chunks from ChromaDB by document_id metadata filter
-    try:
-        collection = _get_knowledge_collection()
-        collection.delete(where={"document_id": doc_id})
-        logger.info(f"[RAG] Deleted chunks for document {doc_id} from ChromaDB")
-    except Exception as e:
-        logger.error(f"[RAG] Error deleting from ChromaDB: {e}")
-
-    # 2. Remove from Django DB
-    try:
-        IndexedDocument.objects.filter(id=doc_id).delete()
-    except Exception as e:
-        logger.error(f"[RAG] Error deleting from DB: {e}")
-
-
-def get_knowledge_stats() -> dict:
-    """Return stats about the knowledge base."""
-    from moderation.models import IndexedDocument
-
-    docs = IndexedDocument.objects.filter(status='indexed')
-    total_docs = docs.count()
-    total_chunks = sum(d.chunk_count for d in docs)
-
-    # Count web-learned chunks separately
-    try:
-        collection = _get_knowledge_collection()
-        web_chunks = collection.get(where={"source_type": "web"}, include=[])
-        web_chunk_count = len(web_chunks["ids"]) if web_chunks and web_chunks["ids"] else 0
-    except Exception:
-        web_chunk_count = 0
-
-    return {
-        "totalIndexedDocs": total_docs,
-        "totalChunks": total_chunks + web_chunk_count,
-        "webLearnedChunks": web_chunk_count,
-        "lastUpdate": docs.order_by('-created_at').first().created_at.isoformat() if total_docs > 0 else None,
-        # Placeholder metrics — in production, these would come from RAGAS evaluation
-        "faithfulness": 0.88,
-        "answerRelevancy": 0.82,
-        "contextPrecision": 0.79,
-    }
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  WEB SEARCH FALLBACK (SerpAPI)
-#  When local knowledge base doesn't have enough context, search the web
-# ═══════════════════════════════════════════════════════════════════════
-
-def _web_search(query: str, num_results: int = 5) -> list[dict]:
-    """
-    Search the web using SerpAPI when local context is insufficient.
-
-    Returns list of dicts: [{title, snippet, url, source}, ...]
-    Falls back gracefully if API key is missing or request fails.
-    """
-    api_key = os.getenv("SERPAPI_KEY", "").strip()
-    if not api_key:
-        logger.warning("[RAG] SERPAPI_KEY not configured, skipping web search")
-        return []
-
-    try:
-        resp = requests.get("https://serpapi.com/search", params={
-            "q": query,
-            "api_key": api_key,
-            "engine": "google",
-            "num": num_results,
-            "hl": "fr",     # French results preferred
-            "gl": "ma",     # Morocco geolocation
-        }, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-
-        results = []
-        for item in data.get("organic_results", [])[:num_results]:
-            results.append({
-                "title": item.get("title", ""),
-                "snippet": item.get("snippet", ""),
-                "url": item.get("link", ""),
-                "source": item.get("displayed_link", ""),
-            })
-
-        logger.info(f"[RAG] Web search returned {len(results)} results for: '{query[:50]}...'")
-        return results
-    except Exception as e:
-        logger.error(f"[RAG] Web search error: {e}")
-        return []
-
-
-def _auto_learn_web_results(query: str, web_results: list[dict]):
-    """
-    Store web search results back into ChromaDB for future retrieval.
-
-    This makes the knowledge base grow incrementally — the same question
-    asked twice will be answered from local cache on the second request.
-    """
-    embedder = _get_embedder()
-    collection = _get_knowledge_collection()
-    if not embedder or not web_results:
-        return 0
-
-    learned_count = 0
-    for result in web_results:
-        # Keep the originating question in the learned chunk so future
-        # semantically similar questions can retrieve it more reliably.
-        text = (
-            f"Question originale: {query}\n"
-            f"Titre: {result['title']}\n"
-            f"Extrait: {result['snippet']}"
-        )
-        if len(text.strip()) < 50:
-            continue
-
-        try:
-            embedding = embedder.encode(text).tolist()
-            chunk_id = str(uuid.uuid4())
-
-            collection.add(
-                ids=[chunk_id],
-                embeddings=[embedding],
-                documents=[text],
-                metadatas=[{
-                    "source": result.get("url", "web"),
-                    "source_type": "web",
-                    "source_title": result.get("title", ""),
-                    "category": "web_search",
-                    "language": "auto",
-                    "original_query": query[:200],
-                    "document_id": "web-auto-learned",
-                }],
-            )
-            learned_count += 1
-        except Exception as e:
-            logger.error(f"[RAG] Error auto-learning web result: {e}")
-
-    if learned_count > 0:
-        logger.info(f"[RAG] Auto-learned {learned_count} web snippets into ChromaDB")
-    return learned_count
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  AGENTIC RAG — ReAct Agent with Tools + Guardrails
-#  Replaces the old static LCEL chain with an agent that DECIDES what to do
-# ═══════════════════════════════════════════════════════════════════════
-
-AGENT_SYSTEM_PROMPT = """Tu es l'Assistant Juridique AEGIS, un expert en protection de l'enfance et cybersécurité au Maroc.
-
-Tu disposes d'outils pour chercher des informations. Voici ta stratégie:
-
---- STRATÉGIE DE RECHERCHE ---
-1. TOUJOURS utiliser l'outil search_knowledge_base en premier avec la question de l'utilisateur.
-2. Si le résultat indique "NO RELEVANT DOCUMENTS" ou que les documents ne répondent pas à la question → utiliser l'outil search_web_and_learn pour chercher sur le web.
-3. Si les résultats web sont aussi insuffisants → dire honnêtement que tu n'as pas trouvé l'information.
-4. Ne JAMAIS inventer d'information. Répondre UNIQUEMENT à partir des résultats des outils.
-
---- RÈGLES DE RÉPONSE ---
-1. Sois ULTRA-CONCIS et direct (2-3 phrases max, sauf si la question demande plus de détails).
-2. OBLIGATION ABSOLUE : Formule ta réponse avec des balises HTML (<b>texte</b> pour le gras, <br> pour les sauts de ligne).
-3. INTERDICTION FORMELLE de mentionner les sources, noms de fichiers, ou URLs dans ta réponse. Le système d'interface s'en charge.
-4. TRADUCTION OBLIGATOIRE : Tu DOIS ABSOLUMENT répondre dans la MÊME LANGUE que la question de l'utilisateur (si la question est en français, réponds en français. Si en anglais, en anglais).
-5. Si tu utilises des résultats web, mentionne brièvement que l'information provient d'une recherche web.
-6. Ne FABRIQUE JAMAIS d'information — ne dis JAMAIS "il est possible que" ou "d'autres cas pourraient exister".
-7. Si aucune source ne contient la réponse, réponds: "Je n'ai pas trouvé cette information dans la base de connaissance AEGIS."
-"""
-
-
-def _retrieve_context(query: str, language: str = None) -> list[dict]:
-    """
-    Retrieve the most relevant chunks from ChromaDB for a given query.
-    Applies similarity threshold filtering — only returns chunks above SIMILARITY_THRESHOLD.
-
-    Returns list of dicts: [{text, source, source_type, score, chunk_preview}, ...]
-    """
-    embedder = _get_embedder()
-    if embedder is None:
-        return []
-
-    collection = _get_knowledge_collection()
-
-    # Embed the preprocessed query
-    query_vector = embedder.encode(query).tolist()
-
-    # Build filter if language specified
-    where_filter = None
-    if language and language != 'auto':
-        where_filter = {"language": language}
-
-    try:
-        results = collection.query(
-            query_embeddings=[query_vector],
-            n_results=TOP_K,
-            include=["documents", "metadatas", "distances"],
-            where=where_filter,
-        )
-        
-        # Fallback: If no results found with language filter, try without filter
-        if where_filter and (not results["documents"] or not results["documents"][0]):
-            logger.debug(f"[RAG] No results found for language {language}. Falling back to all languages.")
-            results = collection.query(
-                query_embeddings=[query_vector],
-                n_results=TOP_K,
-                include=["documents", "metadatas", "distances"],
-            )
-            
-    except Exception:
-        # Fallback without language filter if it fails (e.g., no docs in that language)
-        results = collection.query(
-            query_embeddings=[query_vector],
-            n_results=TOP_K,
-            include=["documents", "metadatas", "distances"],
-        )
-
-    if not results["documents"] or not results["documents"][0]:
-        return []
-
-    sources = []
-    for i, doc_text in enumerate(results["documents"][0]):
-        distance = results["distances"][0][i]
-        similarity = 1.0 - distance
-        metadata = results["metadatas"][0][i]
-
-        # Web-learned snippets are usually shorter and noisier than document
-        # chunks, so give them a slightly lower acceptance threshold.
-        threshold = SIMILARITY_THRESHOLD
-        if metadata.get("source_type") == "web":
-            threshold = min(SIMILARITY_THRESHOLD, 0.32)
-
-        # THRESHOLD GATE: Skip chunks below minimum relevance
-        if similarity < threshold:
-            logger.debug(f"[RAG] Skipping chunk (sim={similarity:.3f} < {threshold}): {doc_text[:60]}...")
-            continue
-
-        sources.append({
-            "text": doc_text,
-            "source": metadata.get("source", "Unknown"),
-            "source_type": metadata.get("source_type", "document"),
-            "category": metadata.get("category", "other"),
-            "score": round(similarity, 3),
-            "chunk_preview": doc_text[:150] + "..." if len(doc_text) > 150 else doc_text,
-        })
-
-    return sources
-
-
-def _build_context_text(sources: list[dict]) -> str:
-    """Build the context text block from retrieved sources."""
-    if not sources:
-        return "(Aucun document pertinent trouvé dans la base de connaissance.)"
-
-    parts = []
-    for i, src in enumerate(sources):
-        parts.append(f"\n--- Extrait de document pertinent ---\n")
-        parts.append(src['text'] + "\n")
-    return "".join(parts)
-
-
-def _build_web_context_text(web_results: list[dict]) -> str:
-    """Build context text from web search results."""
-    if not web_results:
-        return "(Aucun résultat web trouvé.)"
-
-    parts = []
-    for r in web_results:
-        parts.append(f"\n--- Extrait web pertinent ---\n")
-        parts.append(r['snippet'] + "\n")
-    return "".join(parts)
-
 
 def ask_question(question: str, session_id: str = None, user=None, language: str = "fr") -> dict:
     """
@@ -569,7 +102,6 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
     from .rag_guardrails import (
         input_topic_guardrail,
         output_hallucination_guardrail,
-        output_language_guardrail,
     )
 
     # ── 1. Manage session ────────────────────────────────────────
@@ -588,19 +120,28 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
 
     thinking_steps = []
 
-    # ── 2. INPUT GUARDRAIL: Topic relevance ──────────────────────
+    # ── 2. QUERY REFORMULATION (for multi-turn context) ──────────
     thinking_steps.append(
         {"label": "Vérification de la pertinence de la question...", "status": "done"}
     )
 
-    is_allowed, refusal_message = input_topic_guardrail(question, language)
+    # Reformulate the follow-up into a standalone question before running the topic guardrail.
+    try:
+        search_query = _reformulate_query(session, question)
+        if search_query and search_query != question:
+            thinking_steps.append({"label": "Question reformulée pour le contexte multi-tour", "status": "done"})
+    except Exception:
+        search_query = question
+
+    # ── 3. INPUT GUARDRAIL: Topic relevance (run on reformulated query) ──
+    is_allowed, refusal_message = input_topic_guardrail(search_query, language)
 
     if not is_allowed:
         thinking_steps.append(
             {"label": "Question hors-sujet — réponse bloquée par le garde-fou", "status": "warning"}
         )
 
-        # Save the exchange even for blocked questions
+        # Save the exchange even for blocked questions (save the original user text)
         ChatMessage.objects.create(
             session=session, role='user', content=question,
         )
@@ -617,59 +158,23 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
             "thinking_steps": thinking_steps,
         }
 
-    thinking_steps.append(
-        {"label": "Question pertinente ✓ — lancement de l'agent", "status": "done"}
-    )
-
-    # ── 3. Query Reformulation (multi-turn context) ──────────────
-    history_tuples = []
-    recent_msgs = session.messages.order_by('sent_at')[:10]
-    for m in recent_msgs:
-        if m.role == 'user':
-            history_tuples.append(("human", m.content))
-        elif m.role == 'assistant':
-            history_tuples.append(("ai", m.content))
-
-    search_query = question
-
-    if history_tuples:
-        reformulate_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Given the following conversation history and the user's follow-up question, rewrite the follow-up question to be a standalone question that contains all the necessary context to be understood on its own. Do NOT answer the question, ONLY return the rewritten standalone question in the same language as the follow-up question. If the follow-up question is already standalone, just return it as is."),
-            *history_tuples,
-            ("human", "Follow-up question: {question}\nStandalone question:")
-        ])
-
-        fast_llm = ChatGroq(
-            api_key=os.getenv("GROQ_API_KEY", "").strip().strip('"'),
-            model_name="llama-3.1-8b-instant",
-            temperature=0.0,
-            max_tokens=150,
-        )
-
-        try:
-            rewrite_chain = reformulate_prompt | fast_llm | StrOutputParser()
-            search_query = rewrite_chain.invoke({"question": question})
-            logger.debug(f"[RAG] Reformulated query: '{question}' -> '{search_query}'")
-            thinking_steps.append(
-                {"label": "Question reformulée pour le contexte multi-tour", "status": "done"}
-            )
-        except Exception as e:
-            logger.error(f"[RAG] Query reformulation failed: {e}")
-            search_query = question
+    thinking_steps.append({"label": "Question pertinente ✓ — lancement de l'agent", "status": "done"})
 
     # ── 4. Build and run the ReAct Agent ─────────────────────────
-    # Inject session_id into the system prompt
-    system_prompt = AGENT_SYSTEM_PROMPT
-
+    # IMPORTANT: We use qwen3-32b for the agent, NOT llama-3.3-70b.
+    # Llama 3.3 on Groq intermittently generates tool calls in native XML
+    # format (<function=name{json}</function>) instead of OpenAI-compatible
+    # JSON, causing "Failed to call a function" 400 errors.
+    # qwen/qwen3-32b has 100% reliable structured tool-calling on Groq.
     llm = ChatGroq(
         api_key=os.getenv("GROQ_API_KEY", "").strip().strip('"'),
-        model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model_name="qwen/qwen3-32b",
         temperature=0.1,
         max_tokens=1500,
     )
 
     tools = [search_knowledge_base, search_web_and_learn]
-    agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))
+    agent = create_react_agent(llm, tools, prompt=SystemMessage(content=AGENT_SYSTEM_PROMPT))
 
     thinking_steps.append(
         {"label": "Agent ReAct démarré — raisonnement en cours...", "status": "done"}
@@ -684,6 +189,7 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
     try:
         inputs = {"messages": [("user", search_query)]}
         final_message = None
+        seen_message_ids = set()
 
         for chunk in agent.stream(inputs, stream_mode="values"):
             messages = chunk.get("messages", [])
@@ -693,6 +199,12 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
             final_message = messages[-1]
 
             for msg in messages:
+                msg_id = getattr(msg, "id", None)
+                if msg_id and msg_id in seen_message_ids:
+                    continue
+                if msg_id:
+                    seen_message_ids.add(msg_id)
+                
                 # Track tool calls for thinking_steps
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     for tc in msg.tool_calls:
@@ -714,16 +226,16 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
                     tool_name = msg.name if hasattr(msg, "name") else "Tool"
 
                     if tool_name == "search_knowledge_base" and "FOUND" in tool_content:
-                        collected_sources_text += tool_content
+                        collected_sources_text += tool_content + "\n\n"
                         # Extract source info from the tool output
-                        retrieved_sources = _extract_sources_from_kb_result(tool_content)
+                        retrieved_sources.extend(_extract_sources_from_kb_result(tool_content))
                         thinking_steps.append(
                             {"label": f"{len(retrieved_sources)} passages pertinents trouvés ✓", "status": "done"}
                         )
 
                     elif tool_name == "search_web_and_learn" and "WEB SEARCH returned" in tool_content:
-                        collected_sources_text += tool_content
-                        web_sources = _extract_sources_from_web_result(tool_content)
+                        collected_sources_text += tool_content + "\n\n"
+                        web_sources.extend(_extract_sources_from_web_result(tool_content))
                         thinking_steps.append(
                             {"label": f"{len(web_sources)} résultats web trouvés et appris ✓", "status": "done"}
                         )
@@ -732,6 +244,10 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
 
         # Extract the final answer
         answer = final_message.content if final_message else ""
+        if answer:
+            answer = str(answer)
+            # Convert markdown bold to HTML bold so it renders beautifully in the UI
+            answer = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', answer)
 
         if not answer or not answer.strip():
             answer = "Désolé, je n'ai pas pu générer une réponse. Veuillez reformuler votre question."
@@ -766,9 +282,6 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
         thinking_steps.append(
             {"label": "Vérification de cohérence ✓", "status": "done"}
         )
-
-    # 5b. Language enforcement disabled - rely on LLM to match query language
-    # answer = output_language_guardrail(answer, language)
 
     thinking_steps.append(
         {"label": "Réponse générée avec succès ✓", "status": "done"}
@@ -827,6 +340,10 @@ def ask_question(question: str, session_id: str = None, user=None, language: str
     }
 
 
+# ═══════════════════════════════════════════════════════════════════════
+#  SOURCE EXTRACTION HELPERS
+# ═══════════════════════════════════════════════════════════════════════
+
 def _extract_sources_from_kb_result(tool_output: str) -> list[dict]:
     """
     Parse the search_knowledge_base tool output to extract source metadata.
@@ -864,161 +381,9 @@ def _extract_sources_from_web_result(tool_output: str) -> list[dict]:
             sources.append({
                 "name": title,
                 "url": url,
+                "type": "web",
+                "score": 0.99,
                 "chunk_preview": "",
             })
 
     return sources
-
-
-def _direct_rag_fallback(
-    question: str,
-    search_query: str,
-    language: str,
-    session,
-    thinking_steps: list[dict],
-    error: Exception,
-) -> dict | None:
-    """Fallback path when the ReAct agent fails to produce a valid tool call.
-
-    This keeps the chatbot usable even when the LLM tool-calling layer breaks.
-    It runs retrieval directly, then asks the model to answer from the fetched
-    context without tool-calling.
-    """
-    from moderation.models import ChatMessage
-
-    logger.warning(f"[RAG] Falling back to direct retrieval after agent failure: {error}")
-    thinking_steps.append(
-        {"label": "Agent tool-call failed — fallback retrieval en cours", "status": "warning"}
-    )
-
-    kb_sources = _retrieve_context(search_query or question)
-    retrieved_sources = [
-        {
-            "name": src.get("source", "Unknown"),
-            "score": src.get("score", 0.0),
-            "chunk_preview": src.get("chunk_preview", ""),
-        }
-        for src in kb_sources
-    ]
-    kb_context = _build_context_text(kb_sources)
-
-    used_web_search = False
-    web_context = ""
-    web_sources = []
-
-    if not kb_sources:
-        web_results = _web_search(search_query or question)
-        if web_results:
-            _auto_learn_web_results(search_query or question, web_results)
-            web_context = _build_web_context_text(web_results)
-            web_sources = [
-                {
-                    "name": r.get("title", "Unknown"),
-                    "url": r.get("url", ""),
-                    "chunk_preview": r.get("snippet", ""),
-                }
-                for r in web_results
-            ]
-            used_web_search = True
-            thinking_steps.append(
-                {"label": f"{len(web_sources)} résultats web trouvés via fallback ✓", "status": "done"}
-            )
-    elif "NO RELEVANT DOCUMENTS FOUND" in kb_context or "NONE passed the quality threshold" in kb_context:
-        web_results = _web_search(search_query or question)
-        if web_results:
-            _auto_learn_web_results(search_query or question, web_results)
-            web_context = _build_web_context_text(web_results)
-            web_sources = [
-                {
-                    "name": r.get("title", "Unknown"),
-                    "url": r.get("url", ""),
-                    "chunk_preview": r.get("snippet", ""),
-                }
-                for r in web_results
-            ]
-            used_web_search = True
-            thinking_steps.append(
-                {"label": f"{len(web_sources)} résultats web trouvés via fallback ✓", "status": "done"}
-            )
-
-    sources_text = "\n\n".join([txt for txt in [kb_context, web_context] if txt]).strip()
-
-    llm = ChatGroq(
-        api_key=os.getenv("GROQ_API_KEY", "").strip().strip('"'),
-        model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-        temperature=0.1,
-        max_tokens=1200,
-    )
-
-    fallback_prompt = ChatPromptTemplate.from_messages([
-        ("system", AGENT_SYSTEM_PROMPT),
-        ("human", "Question de l'utilisateur: {question}\n\nCONTEXT SOURCES:\n{sources}\n\nRéponds uniquement à partir des sources ci-dessus."),
-    ])
-
-    try:
-        chain = fallback_prompt | llm | StrOutputParser()
-        answer = chain.invoke({
-            "question": question,
-            "sources": sources_text or "(Aucun document pertinent trouvé.)",
-        }).strip()
-        if not answer:
-            answer = "Désolé, je n'ai pas pu générer une réponse. Veuillez reformuler votre question."
-    except Exception as fallback_error:
-        logger.error(f"[RAG] Direct fallback generation failed: {fallback_error}")
-        answer = "Désolé, une erreur est survenue lors de la génération de la réponse. Veuillez réessayer."
-        thinking_steps.append(
-            {"label": "Fallback génération échouée — réponse par défaut", "status": "warning"}
-        )
-
-    ChatMessage.objects.create(
-        session=session, role='user', content=question,
-    )
-
-    if used_web_search and web_sources:
-        context_summary = "; ".join([f"{s['name']} ({s.get('url', '')})" for s in web_sources])
-    elif retrieved_sources:
-        context_summary = "; ".join([f"{s['name']} ({s.get('score', '')})" for s in retrieved_sources])
-    else:
-        context_summary = ""
-
-    source_type = "web" if used_web_search else "knowledge_base"
-
-    ChatMessage.objects.create(
-        session=session, role='assistant', content=answer,
-        retrieved_context=context_summary,
-        source_type=source_type,
-    )
-
-    source_list = []
-    seen_sources = set()
-
-    for src in retrieved_sources:
-        if src["name"] not in seen_sources:
-            seen_sources.add(src["name"])
-            source_list.append({
-                "name": src["name"],
-                "score": src.get("score"),
-                "type": "document",
-                "chunk_preview": src.get("chunk_preview", ""),
-            })
-
-    for ws in web_sources:
-        source_list.append({
-            "name": ws["name"],
-            "score": 0.99,
-            "type": "web",
-            "url": ws.get("url", ""),
-            "chunk_preview": ws.get("chunk_preview", ""),
-        })
-
-    thinking_steps.append(
-        {"label": "Réponse générée via fallback direct ✓", "status": "done"}
-    )
-
-    return {
-        "answer": answer,
-        "sources": source_list,
-        "session_id": str(session.id),
-        "source_type": source_type,
-        "thinking_steps": thinking_steps,
-    }

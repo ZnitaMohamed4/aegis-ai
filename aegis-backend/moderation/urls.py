@@ -29,6 +29,7 @@ urlpatterns = [
 
     # RAG Chatbot
     path('chatbot/ask/', views.ask_chatbot, name='chatbot-ask'),
+    path('chatbot/suggested-questions/', views.suggested_questions, name='chatbot-suggested-questions'),
     path('chatbot/sessions/', views.get_chat_sessions, name='chatbot-sessions'),
     path('chatbot/sessions/<str:session_id>/', views.get_chat_session_detail, name='chatbot-session-detail'),
     path('chatbot/sessions/<str:session_id>/delete/', views.delete_chat_session, name='chatbot-session-delete'),

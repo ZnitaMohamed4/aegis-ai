@@ -5,7 +5,9 @@ import { ApiService } from '../../../core/services/api.service';
 
 export interface Source {
   name: string;
-  score: number;
+  score?: number;
+  type?: string;
+  url?: string;
 }
 
 export interface ThinkingStep {
@@ -29,6 +31,12 @@ export interface Conversation {
   updatedAt: Date;
 }
 
+export interface SuggestedQuestion {
+  icon: string;
+  text: string;
+  category: string;
+}
+
 @Component({
   selector: 'app-chatbot-page',
   standalone: true,
@@ -47,6 +55,7 @@ export class ChatbotPageComponent {
   activeConversationId = signal<string>('');
   inputText = '';
   isTyping = signal(false);
+  suggestedQuestions = signal<SuggestedQuestion[]>([]);
 
   activeConversation = signal<Conversation | undefined>(undefined);
 
@@ -61,6 +70,7 @@ export class ChatbotPageComponent {
 
   ngOnInit() {
     this.loadSessions();
+    this.loadSuggestedQuestions();
   }
 
   loadSessions() {
@@ -93,24 +103,39 @@ export class ChatbotPageComponent {
     return 'fr';
   }
 
+  loadSuggestedQuestions() {
+    this.apiService.getSuggestedQuestions(this.activeLanguage()).subscribe({
+      next: (questions) => this.suggestedQuestions.set(questions),
+      error: (err) => console.error('Failed to load suggested questions', err)
+    });
+  }
+
+  shouldShowSuggestions(): boolean {
+    const conv = this.activeConversation();
+    if (!conv) return true;
+    // Show suggestions only when there's just the welcome message (or no messages)
+    const userMessages = conv.messages.filter(m => m.role === 'user');
+    return userMessages.length === 0;
+  }
+
+  askSuggested(question: string) {
+    if (this.isTyping()) return;
+    this.inputText = question;
+    this.sendMessage();
+  }
+
   selectConversation(id: string) {
     this.activeConversationId.set(id);
   }
 
   newChat() {
     const newConv: Conversation = {
-      id: Math.random().toString(36).substring(7),
+      id: 'temp-' + Math.random().toString(36).substring(7),
       title: 'Nouvelle conversation',
-      messages: [
-        {
-          id: crypto.randomUUID(),
-          role: 'bot',
-          text: 'Nouvelle session démarrée. Posez-moi une question.',
-          timestamp: new Date(),
-        }
-      ],
+      messages: [],
       updatedAt: new Date()
     };
+    
     this.conversations.update(prev => [newConv, ...prev]);
     this.activeConversationId.set(newConv.id);
   }
@@ -133,7 +158,7 @@ export class ChatbotPageComponent {
     }
 
     // Call API (only if it's a real UUID from the backend, not a temporary new chat ID)
-    if (id.length > 10) {
+    if (!id.startsWith('temp-')) {
       this.apiService.deleteChatSession(id).subscribe({
         error: (err) => console.error('Failed to delete session', err)
       });
@@ -162,7 +187,7 @@ export class ChatbotPageComponent {
       if (c.id === this.activeConversationId()) {
         const updatedMessages = [...c.messages, msg];
         let title = c.title;
-        if (c.messages.length === 1 && c.messages[0].role === 'bot') {
+        if (c.title === 'Nouvelle conversation' && msg.role === 'user') {
           title = msg.text.substring(0, 30) + (msg.text.length > 30 ? '...' : '');
         }
         return { ...c, messages: updatedMessages, title, updatedAt: new Date() };
@@ -190,8 +215,10 @@ export class ChatbotPageComponent {
 
     this.updateMessages(botMsg);
 
-    const isNewSession = this.activeConversation()?.messages.length === 2; // only the welcome msg + user's new query
-    const sessionId = isNewSession ? undefined : this.activeConversationId();
+    // A real UUID from the backend is 36 characters. The temporary ID we generate is ~6-7 chars.
+    const currentId = this.activeConversationId();
+    const isNewSession = currentId.length < 20; 
+    const sessionId = isNewSession ? undefined : currentId;
     
     // Call the actual API
     this.apiService.askChatbot(query, sessionId, this.activeLanguage()).subscribe({

@@ -7,12 +7,15 @@ can decide WHEN to call them instead of hardcoded if/else logic.
 Tools:
   1. search_knowledge_base  — ChromaDB vector search
   2. search_web_and_learn   — SerpAPI fallback + auto-ingest
-  3. get_conversation_context — Recent chat history for multi-turn
 """
 import logging
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-
+try:
+    # pydantic v2
+    from pydantic import field_validator
+except Exception:  # pragma: no cover - fallback for pydantic v1
+    from pydantic import validator as field_validator
 logger = logging.getLogger(__name__)
 
 
@@ -20,6 +23,23 @@ class SearchKnowledgeBaseInput(BaseModel):
     query: str = Field(
         description="The search query. IMPORTANT: Write in plain text and STRIP ALL ACCENTS (e.g., write 'autorisee' instead of 'autorisée') to avoid JSON parser errors."
     )
+
+    @field_validator('query')
+    def normalize_query(cls, v: str) -> str:
+        """Normalize the query by stripping accents and normalising whitespace.
+
+        This ensures the model's tool call JSON remains ASCII-safe even when
+        the LLM generates accented characters.
+        """
+        if not isinstance(v, str):
+            return v
+        try:
+            import unicodedata
+            norm = unicodedata.normalize('NFKD', v)
+            ascii_only = norm.encode('ascii', 'ignore').decode('ascii')
+            return ' '.join(ascii_only.split())
+        except Exception:
+            return v
 
 @tool(args_schema=SearchKnowledgeBaseInput)
 def search_knowledge_base(query: str) -> str:
@@ -38,7 +58,8 @@ def search_knowledge_base(query: str) -> str:
         A formatted string with relevant document excerpts and their similarity
         scores, or a message indicating no relevant documents were found.
     """
-    from .rag_service import _retrieve_context, _build_context_text, _preprocess_query, SIMILARITY_THRESHOLD
+    from .rag_retrieval import _retrieve_context, _build_context_text, _preprocess_query
+    from .rag_config import SIMILARITY_THRESHOLD
 
     # Preprocess query for better embedding match (expand abbreviations, etc.)
     processed_query = _preprocess_query(query)
@@ -85,6 +106,19 @@ class SearchWebAndLearnInput(BaseModel):
         description="The search query to send to Google via SerpAPI."
     )
 
+    @field_validator('query')
+    def normalize_query(cls, v: str) -> str:
+        """Also strip accents for web searches to keep downstream tool calls stable."""
+        if not isinstance(v, str):
+            return v
+        try:
+            import unicodedata
+            norm = unicodedata.normalize('NFKD', v)
+            ascii_only = norm.encode('ascii', 'ignore').decode('ascii')
+            return ' '.join(ascii_only.split())
+        except Exception:
+            return v
+
 @tool(args_schema=SearchWebAndLearnInput)
 def search_web_and_learn(query: str) -> str:
     """Search the web when the knowledge base does not have sufficient information.
@@ -102,7 +136,7 @@ def search_web_and_learn(query: str) -> str:
         A formatted string with web search results (title + snippet),
         or a message indicating no results were found.
     """
-    from .rag_service import _web_search, _auto_learn_web_results, _build_web_context_text
+    from .rag_web import _web_search, _auto_learn_web_results, _build_web_context_text
 
     web_results = _web_search(query)
 
@@ -132,5 +166,3 @@ def search_web_and_learn(query: str) -> str:
         f"IMPORTANT: When answering from web results, mention that the information "
         f"comes from a web search, not from the local knowledge base."
     )
-
-

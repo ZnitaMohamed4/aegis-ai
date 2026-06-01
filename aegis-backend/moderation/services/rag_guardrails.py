@@ -93,13 +93,16 @@ def input_topic_guardrail(question: str, language: str = "fr") -> tuple[bool, st
         - (True, "") if the question is on-topic
         - (False, refusal_message) if the question is off-topic
     """
-    from .rag_service import _retrieve_context
+    from .rag_retrieval import _retrieve_context
+    from .rag_config import SIMILARITY_THRESHOLD
 
     try:
-        # Fast path: check ChromaDB for any remotely similar context
+        # Fast path: check ChromaDB for any remotely similar context using the
+        # canonical similarity threshold from the retrieval system to avoid
+        # inconsistent pass/fail behavior between guardrail and retrieval.
         retrieved = _retrieve_context(question)
-        if retrieved and retrieved[0]["score"] > 0.25:
-            logger.debug(f"[GUARDRAIL] ✅ Topic guardrail PASSED (embedding): '{question[:60]}...'")
+        if retrieved and retrieved[0]["score"] > SIMILARITY_THRESHOLD:
+            logger.debug(f"[GUARDRAIL] ✅ Topic guardrail PASSED (embedding): '{question[:60]}...' (score={retrieved[0]['score']:.3f} >= {SIMILARITY_THRESHOLD})")
             return True, ""
 
         # Slow path: Fall back to LLM for ambiguous cases
@@ -134,6 +137,8 @@ GROUNDED means: every factual claim in the answer can be traced back to the sour
 RULES:
 - General knowledge statements (e.g., "cyberbullying is harmful") are acceptable even without sources
 - The answer doesn't need to quote sources verbatim — paraphrasing is fine
+- Mentioning the AEGIS AI system/tool as a solution or recommendation is ALWAYS acceptable and is NOT a hallucination.
+- Engaging follow-up questions at the end of the answer are NOT hallucinations.
 - If the answer says "I don't have this information" or similar, that's GROUNDED (it's honest)
 - If sources are empty/missing and the answer still provides specific legal details → NOT GROUNDED
 

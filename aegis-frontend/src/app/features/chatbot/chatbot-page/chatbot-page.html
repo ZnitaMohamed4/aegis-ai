@@ -49,7 +49,7 @@
     <!-- Top bar -->
     <div class="chat-topbar">
       <button class="topbar-toggle" (click)="isSidebarOpen.set(!isSidebarOpen())" title="Toggle sidebar">
-        <i class="pi" [class.pi-sidebar]="isSidebarOpen()" [class.pi-bars]="!isSidebarOpen()"></i>
+        <i class="pi" [ngClass]="isSidebarOpen() ? 'pi-times' : 'pi-bars'"></i>
       </button>
       <div class="topbar-info">
         <span class="topbar-title">{{ activeConversation()?.title || 'AEGIS Assistant' }}</span>
@@ -112,9 +112,17 @@
                       <div class="src-list">
                         @for (src of msg.sources; track src.name) {
                           <div class="src-row">
-                            <i class="pi pi-file-pdf"></i>
+                            @if (src.type === 'web') {
+                              <i class="pi pi-globe"></i>
+                            } @else {
+                              <i class="pi pi-file-pdf"></i>
+                            }
                             <span>{{ src.name }}</span>
-                            <span class="src-pct">{{ (src.score * 100).toFixed(0) }}%</span>
+                            @if (src.type === 'web') {
+                              <span class="src-pct" style="background-color: #3b82f6; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;">WEB</span>
+                            } @else {
+                              <span class="src-pct">{{ ((src.score || 0) * 100).toFixed(0) }}%</span>
+                            }
                           </div>
                         }
                       </div>
@@ -136,6 +144,30 @@
       </div>
     </div>
 
+    <!-- ═══ SUGGESTED QUESTIONS (empty state) ═══ -->
+    @if (shouldShowSuggestions() && suggestedQuestions().length > 0) {
+      <div class="suggested-section">
+        <div class="suggested-header">
+          <div class="suggested-icon-wrap">
+            <i class="pi pi-sparkles"></i>
+          </div>
+          <div>
+            <h3 class="suggested-title">Comment puis-je vous aider ?</h3>
+            <p class="suggested-subtitle">Cliquez sur une question ou posez la vôtre</p>
+          </div>
+        </div>
+        <div class="suggested-grid">
+          @for (q of suggestedQuestions(); track q.text) {
+            <button class="suggested-card" (click)="askSuggested(q.text)" [disabled]="isTyping()">
+              <span class="suggested-card-icon">{{ q.icon }}</span>
+              <span class="suggested-card-text">{{ q.text }}</span>
+              <i class="pi pi-arrow-right suggested-card-arrow"></i>
+            </button>
+          }
+        </div>
+      </div>
+    }
+
     <!-- ═══ INPUT FOOTER ═══ -->
     <div class="input-footer">
       <div class="input-row">
@@ -156,7 +188,7 @@
           <i class="pi pi-arrow-up"></i>
         </button>
       </div>
-      <p class="grounded-tip">Grounded in your knowledge base · FAISS + Groq LLaMA-3</p>
+      <p class="grounded-tip">"Grounded in your knowledge base · FAISS + Groq LLaMA-3"</p>
     </div>
 
   </main>

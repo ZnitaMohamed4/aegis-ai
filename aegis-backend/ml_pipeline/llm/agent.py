@@ -216,9 +216,9 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
                 try:
                     parsed = json.loads(match.group(0))
                 except json.JSONDecodeError:
-                    parsed = {"decision": "HUMAN_REVIEW", "category": check_class, "explanation": "JSON Parse Fallback Error"}
+                    parsed = {"decision": "HUMAN_REVIEW", "category": primary_class, "explanation": "JSON Parse Fallback Error"}
             else:
-                parsed = {"decision": "HUMAN_REVIEW", "category": check_class, "explanation": "No JSON found in response"}
+                parsed = {"decision": "HUMAN_REVIEW", "category": primary_class, "explanation": "No JSON found in response"}
 
         valid  = {"ESCALATE", "BLOCK", "WARN", "ALLOW", "HUMAN_REVIEW"}
         if parsed.get("decision", "").upper() not in valid:

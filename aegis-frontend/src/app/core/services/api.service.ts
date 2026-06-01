@@ -270,6 +270,10 @@ export class ApiService {
     });
   }
 
+  getSuggestedQuestions(language: string = 'fr'): Observable<any[]> {
+    return this.http.get<any[]>(`${this.BASE_URL}/chatbot/suggested-questions/?language=${language}`);
+  }
+
   getChatSessions(): Observable<any[]> {
     return this.http.get<any[]>(`${this.BASE_URL}/chatbot/sessions/`);
   }
