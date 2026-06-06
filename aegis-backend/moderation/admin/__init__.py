@@ -7,6 +7,7 @@ from .moderation import HarassmentCategoryAdmin, ModerationResultAdmin
 from .behavioral import UserBehaviorProfileAdmin, BehavioralSnapshotAdmin
 from .alerts import SecurityAlertAdmin
 from .chatbot import ChatSessionAdmin, ChatMessageAdmin
+from .platform import FailedMessageAdmin
 
 # ── Admin Site Customization ──
 admin.site.site_header = "🛡️ AEGIS AI — Administration"
@@ -20,4 +21,5 @@ __all__ = [
     'UserBehaviorProfileAdmin', 'BehavioralSnapshotAdmin',
     'SecurityAlertAdmin',
     'ChatSessionAdmin', 'ChatMessageAdmin',
+    'FailedMessageAdmin',
 ]

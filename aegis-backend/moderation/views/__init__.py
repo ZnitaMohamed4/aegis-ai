@@ -83,6 +83,9 @@ from moderation.views.rag_views import (
     get_rag_stats,
 )
 
+# Health Check
+from moderation.views.health_views import health_check
+
 __all__ = [
     'webhook_messages',
     'webhook_chatbot',
@@ -135,4 +138,5 @@ __all__ = [
     'get_knowledge_documents',
     'delete_knowledge_document',
     'get_rag_stats',
+    'health_check',
 ]

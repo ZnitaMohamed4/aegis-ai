@@ -3,6 +3,9 @@ from . import views
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 urlpatterns = [
+    # 0. Health Check — public liveness probe
+    path('health/', views.health_check, name='health-check'),
+
     # 1. Webhooks - Evolution API posts here
     path('webhook/messages/', views.webhook_messages, name='webhook-messages'),
     path('webhook/chatbot/', views.webhook_chatbot, name='webhook-chatbot'),

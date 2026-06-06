@@ -16,16 +16,6 @@ from .state import ModerationState
 
 logger = logging.getLogger(__name__)
 
-# ── ANSI colors for Agent 4 logging ──────────────────────────
-C4_BLUE   = "\033[94m"
-C4_GREEN  = "\033[92m"
-C4_YELLOW = "\033[93m"
-C4_RED    = "\033[91m"
-C4_MAGENTA= "\033[95m"
-C4_CYAN   = "\033[96m"
-C4_RESET  = "\033[0m"
-C4_DIVIDER = "═" * 62
-
 
 def profiler_node(state: ModerationState) -> dict:
     """
@@ -323,19 +313,7 @@ def profiler_node(state: ModerationState) -> dict:
     except Exception as e:
         logger.error(f"[AGENT 4] Failed to upsert BehavioralSnapshot: {e}")
     
-    # --- 3. Terminal Logging ---
-    risk_color = C4_RED if profile.risk_level in ('CRITICAL','HIGH') else C4_YELLOW if profile.risk_level == 'MEDIUM' else C4_GREEN
-    
-    print(f"\n{C4_DIVIDER}")
-    print(f"  📊 {C4_BLUE}[AGENT 4: PROFILER]{C4_RESET} Digital Twin Update")
-    print(C4_DIVIDER)
-    print(f"  👤 Sender:     {sender_jid}")
-    print(f"  📈 Method:     {C4_CYAN}{prediction_method.upper()}{C4_RESET}")
-    print(f"  🧠 Prediction: {risk_color}{profile.risk_level}{C4_RESET} ({archetype}) — score {profile.risk_score:.3f}")
-    if rf_probas:
-        proba_str = " | ".join(f"{k}={v:.2f}" for k, v in sorted(rf_probas.items()))
-        print(f"  🎲 Probas:     {proba_str}")
-    
+    # --- 3. Structured Logging ---
     # Calculate rates for logging
     total_msgs = max(1, profile.total_messages_sent)
     up_rate = profile.upward_corrections_total / total_msgs
@@ -348,14 +326,22 @@ def profiler_node(state: ModerationState) -> dict:
     escalation_rate = profile.escalation_count / max(1, days_known)
     child_init_val = "YES" if profile.child_initiated else "NO"
     
-    print(f"  📉 Features:   Stranger={stranger_val} | Night={profile.night_activity_ratio:.2f} | Targets={profile.unique_targets_count} | SharedGroups={profile.shared_groups_count}")
-    print(f"                 ChildInit={child_init_val} | MsgLen={profile.avg_message_length:.0f} | BlockRatio={block_ratio:.2f} | EscRate={escalation_rate:.2f} | ToxEMA={profile.average_toxicity_score:.2f}")
-    print(C4_DIVIDER + "\n")
+    proba_str = ""
+    if rf_probas:
+        proba_str = " | ".join(f"{k}={v:.2f}" for k, v in sorted(rf_probas.items()))
     
     logger.info(
-        f"[AGENT 4: PROFILER] method={prediction_method} | "
-        f"risk={profile.risk_level} ({profile.risk_score:.3f}) | "
-        f"archetype={archetype}"
+        f"[AGENT 4: PROFILER] sender={sender_jid} | "
+        f"method={prediction_method.upper()} | "
+        f"risk={profile.risk_level} ({archetype}) score={profile.risk_score:.3f}"
+        f"{' | probas=' + proba_str if proba_str else ''}"
+    )
+    logger.info(
+        f"[AGENT 4: FEATURES] Stranger={stranger_val} | "
+        f"Night={profile.night_activity_ratio:.2f} | Targets={profile.unique_targets_count} | "
+        f"SharedGroups={profile.shared_groups_count} | ChildInit={child_init_val} | "
+        f"MsgLen={profile.avg_message_length:.0f} | BlockRatio={block_ratio:.2f} | "
+        f"EscRate={escalation_rate:.2f} | ToxEMA={profile.average_toxicity_score:.2f}"
     )
     
     # Update the LangGraph state

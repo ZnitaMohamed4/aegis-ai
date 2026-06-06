@@ -61,7 +61,8 @@ class ModerationResult(models.Model):
     raw_text = models.TextField(help_text="Original message text")
     normalized_text = models.TextField(help_text="Message text after V3 normalization")
     language = models.CharField(max_length=20, default='en', help_text="Detected language (e.g. en, fr, ar, darija)")
-    message_key_id = models.CharField(max_length=255, null=True, blank=True, help_text="Evolution API message key for deletion")
+    message_key_id = models.CharField(max_length=255, null=True, blank=True, db_index=True,
+        help_text="Evolution API message key for deletion and deduplication")
     primary_class = models.CharField(max_length=50, null=True, blank=True, help_text="M2 detected category (e.g. threat, sexual_harassment)")
 
     # Image Analysis fields

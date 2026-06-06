@@ -139,3 +139,4 @@ xxhash==3.6.0
 zipp==3.23.0
 zope.interface==8.2
 zstandard==0.25.0
+fasttext==0.9.3

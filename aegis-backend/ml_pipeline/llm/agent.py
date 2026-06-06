@@ -8,16 +8,6 @@ from .tools import fetch_recent_history, search_similar_cases, fetch_risk_profil
 
 logger = logging.getLogger(__name__)
 
-# ── ANSI colors (used in terminal output) ────────────────────
-C_YELLOW  = "\033[93m"   # tool calls
-C_CYAN    = "\033[96m"   # tool results
-C_MAGENTA = "\033[95m"   # LLM reasoning  ← unique color you asked for
-C_GREEN   = "\033[92m"   # pass / ALLOW
-C_RED     = "\033[91m"   # BLOCK
-C_ORANGE  = "\033[93m"   # WARN
-C_RESET   = "\033[0m"
-DIVIDER   = "═" * 62
-
 
 def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid, instance_name, image_context=None):
     """
@@ -148,11 +138,7 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     try:
         inputs = {"messages": [("user", "Please analyse the message and give your JSON verdict.")]}
 
-        # ── Print visual header ───────────────────────────────
-        print(f"\n{DIVIDER}")
-        print(f"  🧠 {C_MAGENTA}[AGENT 3: AUDITOR]{C_RESET} ReAct Analysis Starting")
-        print(DIVIDER)
-        logger.info(f"[AGENT 3: AUDITOR] ════ ReAct loop starting for: '{raw_text[:60]}' ════")
+        logger.info(f"[AGENT 3: AUDITOR] ReAct Analysis Starting for: '{raw_text[:60]}'")
 
         final_message = None
         printed_ids   = set()
@@ -172,15 +158,12 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
                 # ── LLM tool-call decision ────────────────────
                 if hasattr(msg, "tool_calls") and msg.tool_calls:
                     for tc in msg.tool_calls:
-                        print(f"  🛠️  TOOL CALL → {C_YELLOW}{tc['name']}{C_RESET}")
-                        print(f"  📥 ARGS      → {tc['args']}")
                         logger.info(f"[AGENT 3: TOOL CALL] {tc['name']} | args={tc['args']}")
 
                 # ── Tool result ───────────────────────────────
                 elif msg.type == "tool":
                     preview   = str(msg.content).replace('\n', ' | ')[:140]
                     tool_name = msg.name if hasattr(msg, "name") else "Tool"
-                    print(f"  👀 {tool_name.upper()} → {C_CYAN}{preview}...{C_RESET}\n")
                     logger.info(f"[AGENT 3: TOOL RESULT] {tool_name} → {preview[:120]}...")
 
                 # ── LLM reasoning text (chain-of-thought) ─────
@@ -191,11 +174,11 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
                 ):
                     full_text = str(msg.content).strip()
                     if full_text:
-                        # Print only the thinking part (before ```json)
                         thinking = full_text.split("```")[0].strip()
                         if thinking:
-                            print(f"  💭 {C_MAGENTA}REASONING{C_RESET} → {thinking[:280]}")
-                        logger.info(f"[AGENT 3: REASONING] {full_text[:250]}")
+                            logger.info(f"[AGENT 3: REASONING] {thinking[:280]}")
+                        else:
+                            logger.info(f"[AGENT 3: REASONING] {full_text[:250]}")
 
         # ── Parse the JSON verdict ────────────────────────────
         import re
@@ -228,13 +211,8 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
         category = parsed.get("category", "?")
         expl     = parsed.get("explanation", "")
 
-        # ── Color-coded verdict line ──────────────────────────
-        vcolor = C_RED if decision == "BLOCK" else C_ORANGE if decision == "WARN" else C_GREEN
-        print(f"  {C_GREEN}✅ VERDICT{C_RESET}   → {vcolor}{decision}{C_RESET} [{category}]  \"{expl}\"")
-        print(DIVIDER + "\n")
-
         logger.info(
-            f"[AGENT 3: FINAL VERDICT] Decision={decision} | "
+            f"[AGENT 3: VERDICT] Decision={decision} | "
             f"Category={category} | Explanation={expl}"
         )
         return parsed

@@ -15,7 +15,7 @@ GROQ_MODEL = os.environ.get('GROQ_MODEL', 'mixtral-8x7b-32768').strip('"').strip
 
 def detect_language_via_llm(text):
     if not GROQ_API_KEY:
-        print("⚠️ Warning: GROQ_API_KEY not set in .env! Returning 'en'")
+        logger.warning("GROQ_API_KEY not set in .env! Returning 'en'")
         return "en"
 
     prompt = f"""You are an expert NLP language detector. Your ONLY task is to identify the language of the following short text.
@@ -55,9 +55,9 @@ def detect_language_via_llm(text):
         return "other"
 
     except Exception as e:
-        print(f"⚠️ Groq API Error: {e}")
+        logger.warning(f"Groq API Error: {e}")
         if "429" in str(e):
-            print("⏳ Ratelimit hit, sleeping for 5 seconds...")
+            logger.info("Ratelimit hit, sleeping for 5 seconds...")
             time.sleep(5)
             # Try once more on rate limit
             try:

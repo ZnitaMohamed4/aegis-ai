@@ -316,12 +316,11 @@ def _enforce_adult_self_moderation(ctx):
             send_text_message(bot_instance, adult_jid, reflection)
             ctx.enforcement_actions.append("self_reflection_dm")
 
-    print(
-        f"\n  💭 [ADULT SELF-MOD] Message flagged for self-reflection!"
-        f"\n     Category: {ctx.primary_class} | "
-        f"Original: {ctx.original_decision} → SELF_WARN"
-        f"\n     No deletion. No parent alert. "
-        f"DM sent: {'✅' if ctx.is_from_me else 'N/A'}"
+    logger.info(
+        f"[AGENT 5: ADULT SELF-MOD] Message flagged for self-reflection | "
+        f"Category={ctx.primary_class} | "
+        f"Original={ctx.original_decision} → SELF_WARN | "
+        f"DM sent={'yes' if ctx.is_from_me else 'N/A'}"
     )
 
 
@@ -409,13 +408,13 @@ def _enforce_child_self_moderation(ctx):
             f"[AGENT 5: ENFORCER] Failed to create SelfModerationEvent: {e}"
         )
 
-    print(
-        f"\n  📚 [SELF-MODERATION] Child message caught!"
-        f"\n     Category: {ctx.primary_class} | "
-        f"Original: {ctx.original_decision} → EDUCATE"
-        f"\n     Deleted: {'✅' if message_deleted else '❌'} | "
-        f"DM Sent: {'✅' if dm_sent else '❌'} | "
-        f"Parent: {'✅' if parent_notified else '❌'}"
+    logger.info(
+        f"[AGENT 5: SELF-MODERATION] Child message caught | "
+        f"Category={ctx.primary_class} | "
+        f"Original={ctx.original_decision} → EDUCATE | "
+        f"Deleted={'yes' if message_deleted else 'no'} | "
+        f"DM sent={'yes' if dm_sent else 'no'} | "
+        f"Parent notified={'yes' if parent_notified else 'no'}"
     )
 
 

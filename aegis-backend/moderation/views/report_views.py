@@ -1,3 +1,5 @@
+import hmac
+import logging
 import requests
 import os
 import base64
@@ -18,6 +20,8 @@ from django.urls import reverse
 
 # Note: Using localhost as requested. This can be moved to Django settings in production.
 N8N_WEBHOOK_URL = 'http://localhost:5678/webhook/generate-report'
+
+logger = logging.getLogger(__name__)
 
 
 def _to_int(value, default=0):
@@ -322,8 +326,10 @@ def generate_report(request):
         'monitored_number': child.whatsapp_display_number if child else '',
         'child_jid': child.whatsapp_jid if child else '',
         
-        # Callback URL for n8n
-        'callback_url': request.build_absolute_uri(reverse('report-complete-webhook', args=[report.id]))
+        # Callback URL for n8n — includes shared secret for authentication
+        'callback_url': request.build_absolute_uri(
+            reverse('report-complete-webhook', args=[report.id])
+        ) + f"?secret={os.environ.get('N8N_WEBHOOK_SECRET', '')}"
     }
     
     # Trigger n8n
@@ -360,12 +366,28 @@ def generate_report(request):
 def report_complete_webhook(request, report_id):
     """
     Called by n8n when the report is ready.
+    Authenticated via shared secret (query param or X-Webhook-Secret header).
     Expects JSON payload with:
     - status ('ready' or 'failed')
     - pdf_base64 (if ready)
     - ai_narrative
     - stats (dict)
     """
+    # ── Webhook Authentication ──────────────────────────────────────────
+    expected_secret = os.environ.get('N8N_WEBHOOK_SECRET', '').strip()
+    if expected_secret:
+        provided_secret = (
+            request.query_params.get('secret', '')
+            or request.META.get('HTTP_X_WEBHOOK_SECRET', '')
+        )
+        if not hmac.compare_digest(provided_secret, expected_secret):
+            logger.warning(
+                "report_complete_webhook: unauthorized callback attempt for report %s from %s",
+                report_id, request.META.get('REMOTE_ADDR', 'unknown'),
+            )
+            return Response({'detail': 'Unauthorized'}, status=401)
+    # ─────────────────────────────────────────────────────────────────────
+
     report = get_object_or_404(Report, id=report_id)
     
     status_val = str(request.data.get('status', 'ready')).strip().lower()

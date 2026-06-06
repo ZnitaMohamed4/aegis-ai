@@ -31,12 +31,9 @@ def _try_semantic_cache_lookup(raw_text):
         if hit:
             similarity = hit.get('similarity', hit.get('confidence', 0))
             logger.info(
-                f"[AGENT 3: SEMANTIC CACHE] ✅ HIT "
-                f"→ {hit.get('decision', '?')} ({hit.get('category', '?')})"
-            )
-            print(
-                f"  ⚡ [SEMANTIC CACHE HIT] "
-                f"→ {hit.get('decision', '?')}"
+                f"[AGENT 3: SEMANTIC CACHE] HIT "
+                f"→ {hit.get('decision', '?')} ({hit.get('category', '?')}) "
+                f"similarity={similarity:.2f}"
             )
             return hit
     except Exception as e:

@@ -71,10 +71,10 @@ def webhook_chatbot(request):
     push_name = data.get("pushName") or inner_data.get("pushName") or "friend"
     instance_name = body.get("instance", "aegis-bot")
     
-    print(f"\n┌──────────────────────────────────────────────┐")
-    print(f"│ 🤖 AEGIS ASSISTANT — Incoming Message")
-    print(f"│ 👤 From: {push_name} ({sender_jid})")
-    print(f"│ 📝 Text: '{raw_text[:80]}{'...' if len(raw_text) > 80 else ''}'")
+    logger.info(
+        f"[CHATBOT] Incoming message from {push_name} ({sender_jid}) | "
+        f"Text='{raw_text[:80]}{'...' if len(raw_text) > 80 else ''}'"
+    )
     
     # ── Process with chatbot service ─────────────────────────────
     from moderation.services.chatbot_service import get_chatbot
@@ -119,7 +119,7 @@ def webhook_chatbot(request):
         else:
             chatbot.notify_parent_safety(monitor_instance, sender_jid, matched_keyword or "LLM Danger Assessment")
     
-    print(f"│ 💬 Response ({t_elapsed}ms): '{response_text[:80]}{'...' if len(response_text) > 80 else ''}'")
+    logger.info(f"[CHATBOT] Response ({t_elapsed}ms): '{response_text[:80]}{'...' if len(response_text) > 80 else ''}'")
     
     # 7. Send clean response to child
     chatbot.send_reply(sender_jid, response_text)
@@ -130,8 +130,6 @@ def webhook_chatbot(request):
         is_safety_flagged=is_safety_event,
         threat_intel=threat_intel,
     )
-    
-    print(f"└──────────────────────────────────────────────┘")
     
     return JsonResponse({
         "status": "success",

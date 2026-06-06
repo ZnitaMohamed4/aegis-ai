@@ -25,8 +25,8 @@ from .alerts import SecurityAlert
 # Package 6: Chatbot & Bot Memory
 from .chatbot import ChatSession, ChatMessage, BotConversation
 
-# Package 7–9: Platform (BlockedContact, Report, PlatformSettings, SelfModerationEvent)
-from .platform import BlockedContact, Report, PlatformSettings, SelfModerationEvent
+# Package 7–9: Platform (BlockedContact, Report, PlatformSettings, SelfModerationEvent, FailedMessage)
+from .platform import BlockedContact, Report, PlatformSettings, SelfModerationEvent, FailedMessage
 
 # Package 10: Knowledge Base
 from .knowledge import IndexedDocument
@@ -39,5 +39,6 @@ __all__ = [
     'SecurityAlert',
     'ChatSession', 'ChatMessage', 'BotConversation',
     'BlockedContact', 'Report', 'PlatformSettings', 'SelfModerationEvent',
+    'FailedMessage',
     'IndexedDocument',
 ]

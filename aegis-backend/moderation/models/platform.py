@@ -170,6 +170,48 @@ class PlatformSettings(models.Model):
 # ║  SelfModerationEvent                                        ║
 # ╚══════════════════════════════════════════════════════════════╝
 
+class FailedMessage(models.Model):
+    """
+    Crash net — when the 5-agent pipeline throws any exception, the raw message
+    is persisted here so it is never silently lost. Admins can review and
+    reprocess these later.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    raw_text = models.TextField(
+        help_text="Original message text before pipeline processing")
+    sender_jid = models.CharField(max_length=255,
+        help_text="WhatsApp JID of the sender")
+    instance_name = models.CharField(max_length=255,
+        help_text="Evolution API instance that received the message")
+    message_key_id = models.CharField(max_length=255, blank=True, default='',
+        help_text="WhatsApp message key for deduplication")
+    push_name = models.CharField(max_length=255, blank=True, default='',
+        help_text="Display name of the sender")
+    error_type = models.CharField(max_length=255,
+        help_text="Exception class name (e.g. TimeoutError, OperationalError)")
+    error_message = models.TextField(
+        help_text="Full error traceback or message")
+    pipeline_stage = models.CharField(max_length=100, blank=True, default='',
+        help_text="Which agent/stage was executing when the error occurred")
+    metadata = models.JSONField(default=dict, blank=True,
+        help_text="Extra context: image_analyzed, is_from_me, etc.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved = models.BooleanField(default=False,
+        help_text="Set True once an admin has reviewed/reprocessed this message")
+
+    class Meta:
+        verbose_name = "Failed Message"
+        verbose_name_plural = "Failed Messages"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['-created_at', 'resolved']),
+        ]
+
+    def __str__(self):
+        return (f"Failed [{self.error_type}] from {self.sender_jid} "
+                f"at {self.created_at.strftime('%Y-%m-%d %H:%M')}")
+
+
 class SelfModerationEvent(models.Model):
     """
     Tracks when Aegis catches the CHILD'S own toxic message and sends

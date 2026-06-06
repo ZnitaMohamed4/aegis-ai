@@ -3,10 +3,12 @@ Webhook endpoint — Evolution API posts WhatsApp messages here.
 
 Extracted from views.py during Phase 2 audit refactoring (2026-04-21).
 """
+import hmac
 import json
 import logging
 import os
 import time
+import traceback
 
 # The Aegis Bot's WhatsApp JID — messages FROM the child TO the bot must be
 # excluded from the moderation pipeline (they're private chats with the assistant).
@@ -22,6 +24,8 @@ import redis
 
 # Import the LangGraph Orchestrator
 from ml_pipeline.graph import aegis_graph
+from moderation.models import FailedMessage, ModerationResult
+from ml_pipeline.models_pkg.language_detector import detect_language, is_likely_darija
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +64,20 @@ def webhook_messages(request):
     This is what Evolution API hits when a WhatsApp message arrives!
     """
     t_start = time.time()
+
+    # 🔒 WEBHOOK AUTHENTICATION — verify the request came from Evolution API
+    # The ngrok tunnel is public, so anyone who knows/guesses the URL can POST.
+    # Evolution API sends its apikey header with every webhook — we validate it here.
+    expected_key = os.getenv('EVOLUTION_API_KEY', '')
+    incoming_key = request.headers.get('apikey', '')
+    if not expected_key or not hmac.compare_digest(incoming_key, expected_key):
+        logger.warning(
+            "Unauthorized webhook attempt from %s (apikey=%s…)",
+            request.META.get('REMOTE_ADDR', 'unknown'),
+            incoming_key[:8] if incoming_key else '<missing>',
+        )
+        return JsonResponse({"status": "unauthorized"}, status=401)
+
     try:
         body = json.loads(request.body)
     except json.JSONDecodeError:
@@ -145,22 +163,18 @@ def webhook_messages(request):
         from ml_pipeline.image_analyzer import analyze_image
         image_result = analyze_image(body.get("instance", "unknown"), inner_data)
         
-        # 📸 Print image analysis results to terminal
-        nsfw_icon = "🔴" if image_result.get("nsfw") else "🟢"
-        violent_icon = "🔴" if image_result.get("violent") else "🟢"
+        # Log image analysis results
         ocr_preview = image_result.get("ocr_text", "")[:80] or "(none)"
         metadata_keys = list(image_result.get("metadata", {}).keys())
         metadata_preview = f"{len(metadata_keys)} tags found" if metadata_keys else "(none stripped)"
         
-        print(f"\n┌──────────────────────────────────────────────┐")
-        print(f"│ 📸 IMAGE ANALYSIS RESULTS")
-        print(f"│ {nsfw_icon} NSFW:     {image_result.get('nsfw', False)}  (score: {image_result.get('nsfw_score', 0):.4f})")
-        print(f"│ {violent_icon} Violence: {image_result.get('violent', False)}  (score: {image_result.get('violent_score', 0):.4f})")
-        print(f"│ 📝 OCR:      {ocr_preview}")
-        print(f"│ 🗺️  EXIF:     {metadata_preview}")
-        if metadata_keys:
-            print(f"│   Tags: {', '.join(metadata_keys[:5])}...")
-        print(f"└──────────────────────────────────────────────┘\n")
+        logger.info(
+            f"[WEBHOOK: IMAGE] NSFW={image_result.get('nsfw', False)} "
+            f"(score={image_result.get('nsfw_score', 0):.4f}) | "
+            f"Violence={image_result.get('violent', False)} "
+            f"(score={image_result.get('violent_score', 0):.4f}) | "
+            f"OCR={ocr_preview} | EXIF={metadata_preview}"
+        )
         
         parts = []
         if caption: 
@@ -316,16 +330,15 @@ def webhook_messages(request):
         return JsonResponse({"status": "ignored", "reason": "bot_instance_webhook"})
     # ─────────────────────────────────────────────────────────────────────────────
 
-    direction_icon = "📤 OUTGOING (Self-Moderation)" if is_from_me else "📥 INCOMING"
+    direction = "OUTGOING (Self-Moderation)" if is_from_me else "INCOMING"
     sender_label = push_name if push_name else (pure_number if not is_from_me else "ME (Host)")
     recipient_label = pure_number if is_from_me else "ME (Host)"
     
-    print(f"\n┌──────────────────────────────────────────────┐")
-    print(f"│ {direction_icon} MESSAGE")
-    print(f"│ 👤 Sender:    {sender_label}")
-    print(f"│ 🎯 Recipient: {recipient_label}")
-    print(f"│ 📝 Text:      '{raw_text[:80] + ('...' if len(raw_text) > 80 else '')}'")
-
+    logger.info(
+        f"[WEBHOOK] {direction} message | "
+        f"Sender={sender_label} | Recipient={recipient_label} | "
+        f"Text='{raw_text[:80] + ('...' if len(raw_text) > 80 else '')}'"
+    )
     # 3. 🧠 SEND TO AI PIPELINE (LangGraph Orchestrator)
     t_ml_start = time.time()
 
@@ -344,6 +357,11 @@ def webhook_messages(request):
     except Exception:
         pass
 
+    # 🔤 LANGUAGE DETECTION (fasttext, <1ms)
+    detected_lang = detect_language(raw_text)
+    if is_likely_darija(raw_text, detected_lang):
+        detected_lang = "darija"
+
     # Prepare the initial state
     initial_state = {
         "monitoring_mode": monitoring_mode,
@@ -355,6 +373,7 @@ def webhook_messages(request):
         "push_name": push_name,
         "is_from_me": is_from_me,
         "start_time_ms": int(t_ml_start * 1000),
+        "detected_language": detected_lang,
 
         # IMAGE ANALYSIS DATA
         "image_analyzed": bool(image_result),
@@ -366,9 +385,48 @@ def webhook_messages(request):
         "image_metadata": image_result.get("metadata", {})
     }
     
-    # 🚀 EXECUTE THE GRAPH
-    final_state = aegis_graph.invoke(initial_state)
-    
+    # 🔒 DEDUPLICATION — reject duplicate webhooks from Evolution API retries
+    if message_key_id and ModerationResult.objects.filter(message_key_id=message_key_id).exists():
+        logger.info("Duplicate message_key_id=%s from %s — skipping", message_key_id, sender_lid_jid)
+        return JsonResponse({"status": "duplicate", "message_key_id": message_key_id})
+
+    # 🚀 EXECUTE THE GRAPH — wrapped in crash net
+    try:
+        final_state = aegis_graph.invoke(initial_state)
+    except Exception as exc:
+        tb = traceback.format_exc()
+        logger.error(
+            "Pipeline crashed for message from %s on instance %s: %s\n%s",
+            sender_lid_jid, instance, exc, tb,
+        )
+        # Persist the failed message so it is never silently lost
+        try:
+            FailedMessage.objects.create(
+                raw_text=raw_text,
+                sender_jid=sender_lid_jid,
+                instance_name=instance,
+                message_key_id=message_key_id,
+                push_name=push_name,
+                error_type=type(exc).__name__,
+                error_message=tb,
+                pipeline_stage="graph_invoke",
+                metadata={
+                    "image_analyzed": bool(image_result),
+                    "is_from_me": is_from_me,
+                },
+            )
+        except Exception:
+            # Last-resort: if even the DB write fails, log it so at least
+            # the error appears in server logs.
+            logger.critical("FailedMessage persistence also failed: %s",
+                            traceback.format_exc())
+
+        # Return 200 so Evolution API does NOT blindly retry the webhook
+        return JsonResponse({
+            "status": "error",
+            "error": "Pipeline processing failed — message persisted for review",
+        }, status=200)
+
     t_ml_end = time.time()
 
     # Extract the final results from the graph's memory!
@@ -380,33 +438,31 @@ def webhook_messages(request):
     llm_explanation = final_state.get("llm_explanation", "")
     ml_corrected = final_state.get("ml_corrected", False)
 
-    # Print the Multi-Agent Execution Results to the console
-    print(f"│ 🧭 [ORCHESTRATOR] Graph Execution Complete in {int((t_ml_end - t_ml_start) * 1000)}ms")
-    print(f"│ 🛡️  [AGENT 1: GATEKEEPER] Toxicity Score: {m1_score:.2f}")
+    # Log the Multi-Agent Execution Results
+    logger.info(f"[ORCHESTRATOR] Graph Execution Complete in {int((t_ml_end - t_ml_start) * 1000)}ms")
+    logger.info(f"[AGENT 1: GATEKEEPER] Toxicity Score: {m1_score:.2f}")
     
     if m2_confidence is not None:
-        print(f"│ 🔬 [AGENT 2: CLASSIFIER] Primary Threat: {primary_class.upper()} (Confidence: {m2_confidence:.2f})")
+        logger.info(f"[AGENT 2: CLASSIFIER] Primary Threat: {primary_class.upper()} (Confidence: {m2_confidence:.2f})")
         
-    # Escalation Gate display
+    # Escalation Gate
     escalation_risk = final_state.get("escalation_risk", 0.0)
     escalation_reason = final_state.get("escalation_reason", "")
     if escalation_risk >= 0.40:
-        print(f"│ 🚨 [ESCALATION GATE] Score: {escalation_risk:.2f} — {escalation_reason}")
+        logger.info(f"[ESCALATION GATE] Score: {escalation_risk:.2f} — {escalation_reason}")
 
     if final_state.get("shadow_reviewed", False):
-        print(f"│ 🕵️  [AGENT 3: AUDITOR] Triggered by Shadow Zone! Verified as {decision}")
+        logger.info(f"[AGENT 3: AUDITOR] Triggered by Shadow Zone! Verified as {decision}")
     elif llm_triggered:
-        correction_tag = " 🔁 CORRECTED ML" if ml_corrected else ""
-        print(f"│ 🤖 [AGENT 3: AUDITOR] Triggered! Groq Decision: {decision} - \"{llm_explanation}\"{correction_tag}")
+        correction_tag = " CORRECTED ML" if ml_corrected else ""
+        logger.info(f"[AGENT 3: AUDITOR] Triggered! Groq Decision: {decision} - \"{llm_explanation}\"{correction_tag}")
         
-    print(f"│ 📊 [AGENT 4: PROFILER] Target Risk Score: {final_state.get('risk_score', 0.0):.2f} ({final_state.get('risk_level', 'LOW')})")
+    logger.info(f"[AGENT 4: PROFILER] Target Risk Score: {final_state.get('risk_score', 0.0):.2f} ({final_state.get('risk_level', 'LOW')})")
     
     # Agent 5 now runs INSIDE the graph — enforcement is complete by this point
     actions = final_state.get("enforcement_actions", [])
     alert_sev = final_state.get("alert_severity", "none") or "none"
-    print(f"│ ⚡ [AGENT 5: ENFORCER] Action: {decision} | Severity: {alert_sev} | Actions: {actions}")
-    
-    print(f"└────────────────────────────────────────────────────────────┘")
+    logger.info(f"[AGENT 5: ENFORCER] Action: {decision} | Severity: {alert_sev} | Actions: {actions}")
 
     t_end = time.time()
     t_orch = int((t_end - t_start) * 1000)
