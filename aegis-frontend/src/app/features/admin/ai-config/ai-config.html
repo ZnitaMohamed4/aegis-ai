@@ -16,6 +16,9 @@
     <button type="button" class="tab-btn" [class.tab-active]="activeTab() === 'simulator'" (click)="activeTab.set('simulator')">
       <i class="pi pi-play-circle"></i> Simulator
     </button>
+    <button type="button" class="tab-btn" [class.tab-active]="activeTab() === 'bn-brain'" (click)="activeTab.set('bn-brain'); loadBnContacts()">
+      <i class="pi pi-sitemap"></i> BN Brain Map
+    </button>
   </div>
 
   @if (activeTab() === 'policy') {
@@ -471,6 +474,278 @@
       <div class="sim-empty-state">
         <i class="pi pi-flask"></i>
         <p>Enter a message above and click <strong>Run Simulation</strong> to see it flow through the AI pipeline</p>
+      </div>
+    }
+
+  </section>
+  }
+
+  <!-- ══════════════════════════════════════════════════════
+       BN BRAIN MAP TAB
+       ══════════════════════════════════════════════════════ -->
+  @if (activeTab() === 'bn-brain') {
+  <section class="rounded-xl border border-[var(--border)] bg-[var(--bg-surface)] p-4 sm:p-5 animate-fade-in">
+
+    <!-- Header -->
+    <div class="flex items-start justify-between mb-4">
+      <div>
+        <p class="section-label">BAYESIAN NETWORK — NEURAL CORTEX</p>
+        <p class="text-xs text-[var(--text-muted)] mt-1">Inspect the probabilistic graphical model: 10 observables → 3 risk pathways → overall risk assessment</p>
+      </div>
+    </div>
+
+    <!-- Control Bar -->
+    <div class="bn-control-bar">
+      <div class="flex flex-wrap items-center gap-3">
+        <!-- Mode toggle -->
+        <button type="button" class="bn-mode-btn" [class.bn-mode-active]="!bnCustomMode()" (click)="toggleBnMode()">
+          <i [class]="bnCustomMode() ? 'pi pi-sliders-h' : 'pi pi-users'"></i>
+          {{ bnCustomMode() ? 'Custom Evidence' : 'From Contact' }}
+        </button>
+
+        @if (!bnCustomMode()) {
+          <!-- Contact selector -->
+          <p-select
+            [options]="bnContacts()"
+            optionLabel="label"
+            optionValue="jid"
+            [ngModel]="bnSelectedContact()"
+            (ngModelChange)="bnSelectedContact.set($event)"
+            placeholder="Select a monitored contact..."
+            appendTo="body"
+            styleClass="bn-contact-select"
+          />
+        }
+
+        <button type="button" class="sim-run-btn" (click)="runBnInference()" [disabled]="bnIsRunning()">
+          <i [class]="bnIsRunning() ? 'pi pi-spin pi-spinner' : 'pi pi-play'"></i>
+          <span>{{ bnIsRunning() ? 'Inferring...' : 'Run Inference' }}</span>
+        </button>
+      </div>
+
+      @if (bnError()) {
+        <p class="bn-error-text">{{ bnError() }}</p>
+      }
+    </div>
+
+    <!-- Custom Evidence Editor -->
+    @if (bnCustomMode()) {
+      <div class="bn-evidence-editor">
+        <p class="bn-editor-label">Set evidence states for each observable:</p>
+        <div class="bn-editor-grid">
+          @for (obs of BN_OBSERVABLES; track obs.id) {
+            <div class="bn-editor-item">
+              <span class="bn-editor-name">{{ obs.label }}</span>
+              <div class="bn-editor-states">
+                @for (st of obs.states; track st) {
+                  <button type="button"
+                    class="bn-state-btn"
+                    [class.bn-state-active]="bnCustomEvidence()[obs.id] === st"
+                    (click)="setBnCustomState(obs.id, st)">
+                    {{ st }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- ═══ NEURAL CORTEX VISUALIZATION ═══ -->
+    @if (bnObservables().length > 0) {
+      <div class="bn-cortex-container">
+
+        <!-- SVG Edge Overlay -->
+        <svg class="bn-edge-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <defs>
+            @for (pw of bnPathwayNodes(); track pw.id) {
+              <marker [attr.id]="'arr-' + pw.id" viewBox="0 0 10 10" refX="8" refY="5"
+                      markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M0 1.5 L8 5 L0 8.5 Z" [attr.fill]="pw.color"/>
+              </marker>
+            }
+            <marker id="arr-overall" viewBox="0 0 10 10" refX="8" refY="5"
+                    markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M0 1.5 L8 5 L0 8.5 Z" fill="#3b82f6"/>
+            </marker>
+          </defs>
+        </svg>
+
+        <!-- 3-column layout -->
+        <div class="bn-cortex-grid">
+
+          <!-- COLUMN 1: Observables -->
+          <div class="bn-col-observables">
+            <div class="bn-col-header">OBSERVABLES</div>
+            @for (obs of bnObservables(); track obs.id; let i = $index) {
+              <div class="bn-obs-pill"
+                   [class.bn-obs-active]="obs.animPhase === 'active'"
+                   [class.bn-obs-settled]="obs.animPhase === 'settled'"
+                   [style.--obs-color]="getObsPrimaryColor(obs)">
+                <div class="bn-obs-label">{{ obs.label }}</div>
+                <div class="bn-obs-state" [style.color]="getObsPrimaryColor(obs)">{{ obs.state }}</div>
+                @if (obs.pathway.length > 1) {
+                  <div class="bn-obs-multi" [title]="'Feeds: ' + obs.pathway.join(', ')">
+                    <span class="bn-obs-dot" [style.background]="getPathwayColor(obs.pathway[0])"></span>
+                    <span class="bn-obs-dot" [style.background]="getPathwayColor(obs.pathway[1])"></span>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- COLUMN 2: Pathways -->
+          <div class="bn-col-pathways">
+            <div class="bn-col-header">RISK PATHWAYS</div>
+            @for (pw of bnPathwayNodes(); track pw.id) {
+              <div class="bn-pathway-card"
+                   [class.bn-pw-computing]="pw.animPhase === 'computing'"
+                   [class.bn-pw-settled]="pw.animPhase === 'settled'"
+                   [style.--pw-color]="pw.color">
+                <div class="bn-pw-header">
+                  <span class="bn-pw-label">{{ pw.label }}</span>
+                  @if (pw.animPhase !== 'idle') {
+                    <span class="bn-pw-high">{{ formatPct(pw.highProb) }}</span>
+                  }
+                </div>
+                @if (pw.animPhase !== 'idle' && pw.probs) {
+                  <div class="bn-prob-bar">
+                    @for (state of ['LOW', 'MEDIUM', 'HIGH']; track state) {
+                      @if (pw.probs[state] !== undefined) {
+                        <div class="bn-prob-seg"
+                             [class]="'bn-prob-' + state.toLowerCase()"
+                             [style.width.%]="pw.probs[state] * 100"
+                             [title]="state + ': ' + formatPct(pw.probs[state])">
+                          @if (pw.probs[state] > 0.12) {
+                            <span class="bn-prob-label">{{ (pw.probs[state] * 100).toFixed(0) }}%</span>
+                          }
+                        </div>
+                      }
+                    }
+                  </div>
+                  <div class="bn-pw-states-row">
+                    @for (state of ['LOW', 'MEDIUM', 'HIGH']; track state) {
+                      <span class="bn-pw-state-val">
+                        <span class="bn-pw-state-dot" [class]="'bn-dot-' + state.toLowerCase()"></span>
+                        {{ state }}: {{ formatPct(pw.probs[state] || 0) }}
+                      </span>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+
+          <!-- COLUMN 3: Overall Risk -->
+          <div class="bn-col-overall">
+            <div class="bn-col-header">OUTPUT</div>
+            <div class="bn-overall-card"
+                 [class.bn-overall-computing]="bnOverall().animPhase === 'computing'"
+                 [class.bn-overall-settled]="bnOverall().animPhase === 'settled'">
+
+              @if (bnOverall().animPhase !== 'idle') {
+                <div class="bn-overall-title">Overall Risk</div>
+
+                <!-- 4-segment probability bar -->
+                <div class="bn-prob-bar bn-prob-bar-lg">
+                  @for (state of ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']; track state) {
+                    @if (bnOverall().probs[state] !== undefined) {
+                      <div class="bn-prob-seg"
+                           [class]="'bn-prob-' + state.toLowerCase()"
+                           [style.width.%]="bnOverall().probs[state] * 100"
+                           [title]="state + ': ' + formatPct(bnOverall().probs[state])">
+                        @if (bnOverall().probs[state] > 0.10) {
+                          <span class="bn-prob-label">{{ (bnOverall().probs[state] * 100).toFixed(0) }}%</span>
+                        }
+                      </div>
+                    }
+                  }
+                </div>
+
+                <!-- Risk Score -->
+                <div class="bn-risk-score-row">
+                  <span class="bn-risk-score-label">Risk Score</span>
+                  <span class="bn-risk-score-value mono"
+                        [style.color]="getRiskLevelColor(bnOverall().riskLevel)">
+                    {{ bnOverall().riskScore.toFixed(4) }}
+                  </span>
+                </div>
+
+                <!-- Risk Level -->
+                <div class="bn-risk-level-badge" [style.background]="getRiskLevelColor(bnOverall().riskLevel) + '22'"
+                     [style.color]="getRiskLevelColor(bnOverall().riskLevel)"
+                     [style.borderColor]="getRiskLevelColor(bnOverall().riskLevel) + '44'">
+                  {{ bnOverall().riskLevel }}
+                </div>
+
+                <!-- Archetype -->
+                <div class="bn-archetype-row">
+                  <i [class]="'pi ' + getArchetypeIcon(bnOverall().archetype)"
+                     [style.color]="getArchetypeColor(bnOverall().archetype)"></i>
+                  <span class="bn-archetype-label" [style.color]="getArchetypeColor(bnOverall().archetype)">
+                    {{ bnOverall().archetype }}
+                  </span>
+                </div>
+
+                <!-- Per-state breakdown -->
+                <div class="bn-overall-breakdown">
+                  @for (state of ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']; track state) {
+                    <span class="bn-overall-state-val">
+                      <span class="bn-pw-state-dot" [class]="'bn-dot-' + state.toLowerCase()"></span>
+                      {{ formatPct(bnOverall().probs[state] || 0) }}
+                    </span>
+                  }
+                </div>
+              } @else {
+                <div class="bn-overall-placeholder">
+                  <i class="pi pi-chart-bar"></i>
+                  <span>Awaiting inference</span>
+                </div>
+              }
+            </div>
+          </div>
+
+        </div>
+
+        <!-- SVG Edge Lines (positioned absolutely over the grid) -->
+        <svg class="bn-edges-overlay" xmlns="http://www.w3.org/2000/svg">
+          <!-- Edges will be drawn dynamically via JS after layout -->
+        </svg>
+
+      </div>
+
+      <!-- Result Summary -->
+      @if (bnHasResult() && !bnIsRunning()) {
+        <div class="bn-result-summary animate-fade-in">
+          <div class="bn-summary-title">
+            <i class="pi pi-chart-bar"></i>
+            <span>Pathway Analysis Summary</span>
+          </div>
+          <div class="bn-summary-cards">
+            @for (pw of bnPathwayNodes(); track pw.id) {
+              <div class="bn-summary-card" [style.--pw-color]="pw.color">
+                <div class="bn-summary-card-header">
+                  <span class="bn-summary-dot" [style.background]="pw.color"></span>
+                  <span class="bn-summary-name">{{ pw.label }}</span>
+                </div>
+                <div class="bn-summary-bar-row">
+                  <div class="bn-summary-bar">
+                    <div class="bn-summary-fill" [style.width.%]="pw.highProb * 100" [style.background]="pw.color"></div>
+                  </div>
+                  <span class="bn-summary-pct mono" [style.color]="pw.color">{{ formatPct(pw.highProb) }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+    } @else {
+      <!-- Empty State -->
+      <div class="bn-empty-state">
+        <i class="pi pi-brain" style="font-size:2.5rem;color:var(--text-muted);"></i>
+        <p>Select a contact or switch to <strong>Custom Evidence</strong> mode, then click <strong>Run Inference</strong> to visualize the Bayesian Network</p>
       </div>
     }
 

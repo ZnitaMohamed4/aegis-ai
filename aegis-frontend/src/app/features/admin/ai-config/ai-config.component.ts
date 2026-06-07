@@ -24,7 +24,45 @@ import {
   PROVIDER_CARDS,
   PROVIDER_MODELS,
   SIMULATION_SAMPLES,
+  BN_OBSERVABLES,
+  BN_PATHWAYS,
+  BN_EDGES,
+  BN_PATHWAY_COLORS,
+  BnObservableDef,
+  BnPathwayDef,
 } from './ai-config.data';
+
+interface BnObservableNode {
+  id: string;
+  label: string;
+  state: string;
+  states: string[];
+  priors: Record<string, number>;
+  pathway: string[];
+  animPhase: 'idle' | 'active' | 'settled';
+}
+
+interface BnPathwayNode {
+  id: string;
+  label: string;
+  color: string;
+  probs: Record<string, number>;
+  highProb: number;
+  animPhase: 'idle' | 'computing' | 'settled';
+}
+
+interface BnOverallNode {
+  probs: Record<string, number>;
+  riskScore: number;
+  riskLevel: string;
+  archetype: string;
+  animPhase: 'idle' | 'computing' | 'settled';
+}
+
+interface ContactOption {
+  jid: string;
+  label: string;
+}
 
 interface ConnectionTestResult {
   ok: boolean;
@@ -102,8 +140,10 @@ export class AiConfigComponent implements OnInit, OnDestroy {
   readonly zoneMeta = DECISION_ZONES;
   readonly providerCards = PROVIDER_CARDS;
   readonly languageTabs = LANGUAGE_TABS;
+  readonly BN_OBSERVABLES = BN_OBSERVABLES;
+  readonly BN_PATHWAYS = BN_PATHWAYS;
 
-  readonly activeTab = signal<'pipeline' | 'policy' | 'infrastructure' | 'simulator'>('pipeline');
+  readonly activeTab = signal<'pipeline' | 'policy' | 'infrastructure' | 'simulator' | 'bn-brain'>('pipeline');
 
   readonly boundaries = signal<DecisionBoundaries>({ ...DEFAULT_BOUNDARIES });
   readonly selectedZone = signal<'allow' | 'warn' | 'review' | 'block' | 'critical'>('review');
@@ -130,6 +170,18 @@ export class AiConfigComponent implements OnInit, OnDestroy {
     { id: 'agent5', name: 'Decision Enforcer', icon: 'pi-lock', role: 'Final policy & actions', state: 'idle', latency: null, detail: '' },
   ]);
   private animationTimers: ReturnType<typeof setTimeout>[] = [];
+
+  // ═══ BN Brain Map signals ═══
+  readonly bnObservables = signal<BnObservableNode[]>([]);
+  readonly bnPathwayNodes = signal<BnPathwayNode[]>([]);
+  readonly bnOverall = signal<BnOverallNode>({ probs: {}, riskScore: 0, riskLevel: 'LOW', archetype: 'Normal User', animPhase: 'idle' });
+  readonly bnIsRunning = signal(false);
+  readonly bnHasResult = signal(false);
+  readonly bnContacts = signal<ContactOption[]>([]);
+  readonly bnSelectedContact = signal<string>('');
+  readonly bnCustomMode = signal(false);
+  readonly bnCustomEvidence = signal<Record<string, string>>({});
+  readonly bnError = signal<string | null>(null);
 
   readonly providerModels = computed(() => PROVIDER_MODELS[this.selectedProvider()]);
   readonly criticalThreshold = computed(() => this.boundaries().critical.toFixed(2));
@@ -443,5 +495,197 @@ export class AiConfigComponent implements OnInit, OnDestroy {
 
   private clamp(value: number, min: number, max: number): number {
     return Math.min(Math.max(value, min), max);
+  }
+
+  // ════════════════════════════════════════════════════════════
+  //  BN BRAIN MAP METHODS
+  // ════════════════════════════════════════════════════════════
+
+  loadBnContacts(): void {
+    this.apiService.getAdminRiskProfiles().subscribe({
+      next: (data) => {
+        const contacts: ContactOption[] = [];
+        if (data.contacts) {
+          for (const c of data.contacts) {
+            contacts.push({ jid: c.raw_jid || c.id, label: c.display_name || c.raw_jid || c.id });
+          }
+        }
+        this.bnContacts.set(contacts);
+      },
+      error: () => console.error('Failed to load contacts for BN visualization'),
+    });
+  }
+
+  initBnCustomEvidence(): void {
+    const evidence: Record<string, string> = {};
+    for (const obs of BN_OBSERVABLES) {
+      evidence[obs.id] = obs.states[0];
+    }
+    this.bnCustomEvidence.set(evidence);
+  }
+
+  toggleBnMode(): void {
+    const next = !this.bnCustomMode();
+    this.bnCustomMode.set(next);
+    if (next) {
+      this.initBnCustomEvidence();
+    }
+  }
+
+  setBnCustomState(obsId: string, state: string): void {
+    this.bnCustomEvidence.update(ev => ({ ...ev, [obsId]: state }));
+  }
+
+  runBnInference(): void {
+    this.bnError.set(null);
+    this.bnIsRunning.set(true);
+    this.bnHasResult.set(false);
+
+    // Reset all nodes to idle
+    this.bnObservables.update(nodes => nodes.map(n => ({ ...n, animPhase: 'idle' as const })));
+    this.bnPathwayNodes.update(nodes => nodes.map(n => ({ ...n, animPhase: 'idle' as const, probs: {} })));
+    this.bnOverall.set({ probs: {}, riskScore: 0, riskLevel: 'LOW', archetype: 'Normal User', animPhase: 'idle' });
+
+    const payload = this.bnCustomMode()
+      ? { evidence: this.bnCustomEvidence() }
+      : { sender_jid: this.bnSelectedContact() };
+
+    if (!this.bnCustomMode() && !this.bnSelectedContact()) {
+      this.bnIsRunning.set(false);
+      this.bnError.set('Please select a contact or switch to Custom Evidence mode.');
+      return;
+    }
+
+    this.apiService.runBnInference(payload).subscribe({
+      next: (res) => this.animateBnInference(res),
+      error: (err) => {
+        this.bnIsRunning.set(false);
+        this.bnError.set(err.error?.error || 'Failed to run BN inference. Check backend.');
+      },
+    });
+  }
+
+  private animateBnInference(res: any): void {
+    // Clear previous timers
+    this.animationTimers.forEach(t => clearTimeout(t));
+    this.animationTimers = [];
+
+    // Phase 1: Build observable nodes with evidence state (immediate)
+    const obsNodes: BnObservableNode[] = BN_OBSERVABLES.map(def => ({
+      id: def.id,
+      label: def.label,
+      state: res.evidence[def.id] || def.states[0],
+      states: def.states,
+      priors: res.observables?.find((o: any) => o.name === def.id)?.priors || {},
+      pathway: def.pathway,
+      animPhase: 'idle' as const,
+    }));
+    this.bnObservables.set(obsNodes);
+
+    // Phase 2: Build pathway nodes (will animate later)
+    const pathwayNodes: BnPathwayNode[] = BN_PATHWAYS.map(def => ({
+      id: def.id,
+      label: def.label,
+      color: def.color,
+      probs: {},
+      highProb: 0,
+      animPhase: 'idle' as const,
+    }));
+    this.bnPathwayNodes.set(pathwayNodes);
+
+    // Animate cascade
+    const d = 100; // initial delay
+
+    // Phase 1: Observables light up one by one (0-400ms)
+    obsNodes.forEach((_, i) => {
+      this.animationTimers.push(setTimeout(() => {
+        this.bnObservables.update(nodes =>
+          nodes.map((n, idx) => idx === i ? { ...n, animPhase: 'active' } : n)
+        );
+      }, d + i * 35));
+    });
+
+    // Settle all observables
+    this.animationTimers.push(setTimeout(() => {
+      this.bnObservables.update(nodes => nodes.map(n => ({ ...n, animPhase: 'settled' })));
+    }, d + obsNodes.length * 35 + 150));
+
+    // Phase 2: Pathways compute (600-1000ms)
+    const pathwayDelay = d + obsNodes.length * 35 + 300;
+    BN_PATHWAYS.forEach((def, i) => {
+      this.animationTimers.push(setTimeout(() => {
+        const probs = res.pathways[def.id] || {};
+        this.bnPathwayNodes.update(nodes =>
+          nodes.map(n => n.id === def.id ? { ...n, probs, highProb: probs['HIGH'] || 0, animPhase: 'computing' } : n)
+        );
+      }, pathwayDelay + i * 150));
+    });
+
+    // Settle pathways
+    this.animationTimers.push(setTimeout(() => {
+      this.bnPathwayNodes.update(nodes => nodes.map(n => ({ ...n, animPhase: 'settled' })));
+    }, pathwayDelay + BN_PATHWAYS.length * 150 + 200));
+
+    // Phase 3: Overall risk resolves (after pathways)
+    const overallDelay = pathwayDelay + BN_PATHWAYS.length * 150 + 400;
+    this.animationTimers.push(setTimeout(() => {
+      this.bnOverall.set({
+        probs: res.overall || {},
+        riskScore: res.risk_score || 0,
+        riskLevel: res.risk_level || 'LOW',
+        archetype: res.archetype || 'Normal User',
+        animPhase: 'computing',
+      });
+    }, overallDelay));
+
+    this.animationTimers.push(setTimeout(() => {
+      this.bnOverall.update(o => ({ ...o, animPhase: 'settled' }));
+      this.bnIsRunning.set(false);
+      this.bnHasResult.set(true);
+    }, overallDelay + 300));
+  }
+
+  getPathwayColor(pathwayKey: string): string {
+    return BN_PATHWAY_COLORS[pathwayKey] || '#64748b';
+  }
+
+  getBnPathwayForEdge(toId: string): string {
+    const p = BN_PATHWAYS.find(pw => pw.id === toId);
+    if (p) return p.color;
+    if (toId === 'OverallRisk') return '#3b82f6';
+    return '#64748b';
+  }
+
+  /** Returns the primary pathway color for an observable (first pathway) */
+  getObsPrimaryColor(obs: BnObservableNode): string {
+    if (!obs.pathway.length) return '#64748b';
+    return this.getPathwayColor(obs.pathway[0]);
+  }
+
+  formatPct(val: number): string {
+    return (val * 100).toFixed(1) + '%';
+  }
+
+  getRiskLevelColor(level: string): string {
+    const map: Record<string, string> = {
+      'LOW': '#10b981', 'MEDIUM': '#f59e0b', 'HIGH': '#f97316', 'CRITICAL': '#ef4444',
+    };
+    return map[level] || '#64748b';
+  }
+
+  getArchetypeIcon(archetype: string): string {
+    const map: Record<string, string> = {
+      'Normal User': 'pi-check-circle', 'Troll Pattern': 'pi-comment',
+      'Bully Pattern': 'pi-bolt', 'Groomer Pattern': 'pi-eye',
+    };
+    return map[archetype] || 'pi-question-circle';
+  }
+
+  getArchetypeColor(archetype: string): string {
+    const map: Record<string, string> = {
+      'Normal User': '#10b981', 'Troll Pattern': '#8b5cf6',
+      'Bully Pattern': '#f59e0b', 'Groomer Pattern': '#f43f5e',
+    };
+    return map[archetype] || '#64748b';
   }
 }

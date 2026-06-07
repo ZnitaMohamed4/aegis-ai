@@ -210,6 +210,11 @@ export class ApiService {
     return this.http.get<any>(`${this.BASE_URL}/admin/agent-latencies/`);
   }
 
+  /** Runs Bayesian Network inference for visualization. */
+  runBnInference(payload: { sender_jid?: string; evidence?: Record<string, string> }): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/admin/bn-inference/`, payload);
+  }
+
   // ════════════════════════════════════════════════════════════════
   // PARENT ENDPOINTS (filtered to logged-in parent's child only)
   // ════════════════════════════════════════════════════════════════

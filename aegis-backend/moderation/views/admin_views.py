@@ -1605,3 +1605,166 @@ def agent_latencies(request):
         val = get_avg_latency(f'agent_{i}', None)
         latencies[f"agent_{i}"] = int(val) if val is not None else None
     return Response(latencies)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def bn_inference(request):
+    """
+    POST /api/v1/admin/bn-inference/ — Run Bayesian Network inference.
+
+    Accepts either:
+      { "sender_jid": "..." }   → look up UserBehaviorProfile, collect evidence, run inference
+      { "evidence": { "Stranger": "YES", ... } } → run inference on custom evidence
+
+    Returns full BN node graph data with probabilities for visualization.
+    """
+    from ml_pipeline.bn_engine import get_bn_profiler
+    from ml_pipeline.bayesian.evidence import collect_evidence
+
+    sender_jid = request.data.get('sender_jid')
+    custom_evidence = request.data.get('evidence')
+
+    # Valid observable names and their allowed states (for validation)
+    VALID_STATES = {
+        'Stranger': ['NO', 'YES'],
+        'ChildInitiated': ['NO', 'YES'],
+        'SharedGroupsCount': ['ZERO', 'ONE', 'MANY'],
+        'NightActive': ['LOW', 'MEDIUM', 'HIGH'],
+        'ToxicityLevel': ['CLEAN', 'MILD', 'MODERATE', 'SEVERE'],
+        'UpwardCorrection': ['LOW', 'MEDIUM', 'HIGH'],
+        'DownwardCorrection': ['LOW', 'MEDIUM', 'HIGH'],
+        'TargetBreadth': ['FEW', 'SOME', 'MANY'],
+        'BlockRatio': ['LOW', 'MEDIUM', 'HIGH'],
+        'MessageBehavior': ['CALM', 'ACTIVE', 'BURSTY'],
+        'MessageStyle': ['SHORT', 'MEDIUM', 'LONG'],
+        'ThreatCategory': ['SAFE', 'VERBAL', 'THREAT', 'SEXUAL', 'DISCRIMINATION'],
+    }
+
+    # Prior distributions (base rates from the BN CPTs)
+    PRIORS = {
+        'Stranger': {'NO': 0.70, 'YES': 0.30},
+        'ChildInitiated': {'NO': 0.50, 'YES': 0.50},
+        'SharedGroupsCount': {'ZERO': 0.80, 'ONE': 0.15, 'MANY': 0.05},
+        'NightActive': {'LOW': 0.60, 'MEDIUM': 0.25, 'HIGH': 0.15},
+        'ToxicityLevel': {'CLEAN': 0.50, 'MILD': 0.25, 'MODERATE': 0.15, 'SEVERE': 0.10},
+        'UpwardCorrection': {'LOW': 0.75, 'MEDIUM': 0.15, 'HIGH': 0.10},
+        'DownwardCorrection': {'LOW': 0.70, 'MEDIUM': 0.20, 'HIGH': 0.10},
+        'TargetBreadth': {'FEW': 0.65, 'SOME': 0.25, 'MANY': 0.10},
+        'BlockRatio': {'LOW': 0.70, 'MEDIUM': 0.20, 'HIGH': 0.10},
+        'MessageBehavior': {'CALM': 0.60, 'ACTIVE': 0.30, 'BURSTY': 0.10},
+        'MessageStyle': {'SHORT': 0.30, 'MEDIUM': 0.50, 'LONG': 0.20},
+        'ThreatCategory': {'SAFE': 0.70, 'VERBAL': 0.12, 'THREAT': 0.08, 'SEXUAL': 0.05, 'DISCRIMINATION': 0.05},
+    }
+
+    profile_data = None
+
+    try:
+        if sender_jid:
+            # Look up the profile
+            profile = UserBehaviorProfile.objects.filter(user_jid=sender_jid).first()
+            if not profile:
+                return Response({"error": f"No profile found for {sender_jid}"}, status=404)
+
+            evidence = collect_evidence(profile)
+            # Build profile summary for the frontend
+            total_msgs = max(1, profile.total_messages_sent)
+            days_known = (
+                (timezone.now() - profile.first_seen_at).days
+                if profile.first_seen_at else 0
+            )
+            profile_data = {
+                'user_jid': profile.user_jid,
+                'total_messages': profile.total_messages_sent,
+                'days_known': days_known,
+                'avg_toxicity': round(float(profile.average_toxicity_score), 4),
+                'block_ratio': round(float(profile.block_ratio), 4),
+                'risk_score': round(float(profile.risk_score), 4),
+                'risk_level': profile.risk_level,
+                'archetype': profile.risk_level,  # will be overridden by BN result
+            }
+
+        elif custom_evidence:
+            # Validate custom evidence
+            evidence = {}
+            for key, val in custom_evidence.items():
+                if key not in VALID_STATES:
+                    return Response({"error": f"Unknown observable: {key}"}, status=400)
+                val_upper = str(val).upper()
+                if val_upper not in VALID_STATES[key]:
+                    return Response(
+                        {"error": f"Invalid state '{val}' for {key}. Must be one of {VALID_STATES[key]}"},
+                        status=400
+                    )
+                evidence[key] = val_upper
+
+            # Fill missing observables with their most common prior state
+            for obs_name, states in VALID_STATES.items():
+                if obs_name not in evidence:
+                    evidence[obs_name] = states[0]
+        else:
+            return Response(
+                {"error": "Provide either 'sender_jid' or 'evidence'"},
+                status=400
+            )
+
+        # Run BN inference
+        bn = get_bn_profiler()
+        result = bn.infer(evidence)
+
+        # Build observables array with priors + evidence state
+        observables = []
+        for obs_name in VALID_STATES:
+            states = VALID_STATES[obs_name]
+            state = evidence.get(obs_name, states[0])
+            priors = PRIORS.get(obs_name, {})
+            observables.append({
+                'name': obs_name,
+                'state': state,
+                'states': states,
+                'priors': {s: priors.get(s, 0) for s in states},
+            })
+
+        # Edges (static BN structure)
+        edges = [
+            # Grooming pathway
+            {'from': 'Stranger', 'to': 'GroomingRisk'},
+            {'from': 'ChildInitiated', 'to': 'GroomingRisk'},
+            {'from': 'SharedGroupsCount', 'to': 'GroomingRisk'},
+            {'from': 'NightActive', 'to': 'GroomingRisk'},
+            {'from': 'UpwardCorrection', 'to': 'GroomingRisk'},
+            {'from': 'DownwardCorrection', 'to': 'GroomingRisk'},
+            {'from': 'MessageStyle', 'to': 'GroomingRisk'},
+            {'from': 'ThreatCategory', 'to': 'GroomingRisk'},
+            # Bully pathway
+            {'from': 'ToxicityLevel', 'to': 'BullyRisk'},
+            {'from': 'BlockRatio', 'to': 'BullyRisk'},
+            {'from': 'TargetBreadth', 'to': 'BullyRisk'},
+            {'from': 'ThreatCategory', 'to': 'BullyRisk'},
+            {'from': 'DownwardCorrection', 'to': 'BullyRisk'},
+            # Troll pathway
+            {'from': 'MessageBehavior', 'to': 'TrollRisk'},
+            {'from': 'TargetBreadth', 'to': 'TrollRisk'},
+            {'from': 'Stranger', 'to': 'TrollRisk'},
+            {'from': 'MessageStyle', 'to': 'TrollRisk'},
+            # Output
+            {'from': 'GroomingRisk', 'to': 'OverallRisk'},
+            {'from': 'BullyRisk', 'to': 'OverallRisk'},
+            {'from': 'TrollRisk', 'to': 'OverallRisk'},
+        ]
+
+        return Response({
+            'evidence': evidence,
+            'observables': observables,
+            'pathways': result['explanation'],
+            'overall': result['probas'],
+            'risk_score': result['risk_score'],
+            'risk_level': result['risk_level'],
+            'archetype': result['archetype'],
+            'edges': edges,
+            'profile': profile_data,
+        })
+
+    except Exception as e:
+        logger.error(f"BN inference failed: {e}", exc_info=True)
+        return Response({"error": f"BN inference error: {str(e)[:200]}"}, status=500)

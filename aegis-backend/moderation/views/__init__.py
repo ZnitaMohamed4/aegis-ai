@@ -38,6 +38,7 @@ from moderation.views.admin_views import (
     test_llm_connection,
     simulate_message,
     agent_latencies,
+    bn_inference,
 )
 
 # Auth + WhatsApp setup
@@ -111,6 +112,7 @@ __all__ = [
     'test_llm_connection',
     'simulate_message',
     'agent_latencies',
+    'bn_inference',
     'register_parent',
     'current_user',
     'generate_whatsapp_qr',

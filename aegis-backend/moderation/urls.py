@@ -70,6 +70,7 @@ urlpatterns = [
     path('admin/test-llm/', views.test_llm_connection, name='admin-test-llm'),
     path('admin/simulate/', views.simulate_message, name='admin-simulate'),
     path('admin/agent-latencies/', views.agent_latencies, name='admin-agent-latencies'),
+    path('admin/bn-inference/', views.bn_inference, name='admin-bn-inference'),
 
     # 7. Auth Endpoints
     path('auth/register/', views.register_parent, name='auth-register'),

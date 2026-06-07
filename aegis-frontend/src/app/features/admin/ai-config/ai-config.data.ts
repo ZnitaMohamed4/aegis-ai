@@ -115,3 +115,80 @@ export const AGENT_STATUS_TONE: Record<AgentStatus, 'good' | 'warn' | 'bad'> = {
 	DEGRADED: 'warn',
 	OFFLINE: 'bad',
 };
+
+// ════════════════════════════════════════════════════════════════
+//  BAYESIAN NETWORK VISUALIZATION DATA
+// ════════════════════════════════════════════════════════════════
+
+export interface BnObservableDef {
+  id: string;
+  label: string;
+  states: string[];
+  pathway: string[];
+}
+
+export interface BnPathwayDef {
+  id: string;
+  label: string;
+  color: string;
+}
+
+export interface BnEdgeDef {
+  from: string;
+  to: string;
+}
+
+export const BN_OBSERVABLES: BnObservableDef[] = [
+  { id: 'Stranger',            label: 'Stranger',        states: ['NO', 'YES'],                          pathway: ['grooming'] },
+  { id: 'ChildInitiated',      label: 'Child Initiated', states: ['NO', 'YES'],                          pathway: ['grooming'] },
+  { id: 'SharedGroupsCount',   label: 'Shared Groups',   states: ['ZERO', 'ONE', 'MANY'],               pathway: ['grooming'] },
+  { id: 'NightActive',         label: 'Night Active',    states: ['LOW', 'MEDIUM', 'HIGH'],             pathway: ['grooming'] },
+  { id: 'UpwardCorrection',    label: 'Upward Corr.',    states: ['LOW', 'MEDIUM', 'HIGH'],             pathway: ['grooming'] },
+  { id: 'ToxicityLevel',       label: 'Toxicity',        states: ['CLEAN', 'MILD', 'MODERATE', 'SEVERE'], pathway: ['bully'] },
+  { id: 'BlockRatio',          label: 'Block Ratio',     states: ['LOW', 'MEDIUM', 'HIGH'],             pathway: ['bully'] },
+  { id: 'TargetBreadth',       label: 'Target Breadth',  states: ['FEW', 'SOME', 'MANY'],               pathway: ['bully', 'troll'] },
+  { id: 'DownwardCorrection',  label: 'Downward Corr.',  states: ['LOW', 'MEDIUM', 'HIGH'],             pathway: ['grooming', 'bully'] },
+  { id: 'MessageBehavior',     label: 'Msg Behavior',    states: ['CALM', 'ACTIVE', 'BURSTY'],          pathway: ['troll'] },
+  { id: 'MessageStyle',        label: 'Msg Style',       states: ['SHORT', 'MEDIUM', 'LONG'],           pathway: ['grooming', 'troll'] },
+  { id: 'ThreatCategory',      label: 'Threat Cat.',     states: ['SAFE', 'VERBAL', 'THREAT', 'SEXUAL', 'DISCRIMINATION'], pathway: ['grooming', 'bully'] },
+];
+
+export const BN_PATHWAYS: BnPathwayDef[] = [
+  { id: 'GroomingRisk', label: 'Grooming Risk', color: '#f43f5e' },
+  { id: 'BullyRisk',    label: 'Bully Risk',    color: '#f59e0b' },
+  { id: 'TrollRisk',    label: 'Troll Risk',    color: '#8b5cf6' },
+];
+
+export const BN_EDGES: BnEdgeDef[] = [
+  // Grooming pathway (8 edges)
+  { from: 'Stranger',           to: 'GroomingRisk' },
+  { from: 'ChildInitiated',     to: 'GroomingRisk' },
+  { from: 'SharedGroupsCount',  to: 'GroomingRisk' },
+  { from: 'NightActive',        to: 'GroomingRisk' },
+  { from: 'UpwardCorrection',   to: 'GroomingRisk' },
+  { from: 'DownwardCorrection', to: 'GroomingRisk' },
+  { from: 'MessageStyle',       to: 'GroomingRisk' },
+  { from: 'ThreatCategory',     to: 'GroomingRisk' },
+  // Bully pathway (5 edges)
+  { from: 'ToxicityLevel',      to: 'BullyRisk' },
+  { from: 'BlockRatio',         to: 'BullyRisk' },
+  { from: 'TargetBreadth',      to: 'BullyRisk' },
+  { from: 'ThreatCategory',     to: 'BullyRisk' },
+  { from: 'DownwardCorrection', to: 'BullyRisk' },
+  // Troll pathway (4 edges)
+  { from: 'MessageBehavior',    to: 'TrollRisk' },
+  { from: 'TargetBreadth',      to: 'TrollRisk' },
+  { from: 'Stranger',           to: 'TrollRisk' },
+  { from: 'MessageStyle',       to: 'TrollRisk' },
+  // Output edges
+  { from: 'GroomingRisk',       to: 'OverallRisk' },
+  { from: 'BullyRisk',          to: 'OverallRisk' },
+  { from: 'TrollRisk',          to: 'OverallRisk' },
+];
+
+/** Pathway color map for quick lookups */
+export const BN_PATHWAY_COLORS: Record<string, string> = {
+  grooming: '#f43f5e',
+  bully: '#f59e0b',
+  troll: '#8b5cf6',
+};

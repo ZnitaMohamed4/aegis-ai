@@ -920,3 +920,596 @@
   max-width: 300px;
   line-height: 1.55;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — CONTROL BAR
+══════════════════════════════════════════════════════════════ */
+
+.bn-control-bar {
+  margin-bottom: 1rem;
+}
+
+.bn-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: color 0.18s, border-color 0.18s, background 0.18s;
+}
+.bn-mode-btn:hover { color: var(--text-primary); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.bn-mode-active { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 8%, var(--bg-surface)); }
+
+.bn-contact-select {
+  min-width: 250px;
+}
+
+.bn-error-text {
+  color: var(--critical);
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — CUSTOM EVIDENCE EDITOR
+══════════════════════════════════════════════════════════════ */
+
+.bn-evidence-editor {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--bg-surface-2);
+  padding: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.bn-editor-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+}
+
+.bn-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.5rem;
+}
+
+.bn-editor-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bn-editor-name {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.bn-editor-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.bn-state-btn {
+  padding: 0.18rem 0.45rem;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.bn-state-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+.bn-state-active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — NEURAL CORTEX CONTAINER
+══════════════════════════════════════════════════════════════ */
+
+.bn-cortex-container {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background:
+    radial-gradient(ellipse at 30% 50%, rgba(244,63,94,0.03) 0%, transparent 60%),
+    radial-gradient(ellipse at 60% 50%, rgba(245,158,11,0.03) 0%, transparent 60%),
+    radial-gradient(ellipse at 85% 50%, rgba(139,92,246,0.03) 0%, transparent 60%),
+    var(--bg-surface-2);
+  padding: 1.2rem;
+  overflow: hidden;
+}
+
+.bn-cortex-grid {
+  display: grid;
+  grid-template-columns: 220px 1fr 220px;
+  gap: 1.5rem;
+  align-items: start;
+  position: relative;
+  z-index: 2;
+}
+
+@media (max-width: 900px) {
+  .bn-cortex-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+.bn-col-header {
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — OBSERVABLE PILLS
+══════════════════════════════════════════════════════════════ */
+
+.bn-col-observables {
+  display: flex;
+  flex-direction: column;
+}
+
+.bn-obs-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--bg-surface);
+  margin-bottom: 0.35rem;
+  transition: all 0.3s ease;
+  opacity: 0.5;
+}
+
+.bn-obs-active {
+  opacity: 1;
+  border-color: var(--obs-color, var(--accent));
+  background: color-mix(in srgb, var(--obs-color, var(--accent)) 8%, var(--bg-surface));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--obs-color, var(--accent)) 25%, transparent);
+  animation: bnObsPulse 0.4s ease-out;
+}
+
+.bn-obs-settled {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--obs-color, var(--accent)) 40%, var(--border));
+  background: color-mix(in srgb, var(--obs-color, var(--accent)) 5%, var(--bg-surface));
+}
+
+@keyframes bnObsPulse {
+  0% { transform: scale(0.97); }
+  50% { transform: scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.bn-obs-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bn-obs-state {
+  font-size: 0.65rem;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.03em;
+}
+
+.bn-obs-multi {
+  display: flex;
+  gap: 3px;
+  margin-left: 0.2rem;
+}
+
+.bn-obs-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — PATHWAY CARDS
+══════════════════════════════════════════════════════════════ */
+
+.bn-col-pathways {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.bn-pathway-card {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--bg-surface);
+  padding: 0.85rem;
+  transition: all 0.4s ease;
+  opacity: 0.4;
+}
+
+.bn-pw-computing {
+  opacity: 1;
+  border-color: var(--pw-color);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--pw-color) 20%, transparent);
+  animation: bnPathwayCompute 0.5s ease-out;
+}
+
+.bn-pw-settled {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--pw-color) 50%, var(--border));
+}
+
+@keyframes bnPathwayCompute {
+  0% { transform: scale(0.98); opacity: 0.5; }
+  50% { transform: scale(1.01); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.bn-pw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.bn-pw-label {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.bn-pw-high {
+  font-size: 0.85rem;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--pw-color);
+}
+
+.bn-pw-states-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.4rem;
+}
+
+.bn-pw-state-val {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.bn-pw-state-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.bn-dot-low { background: #10b981; }
+.bn-dot-medium { background: #f59e0b; }
+.bn-dot-high { background: #f97316; }
+.bn-dot-critical { background: #ef4444; }
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — PROBABILITY BARS
+══════════════════════════════════════════════════════════════ */
+
+.bn-prob-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--bg-surface-2);
+  animation: bnBarFill 0.5s ease-out;
+}
+
+.bn-prob-bar-lg {
+  height: 14px;
+  border-radius: 7px;
+}
+
+@keyframes bnBarFill {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+
+.bn-prob-seg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: width 0.5s ease;
+  min-width: 0;
+}
+
+.bn-prob-label {
+  font-size: 0.5rem;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.bn-prob-low      { background: #10b981; }
+.bn-prob-medium   { background: #f59e0b; }
+.bn-prob-high     { background: #f97316; }
+.bn-prob-critical { background: #ef4444; }
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — OVERALL RISK CARD
+══════════════════════════════════════════════════════════════ */
+
+.bn-col-overall {
+  display: flex;
+  flex-direction: column;
+}
+
+.bn-overall-card {
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--bg-surface);
+  padding: 1rem;
+  transition: all 0.4s ease;
+  opacity: 0.4;
+}
+
+.bn-overall-computing {
+  opacity: 1;
+  border-color: #3b82f6;
+  box-shadow: 0 0 25px rgba(59,130,246,0.15);
+  animation: bnOverallResolve 0.5s ease-out;
+}
+
+.bn-overall-settled {
+  opacity: 1;
+  border-color: color-mix(in srgb, #3b82f6 40%, var(--border));
+}
+
+@keyframes bnOverallResolve {
+  0% { transform: scale(0.98); opacity: 0.5; }
+  50% { transform: scale(1.01); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.bn-overall-title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 0.65rem;
+}
+
+.bn-risk-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.65rem;
+}
+
+.bn-risk-score-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.bn-risk-score-value {
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+
+.bn-risk-level-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 1.5px solid;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  margin-top: 0.5rem;
+}
+
+.bn-archetype-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.55rem;
+}
+
+.bn-archetype-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.bn-overall-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--border);
+}
+
+.bn-overall-state-val {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.bn-overall-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.5rem 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  opacity: 0.4;
+}
+.bn-overall-placeholder i { font-size: 1.5rem; }
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — SVG EDGE OVERLAY
+══════════════════════════════════════════════════════════════ */
+
+.bn-edge-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+}
+
+.bn-edges-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — RESULT SUMMARY
+══════════════════════════════════════════════════════════════ */
+
+.bn-result-summary {
+  margin-top: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--bg-surface-2);
+  padding: 0.85rem;
+}
+
+.bn-summary-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.65rem;
+}
+.bn-summary-title i { color: var(--accent); }
+
+.bn-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.6rem;
+}
+
+.bn-summary-card {
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--bg-surface);
+  padding: 0.65rem;
+}
+
+.bn-summary-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.4rem;
+}
+
+.bn-summary-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.bn-summary-name {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.bn-summary-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bn-summary-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg-surface-2);
+  overflow: hidden;
+}
+
+.bn-summary-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.bn-summary-pct {
+  font-size: 0.72rem;
+  font-weight: 800;
+  min-width: 45px;
+  text-align: right;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BN BRAIN MAP — EMPTY STATE
+══════════════════════════════════════════════════════════════ */
+
+.bn-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 3rem 1.5rem;
+  border: 1.5px dashed var(--border);
+  border-radius: 0.9rem;
+  margin-top: 1.25rem;
+  color: var(--text-muted);
+}
+.bn-empty-state p {
+  font-size: 0.78rem;
+  text-align: center;
+  max-width: 350px;
+  line-height: 1.55;
+}
