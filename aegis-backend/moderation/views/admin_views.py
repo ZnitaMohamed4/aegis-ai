@@ -1557,6 +1557,17 @@ def simulate_message(request):
         final_state = aegis_graph.invoke(initial_state)
         latency_ms = int((time.time() - start) * 1000)
 
+        # Compute per-agent deltas (individual durations, not cumulative)
+        t12 = final_state.get("agent_1_2_latency_ms") or 0
+        t3_cum = final_state.get("agent_3_latency_ms") or 0
+        t4_cum = final_state.get("agent_4_latency_ms") or 0
+        t5_cum = final_state.get("agent_5_latency_ms") or 0
+
+        delta_12 = int(t12)
+        delta_3 = max(0, int(t3_cum - t12)) if t3_cum > 0 else 0
+        delta_4 = max(0, int(t4_cum - max(t3_cum, t12)))
+        delta_5 = max(0, int(t5_cum - t4_cum)) if t4_cum > 0 else max(0, int(t5_cum))
+
         return Response({
             "toxicity_score": round(final_state.get("m1_score", 0.0), 4),
             "primary_class": final_state.get("primary_class", "safe"),
@@ -1569,6 +1580,15 @@ def simulate_message(request):
             "language": final_state.get("detected_language", language),
             "explanation": final_state.get("llm_explanation", "Pipeline analysis complete."),
             "latency_ms": latency_ms,
+            "agent_latencies": {
+                "agent_1_2": delta_12,
+                "agent_3": delta_3,
+                "agent_4": delta_4,
+                "agent_5": delta_5,
+            },
+            "needs_audit": final_state.get("needs_audit", False),
+            "escalation_risk": round(final_state.get("escalation_risk", 0.0), 4),
+            "ml_corrected": final_state.get("ml_corrected", False),
         })
     except Exception as e:
         logger.error(f"Simulation failed: {e}")

@@ -534,13 +534,43 @@ def _enforce_standard(ctx):
                     )
                     ctx.enforcement_actions.append("sms_alert")
 
-        # Archive + Block disabled (Baileys protocol instability)
+        # ── APPLICATION-LEVEL BLOCK + BEST-EFFORT WHATSAPP BLOCK ──────────────
+        # WhatsApp protocol limitation: we CANNOT delete incoming messages (fromMe=False).
+        # Baileys' updateBlockStatus fails for LID contacts (bad-request).
+        # Solution: save sender to BlockedContact table so future messages are silently
+        # dropped at the webhook (no pipeline, no alert, no reaction).
+        # Also attempt the real WhatsApp block as best-effort — works for phone-JID contacts.
         if ctx.decision in ('BLOCK', 'ESCALATE') and not ctx.is_from_me:
-            logger.info(
-                f"[AGENT 5: ENFORCER] ⚠️ Archive/Block disabled for "
-                f"{phone_jid} (decision={ctx.decision}). "
-                f"See DISABLED_FEATURES.md."
-            )
+            from moderation.models import BlockedContact
+            try:
+                BlockedContact.objects.update_or_create(
+                    sender_jid=phone_jid,
+                    defaults={
+                        "instance_name": ctx.instance_name,
+                        "reason": ctx.decision,
+                        "is_active": True,
+                    },
+                )
+                logger.info(
+                    f"[AGENT 5: ENFORCER] 🚫 APP-BLOCKED {phone_jid} — "
+                    f"all future messages will be silently dropped."
+                )
+                ctx.enforcement_actions.append("app_block")
+            except Exception as e:
+                logger.error(f"[AGENT 5: ENFORCER] ❌ Failed to save app-level block: {e}")
+
+            # Best-effort WhatsApp block (may fail for LID contacts — that's OK)
+            from moderation.evolution_api import block_contact
+            try:
+                if block_contact(ctx.instance_name, phone_jid):
+                    ctx.enforcement_actions.append("wa_block")
+                    logger.info(f"[AGENT 5: ENFORCER] ✅ WhatsApp-level block succeeded for {phone_jid}")
+                else:
+                    ctx.enforcement_actions.append("wa_block_failed")
+                    logger.info(f"[AGENT 5: ENFORCER] ⚠️ WhatsApp block failed for {phone_jid} (LID issue, app-block active)")
+            except Exception as e:
+                logger.warning(f"[AGENT 5: ENFORCER] ⚠️ WhatsApp block exception: {e}")
+                ctx.enforcement_actions.append("wa_block_failed")
 
 
 def _enforce_safe(ctx):
