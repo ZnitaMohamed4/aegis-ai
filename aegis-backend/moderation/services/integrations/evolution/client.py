@@ -332,7 +332,13 @@ class EvolutionAPIClient:
         return self._get(f"instance/connect/{instance_name}")
 
     def set_webhook(self, instance_name, webhook_url):
-        """Configure the webhook for an instance."""
+        """Configure the webhook for an instance.
+
+        The ``headers`` dict is critical: Evolution API v2 does NOT send its
+        AUTHENTICATION_API_KEY automatically — we must explicitly tell it to
+        include the ``apikey`` header so our backend can authenticate the
+        incoming webhook POST.
+        """
         self._post(f"webhook/set/{instance_name}", {
             "webhook": {
                 "enabled": True,
@@ -340,6 +346,9 @@ class EvolutionAPIClient:
                 "byEvents": False,
                 "base64": False,
                 "events": ["MESSAGES_UPSERT", "CONNECTION_UPDATE"],
+                "headers": {
+                    "apikey": self.api_key,
+                },
             }
         })
 

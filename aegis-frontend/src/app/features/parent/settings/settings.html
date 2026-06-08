@@ -134,7 +134,7 @@
 						class="mode-card p-4 rounded-xl border-2 cursor-pointer transition-all flex-1"
 						[class.border-primary]="parentAccount().monitoringMode === 'child'"
 						[class.border-transparent]="parentAccount().monitoringMode !== 'child'"
-						style="background: var(--surface-b);"
+						style="background: var(--bg-surface-2);"
 						(click)="confirmModeSwitch('child')">
 						<div class="flex items-center gap-3 mb-2">
 							<i class="pi pi-shield text-2xl" [class.text-primary]="parentAccount().monitoringMode === 'child'"></i>
@@ -147,7 +147,7 @@
 						class="mode-card p-4 rounded-xl border-2 cursor-pointer transition-all flex-1"
 						[class.border-primary]="parentAccount().monitoringMode === 'adult'"
 						[class.border-transparent]="parentAccount().monitoringMode !== 'adult'"
-						style="background: var(--surface-b);"
+						style="background: var(--bg-surface-2);"
 						(click)="confirmModeSwitch('adult')">
 						<div class="flex items-center gap-3 mb-2">
 							<i class="pi pi-heart text-2xl" [class.text-primary]="parentAccount().monitoringMode === 'adult'"></i>
@@ -158,7 +158,7 @@
 				</div>
 
 				@if (parentAccount().monitoringMode === 'adult') {
-					<div class="adult-contact-section p-4 rounded-xl border mt-2" style="background: var(--surface-b); border-color: var(--surface-border);">
+					<div class="adult-contact-section p-4 rounded-xl border mt-2" style="background: var(--bg-surface-2); border-color: var(--border);">
 						<h4 class="font-semibold mb-3 flex items-center gap-2">
 							<i class="pi pi-users"></i> Emergency Trusted Contact
 						</h4>

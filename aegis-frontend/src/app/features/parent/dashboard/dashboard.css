@@ -35,10 +35,10 @@
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--low);
-  background: #22c55e18;
+  background: color-mix(in srgb, var(--low) 10%, transparent);
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid #22c55e33;
+  border: 1px solid color-mix(in srgb, var(--low) 25%, transparent);
 }
 
 .live-dot {
@@ -129,8 +129,8 @@
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--low);
-  background: #22c55e12;
-  border: 1px solid #22c55e33;
+  background: color-mix(in srgb, var(--low) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--low) 25%, transparent);
   padding: 0.35rem 0.85rem;
   border-radius: 999px;
 }

@@ -1,5 +1,6 @@
-.decision-block { background: #FF4D4D18; color: #FF4D4D; }
-.decision-escalate { background: #FF7A3018; color: #FF7A30; }
-.decision-warn { background: #FFB02018; color: #FFB020; }
-.decision-allow { background: #10D9A018; color: #10D9A0; }
-.decision-reflection { background: #A78BFA18; color: #A78BFA; }
+/* ── Decision Badges (theme-aware) ── */
+.decision-block     { background: color-mix(in srgb, var(--critical) 10%, transparent); color: var(--critical); }
+.decision-escalate  { background: color-mix(in srgb, var(--high)     10%, transparent); color: var(--high); }
+.decision-warn      { background: color-mix(in srgb, var(--medium)   10%, transparent); color: var(--medium); }
+.decision-allow     { background: color-mix(in srgb, var(--low)      10%, transparent); color: var(--low); }
+.decision-reflection{ background: color-mix(in srgb, #A78BFA         10%, transparent); color: #A78BFA; }

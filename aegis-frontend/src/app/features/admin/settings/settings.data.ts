@@ -95,7 +95,7 @@ export const THEME_VARIABLES: Record<ThemePreset['id'], ThemeVariableSet> = {
       '--interaction-hover': '#2DD4BF',
       '--text-primary': '#F9FAFB',
       '--text-secondary': '#9CA3AF',
-      '--text-muted': '#4B5563',
+      '--text-muted': '#6B7280',
     },
   },
   cyan: {
@@ -131,7 +131,7 @@ export const THEME_VARIABLES: Record<ThemePreset['id'], ThemeVariableSet> = {
       '--interaction-hover': '#22D3EE',
       '--text-primary': '#F1F5F9',
       '--text-secondary': '#94A3B8',
-      '--text-muted': '#3B5468',
+      '--text-muted': '#5C7A8E',
     },
   },
   rose: {
@@ -167,7 +167,7 @@ export const THEME_VARIABLES: Record<ThemePreset['id'], ThemeVariableSet> = {
       '--interaction-hover': '#F472B6',
       '--text-primary': '#FAF5F8',
       '--text-secondary': '#A08894',
-      '--text-muted': '#553D58',
+      '--text-muted': '#7A5F70',
     },
   },
   indigo: {
@@ -209,7 +209,7 @@ export const THEME_VARIABLES: Record<ThemePreset['id'], ThemeVariableSet> = {
 
     '--text-primary': '#F8FAFC',
     '--text-secondary': '#94A3B8',
-    '--text-muted': '#3A417A',
+    '--text-muted': '#5C6490',
   },
   },
   emerald: {
@@ -251,7 +251,7 @@ export const THEME_VARIABLES: Record<ThemePreset['id'], ThemeVariableSet> = {
 
       '--text-primary': '#ECFDF5',
       '--text-secondary': '#A7F3D0',
-      '--text-muted': '#2C5A4C',
+      '--text-muted': '#4A8070',
     }
   },
   graphite: {
@@ -293,7 +293,7 @@ export const THEME_VARIABLES: Record<ThemePreset['id'], ThemeVariableSet> = {
 
       '--text-primary': '#FAFAFA',
       '--text-secondary': '#A1A1AA',
-      '--text-muted': '#52525B',
+      '--text-muted': '#71717A',
     }
   },
   blue: {
@@ -335,7 +335,7 @@ export const THEME_VARIABLES: Record<ThemePreset['id'], ThemeVariableSet> = {
 
     '--text-primary': '#E1E1E1',
     '--text-secondary': '#8B949E',
-    '--text-muted': '#555555',
+    '--text-muted': '#7A7A7A',
   },
   },
   security: {
@@ -377,7 +377,7 @@ export const THEME_VARIABLES: Record<ThemePreset['id'], ThemeVariableSet> = {
 
     '--text-primary': '#ECFDF5',
     '--text-secondary': '#A7F3D0',
-    '--text-muted': '#3F4F47',
+    '--text-muted': '#5E7A6E',
   },
   },
 };

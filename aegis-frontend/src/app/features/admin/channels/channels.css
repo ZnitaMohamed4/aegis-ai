@@ -19,24 +19,24 @@
 
 .status-dot-online,
 .status-dot-connected {
-	background: #22c55e;
-	box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+	background: var(--low);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--low) 18%, transparent);
 }
 
 .status-dot-disconnected {
-	background: #ef4444;
-	box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18);
+	background: var(--critical);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--critical) 18%, transparent);
 }
 
 .status-dot-pending {
-	background: #f59e0b;
-	box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+	background: var(--medium);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--medium) 18%, transparent);
 	animation: pulse-amber 2s ease-in-out infinite;
 }
 
 @keyframes pulse-amber {
-	0%, 100% { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18); }
-	50% { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.08); }
+	0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--medium) 18%, transparent); }
+	50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--medium) 8%, transparent); }
 }
 
 /* ── Summary Stat Cards ── */

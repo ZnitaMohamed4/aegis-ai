@@ -15,8 +15,8 @@
 .panel.section-card {
 	padding: 2rem;
 	border-radius: 16px;
-	background: var(--card-bg, #ffffff);
-	border: 1px solid var(--border-color, #e2e8f0);
+	background: var(--bg-surface);
+	border: 1px solid var(--border);
 	box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 
@@ -28,7 +28,7 @@
 	display: block;
 	font-size: 0.75rem;
 	font-weight: 700;
-	color: var(--primary-color, #3b82f6);
+	color: var(--accent);
 	letter-spacing: 0.05em;
 	text-transform: uppercase;
 	margin-bottom: 0.5rem;
@@ -38,12 +38,12 @@
 	margin: 0;
 	font-size: 1.5rem;
 	font-weight: 600;
-	color: var(--primary-text, #0f172a);
+	color: var(--text-primary);
 }
 
 .section-divider {
 	height: 1px;
-	background: var(--border-color, #e2e8f0);
+	background: var(--border);
 	margin: 0 1rem;
 }
 
@@ -63,15 +63,15 @@
 .field-label {
 	font-size: 0.875rem;
 	font-weight: 600;
-	color: var(--text-color, #334155);
+	color: var(--text-secondary);
 }
 
 .input-field {
 	padding: 0.75rem 1rem;
-	border: 1px solid var(--input-border, #cbd5e1);
+	border: 1px solid var(--border);
 	border-radius: 8px;
-	background: var(--input-bg, #f8fafc);
-	color: var(--text-color, #1e293b);
+	background: var(--bg-surface-2);
+	color: var(--text-primary);
 	font-size: 0.875rem;
 	transition: all 0.2s;
 	width: 100%;
@@ -79,15 +79,15 @@
 
 .input-field:focus {
 	outline: none;
-	border-color: var(--primary-color, #3b82f6);
-	box-shadow: 0 0 0 3px var(--primary-light, #dbeafe);
+	border-color: var(--accent);
+	box-shadow: 0 0 0 3px var(--accent-subtle);
 }
 
 ::ng-deep .settings-select {
 	width: 100%;
 	border-radius: 8px !important;
-	background: var(--input-bg, #f8fafc) !important;
-	border-color: var(--input-border, #cbd5e1) !important;
+	background: var(--bg-surface-2) !important;
+	border-color: var(--border) !important;
 }
 
 /* Theme Dots */
@@ -95,14 +95,14 @@
 	width: 16px;
 	height: 16px;
 	border-radius: 50%;
-	box-shadow: 0 0 0 2px var(--card-bg, #ffffff), 0 0 0 3px var(--border-color, #e2e8f0);
+	box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 3px var(--border);
 }
 
 .theme-dot-large {
 	width: 32px;
 	height: 32px;
 	border-radius: 50%;
-	box-shadow: 0 0 0 2px var(--card-bg, #ffffff), 0 0 0 4px var(--border-color, #e2e8f0);
+	box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px var(--border);
 }
 
 /* Switches */
@@ -111,9 +111,9 @@
 	justify-content: space-between;
 	align-items: center;
 	padding: 1rem;
-	background: var(--surface-bg, #f8fafc);
+	background: var(--bg-surface-2);
 	border-radius: 8px;
-	border: 1px solid var(--border-color, #e2e8f0);
+	border: 1px solid var(--border);
 	gap: 1rem;
 }
 
@@ -128,13 +128,13 @@
 	margin: 0;
 	font-weight: 600;
 	font-size: 0.95rem;
-	color: var(--text-color, #1e293b);
+	color: var(--text-primary);
 }
 
 .row-caption {
 	margin: 0.25rem 0 0;
 	font-size: 0.8rem;
-	color: var(--secondary-text, #64748b);
+	color: var(--text-muted);
 }
 
 /* Time Range */
@@ -143,9 +143,9 @@
 	flex-direction: column;
 	gap: 0.75rem;
 	padding: 1.5rem;
-	background: var(--surface-bg, #f8fafc);
+	background: var(--bg-surface-2);
 	border-radius: 8px;
-	border: 1px solid var(--border-color, #e2e8f0);
+	border: 1px solid var(--border);
 	max-width: 600px;
 	margin-top: 1rem;
 }
@@ -157,7 +157,7 @@
 }
 
 .range-separator {
-	color: var(--secondary-text, #94a3b8);
+	color: var(--text-muted);
 	font-weight: 600;
 }
 
@@ -167,7 +167,7 @@
 	align-items: center;
 	gap: 0.5rem;
 	padding: 0.625rem 1.25rem;
-	background: var(--primary-color, #3b82f6);
+	background: var(--accent);
 	color: white;
 	border: none;
 	border-radius: 8px;
@@ -177,13 +177,13 @@
 }
 
 .save-btn-header:hover {
-	background: var(--primary-dark, #2563eb);
+	background: var(--accent-hover);
 }
 
 .ghost-btn {
 	background: transparent;
-	border: 1px solid var(--border-color, #cbd5e1);
-	color: var(--text-color, #475569);
+	border: 1px solid var(--border);
+	color: var(--text-secondary);
 	padding: 0.625rem 1rem;
 	border-radius: 6px;
 	font-weight: 600;
@@ -194,8 +194,8 @@
 }
 
 .ghost-btn:hover {
-	background: var(--surface-bg, #f1f5f9);
-	color: var(--primary-text, #0f172a);
+	background: var(--bg-surface-2);
+	color: var(--text-primary);
 }
 
 /* Inline Password Form */
@@ -204,15 +204,15 @@
 	flex-direction: column;
 	gap: 1rem;
 	padding: 1.5rem;
-	background: var(--primary-light, #eff6ff);
-	border: 1px solid var(--primary-border, #bfdbfe);
+	background: var(--accent-subtle);
+	border: 1px solid var(--accent-border);
 	border-radius: 8px;
 	grid-column: 1 / -1;
 	animation: slideDown 0.3s ease-out;
 }
 
 .inline-save-btn {
-	background: var(--primary-color, #3b82f6);
+	background: var(--accent);
 	color: white;
 	border: none;
 	padding: 0.75rem;
@@ -223,17 +223,17 @@
 }
 
 .inline-save-btn:hover {
-	background: var(--primary-dark, #2563eb);
+	background: var(--accent-hover);
 }
 
 /* Misc */
 .readonly-value {
 	margin: 0;
 	padding: 0.75rem 1rem;
-	background: var(--surface-bg, #f1f5f9);
-	border: 1px solid var(--border-color, #e2e8f0);
+	background: var(--bg-surface-2);
+	border: 1px solid var(--border);
 	border-radius: 8px;
-	color: var(--secondary-text, #64748b);
+	color: var(--text-muted);
 	font-size: 0.875rem;
 }
 
@@ -269,18 +269,18 @@
 }
 ::ng-deep p-confirmdialog .p-dialog .p-dialog-header {
 	padding: 1.5rem 1.5rem 0.5rem 1.5rem !important;
-	background: var(--surface-bg, #f8fafc) !important;
+	background: var(--bg-surface) !important;
 	border-bottom: none !important;
 }
 ::ng-deep p-confirmdialog .p-dialog .p-dialog-content {
 	padding: 1rem 1.5rem !important;
-	background: var(--surface-bg, #f8fafc) !important;
-	color: var(--text-color, #334155) !important;
+	background: var(--bg-surface) !important;
+	color: var(--text-secondary) !important;
 	font-size: 0.95rem;
 	line-height: 1.5;
 }
 ::ng-deep p-confirmdialog .p-dialog .p-dialog-footer {
 	padding: 1rem 1.5rem 1.5rem 1.5rem !important;
-	background: var(--surface-bg, #f8fafc) !important;
+	background: var(--bg-surface) !important;
 	border-top: none !important;
 }

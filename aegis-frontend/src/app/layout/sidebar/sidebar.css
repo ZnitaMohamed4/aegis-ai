@@ -41,7 +41,7 @@
   font-family: 'Outfit', sans-serif;
   letter-spacing: -0.02em;
   white-space: nowrap;
-  background: linear-gradient(135deg, var(--accent) 0%, #14b8a6 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
