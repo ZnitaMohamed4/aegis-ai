@@ -206,7 +206,8 @@ def enforcer_node(state: ModerationState) -> dict:
     channel_layer = get_channel_layer()
 
     def _broadcast(mod, alerte=None):
-        """Push real-time event to Angular Dashboard via Django Channels."""
+        """Push real-time event to Angular Dashboard via Django Channels.
+        Also fans out per-user Notification records for persistence."""
         payload = {
             "id": str(alerte.id) if alerte else str(mod.id),
             "type": "alert" if alerte else "log",
@@ -238,6 +239,24 @@ def enforcer_node(state: ModerationState) -> dict:
                 )
         except Exception as e:
             logger.warning(f"[AGENT 5: ENFORCER] WS broadcast failed: {e}")
+
+        # ── Fan out Notification records for persistence ──────────────
+        if alerte is not None:
+            from moderation.models import Notification, AegisUser
+            recipients = []
+            try:
+                # All admin users receive every alert
+                admins = AegisUser.objects.filter(role='admin').only('id')
+                recipients.extend(list(admins))
+                # The parent linked to this instance also receives it
+                if ctx.child and ctx.child.parent and ctx.child.parent.user:
+                    recipients.append(ctx.child.parent.user)
+                Notification.objects.bulk_create([
+                    Notification(user=u, alert=alerte)
+                    for u in recipients
+                ], ignore_conflicts=True)
+            except Exception as e:
+                logger.warning(f"[AGENT 5: ENFORCER] Notification fan-out failed: {e}")
 
     ctx.broadcast_fn = _broadcast
 
@@ -520,19 +539,33 @@ def _enforce_standard(ctx):
                     ctx.child.full_name, ctx.primary_class, ctx.raw_text,
                 )
                 ctx.enforcement_actions.append("parent_alert")
+                # Mark parent notified on the SecurityAlert record
+                alerte.parent_notified = True
 
-                # Twilio Emergency Voice Call (temporarily disabled)
+                # Twilio Emergency Voice Call (temporarily disabled to preserve free trial)
                 if getattr(ctx.child.parent, 'receive_call_on_critical', False):
-                    pass
+                    from moderation.services.twilio_service import call_parent_emergency
+                    call_ok = call_parent_emergency(
+                        parent_phone, ctx.child.full_name,
+                        ctx.primary_class, ctx.alert_severity.upper(),
+                    )
+                    if call_ok:
+                        alerte.calls_made += 1
+                        ctx.enforcement_actions.append("voice_call")
 
                 # Twilio SMS Alert Backup
                 if getattr(ctx.child.parent, 'receive_sms_alerts', False):
                     from moderation.services.twilio_service import send_sms_alert
-                    send_sms_alert(
+                    sms_ok = send_sms_alert(
                         parent_phone, ctx.child.full_name,
                         ctx.primary_class, ctx.raw_text[:100],
                     )
-                    ctx.enforcement_actions.append("sms_alert")
+                    if sms_ok:
+                        alerte.sms_sent += 1
+                        ctx.enforcement_actions.append("sms_alert")
+
+                # Persist delivery counts
+                alerte.save(update_fields=['parent_notified', 'calls_made', 'sms_sent'])
 
         # ── APPLICATION-LEVEL BLOCK + BEST-EFFORT WHATSAPP BLOCK ──────────────
         # WhatsApp protocol limitation: we CANNOT delete incoming messages (fromMe=False).

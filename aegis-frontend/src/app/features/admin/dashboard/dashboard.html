@@ -22,6 +22,19 @@
     </div>
   </div>
 
+  <!-- Unread Notifications Banner -->
+  @if (unreadNotificationsCount > 0) {
+    <div style="background: var(--critical-bg, rgba(239,68,68,0.08)); border: 1px solid var(--critical); border-radius: 10px; padding: 0.75rem 1.25rem; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+      <i class="pi pi-bell" style="color: var(--critical); font-size: 1.2rem;"></i>
+      <span style="flex:1; font-size: 0.9rem; color: var(--text-primary);">
+        You have <strong>{{ unreadNotificationsCount }}</strong> unread notification{{ unreadNotificationsCount > 1 ? 's' : '' }}.
+      </span>
+      <button (click)="markAllRead()" style="background: var(--critical); color: white; border: none; border-radius: 6px; padding: 0.35rem 0.85rem; font-size: 0.8rem; cursor: pointer; font-weight: bold;">
+        Mark all read
+      </button>
+    </div>
+  }
+
   <!-- Stat Cards -->
   <div class="stats-grid">
     @if (stats) {
@@ -296,13 +309,13 @@
           <div style="font-size: 0.75rem; color: var(--high); font-weight: bold; margin-bottom: 0.25rem;">EMAIL</div>
           <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">0</div>
         </div>
-        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center; opacity: 0.5;">
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center;" [style.opacity]="smsToday > 0 ? '1' : '0.5'">
           <div style="font-size: 0.75rem; color: var(--medium); font-weight: bold; margin-bottom: 0.25rem;">SMS</div>
-          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">0</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">{{ smsToday }}</div>
         </div>
-        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center; opacity: 0.5;">
+        <div style="flex: 1; border-radius: 12px; background: var(--bg-base); border: 1px solid var(--border); padding: 1rem; text-align: center;" [style.opacity]="callsToday > 0 ? '1' : '0.5'">
           <div style="font-size: 0.75rem; color: var(--critical); font-weight: bold; margin-bottom: 0.25rem;">APPEL</div>
-          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;">0</div>
+          <div style="font-size: 1.5rem; font-weight: bold; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">{{ callsToday }}</div>
         </div>
       </div>
     </div>

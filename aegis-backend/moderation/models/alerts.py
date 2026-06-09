@@ -8,7 +8,7 @@ from .moderation import ModerationResult
 
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  UML PACKAGE 5 — ALERTS & NOTIFICATIONS                    ║
-# ║  SecurityAlert (enhanced)                                   ║
+# ║  SecurityAlert (enhanced) + Notification (per-user inbox)   ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 class SecurityAlert(models.Model):
@@ -48,6 +48,13 @@ class SecurityAlert(models.Model):
     is_resolved = models.BooleanField(default=False)
     parent_notified = models.BooleanField(default=False,
         help_text="External notification (SMS/email/call) was sent to parent")
+
+    # Delivery tracking — counts Twilio actions taken for this alert
+    calls_made = models.PositiveIntegerField(default=0,
+        help_text="Number of Twilio voice calls made to parent for this alert")
+    sms_sent = models.PositiveIntegerField(default=0,
+        help_text="Number of Twilio SMS messages sent to parent for this alert")
+
     sent_at = models.DateTimeField(auto_now_add=True)
     resolved_at = models.DateTimeField(null=True, blank=True)
 
@@ -66,3 +73,36 @@ class SecurityAlert(models.Model):
         self.is_resolved = True
         self.resolved_at = timezone.now()
         self.save(update_fields=['is_resolved', 'resolved_at'])
+
+
+class Notification(models.Model):
+    """
+    Per-user notification inbox entry.
+    Links a SecurityAlert to a specific user (admin or parent) with read tracking.
+    One SecurityAlert can fan out to multiple Notification records (one per admin + parent).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(AegisUser, on_delete=models.CASCADE, related_name='notifications',
+        help_text="The user who sees this notification in their inbox")
+    alert = models.ForeignKey(SecurityAlert, on_delete=models.CASCADE, related_name='notifications',
+        help_text="The underlying SecurityAlert")
+    is_read = models.BooleanField(default=False, db_index=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        verbose_name = "Notification"
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'is_read']),
+        ]
+
+    def __str__(self):
+        return f"Notif({self.user.username}) — {self.alert.severity} — {'read' if self.is_read else 'unread'}"
+
+    def mark_as_read(self):
+        if not self.is_read:
+            self.is_read = True
+            self.read_at = timezone.now()
+            self.save(update_fields=['is_read', 'read_at'])

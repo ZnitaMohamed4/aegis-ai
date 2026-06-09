@@ -37,6 +37,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   // Stats
   stats: any[] | null = null;
   recentAlerts: any[] | null = null;
+  unreadNotificationsCount: number = 0;
+  callsToday: number = 0;
+  smsToday: number = 0;
 
   // Charts
   harassmentChartData: any = null;
@@ -342,6 +345,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         // Set child info
         this.childInfo = data.child;
         this.childName = data.child?.name || 'Your Child';
+        this.unreadNotificationsCount = data.stats.unread_notifications || 0;
+        this.callsToday = data.stats.calls_today || 0;
+        this.smsToday = data.stats.sms_today || 0;
 
         const isAdult = this.monitoringMode === 'adult';
         this.stats = [
@@ -579,5 +585,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
     if (count <= 3) return 'rgba(249, 115, 22, 0.55)';   // orange
     if (count <= 5) return 'rgba(239, 68, 68, 0.7)';     // red
     return 'rgba(220, 38, 38, 0.9)';                      // dark red
+  }
+
+  markAllRead(): void {
+    this.apiService.markNotificationsRead().subscribe({
+      next: (res) => {
+        this.unreadNotificationsCount = res.unread;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Notifications',
+          detail: 'All notifications marked as read.',
+          life: 3000,
+        });
+      },
+      error: (err) => console.error('[AEGIS] Failed to mark notifications read:', err)
+    });
   }
 }

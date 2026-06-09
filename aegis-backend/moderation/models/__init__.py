@@ -20,7 +20,7 @@ from .moderation import HarassmentCategory, ModerationResult
 from .behavioral import UserBehaviorProfile, BehavioralSnapshot
 
 # Package 5: Alerts & Notifications
-from .alerts import SecurityAlert
+from .alerts import SecurityAlert, Notification
 
 # Package 6: Chatbot & Bot Memory
 from .chatbot import ChatSession, ChatMessage, BotConversation
@@ -36,7 +36,7 @@ __all__ = [
     'Conversation', 'Message',
     'HarassmentCategory', 'ModerationResult',
     'UserBehaviorProfile', 'BehavioralSnapshot',
-    'SecurityAlert',
+    'SecurityAlert', 'Notification',
     'ChatSession', 'ChatMessage', 'BotConversation',
     'BlockedContact', 'Report', 'PlatformSettings', 'SelfModerationEvent',
     'FailedMessage',

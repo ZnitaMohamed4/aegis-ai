@@ -17,7 +17,7 @@ from rest_framework.response import Response
 
 from moderation.models import (
     ModerationResult, UserBehaviorProfile, SecurityAlert,
-    MonitoredChild, ParentProfile, SelfModerationEvent
+    MonitoredChild, ParentProfile, SelfModerationEvent, Notification
 )
 from moderation.permissions import IsParentUser
 from moderation.services.formatters import get_severity, SEVERITY_MAP, format_phone_number
@@ -214,6 +214,17 @@ def parent_dashboard_stats(request):
         "data": lang_data if lang_data else [1]
     }
 
+    # Unread notification count for the logged-in parent
+    unread_notifications = Notification.objects.filter(
+        user=request.user, is_read=False
+    ).count()
+
+    # Notification delivery stats (calls + SMS today)
+    from django.db.models import Sum
+    today_security_alerts = SecurityAlert.objects.filter(alert_q, sent_at__date=today)
+    calls_today = today_security_alerts.aggregate(total=Sum('calls_made'))['total'] or 0
+    sms_today = today_security_alerts.aggregate(total=Sum('sms_sent'))['total'] or 0
+
     return Response({
         "child": child_info,
         "stats": {
@@ -225,6 +236,9 @@ def parent_dashboard_stats(request):
             "total_blocked_all_time": total_blocked_all_time,
             "llm_interventions": llm_interventions,
             "avg_latency_ms": get_avg_latency('agent_1', 42) + get_avg_latency('agent_2', 287) + get_avg_latency('agent_5', 12),
+            "unread_notifications": unread_notifications,
+            "calls_today": calls_today,
+            "sms_today": sms_today,
         },
         "category_breakdown": category_breakdown,
         "weekly_activity": weekly_data,

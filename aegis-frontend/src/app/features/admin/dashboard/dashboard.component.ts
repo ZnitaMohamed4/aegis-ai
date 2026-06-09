@@ -31,6 +31,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   stats: any[] | null = null;
   latencies: any = null;
   pushNotificationsCount: number = 0;
+  unreadNotificationsCount: number = 0;
+  callsToday: number = 0;
+  smsToday: number = 0;
   recentAlerts: any[] | null = null;
   atRiskChildren: any[] | null = null;
   // adding an evol api property
@@ -374,6 +377,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         
         this.latencies = data.stats.latencies;
         this.pushNotificationsCount = data.stats.total_alerts_today;
+        this.unreadNotificationsCount = data.stats.unread_notifications || 0;
+        this.callsToday = data.stats.calls_today || 0;
+        this.smsToday = data.stats.sms_today || 0;
         this.isEvolutionOnline = data.stats.evolution_api_online;
         
         this.stats = [
@@ -572,5 +578,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   getRiskBarWidth(score: number): string {
     return `${score * 100}%`;
+  }
+
+  markAllRead(): void {
+    this.apiService.markNotificationsRead().subscribe({
+      next: (res) => {
+        this.unreadNotificationsCount = res.unread;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Notifications',
+          detail: 'All notifications marked as read.',
+          life: 3000,
+        });
+      },
+      error: (err) => console.error('[AEGIS] Failed to mark notifications read:', err)
+    });
   }
 }

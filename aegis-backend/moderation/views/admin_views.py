@@ -19,7 +19,7 @@ from rest_framework.response import Response
 
 from moderation.models import (
     ModerationResult, UserBehaviorProfile, SecurityAlert,
-    MonitoredChild, AegisUser, ParentProfile
+    MonitoredChild, AegisUser, ParentProfile, Notification
 )
 from moderation.permissions import IsAdminUser
 from moderation.services.formatters import get_severity, SEVERITY_MAP, format_phone_number
@@ -572,6 +572,38 @@ def flag_for_review(request, moderation_id):
         return Response({"status": "error", "reason": str(e)}, status=400)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_notifications_read(request):
+    """POST /api/v1/notifications/mark-read/
+    Marks all unread notifications for the logged-in user as read.
+    Optionally accepts a `notification_id` to mark a single one.
+    """
+    from django.utils import timezone as tz
+    notif_id = request.data.get('notification_id')
+    if notif_id:
+        Notification.objects.filter(
+            id=notif_id, user=request.user, is_read=False
+        ).update(is_read=True, read_at=tz.now())
+    else:
+        Notification.objects.filter(
+            user=request.user, is_read=False
+        ).update(is_read=True, read_at=tz.now())
+    unread = Notification.objects.filter(user=request.user, is_read=False).count()
+    return Response({"status": "ok", "unread": unread})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def notifications_unread_count(request):
+    """GET /api/v1/notifications/unread/
+    Returns the unread notification count for the logged-in user.
+    Lightweight endpoint for polling or badge refresh.
+    """
+    unread = Notification.objects.filter(user=request.user, is_read=False).count()
+    return Response({"unread": unread})
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUser])
 def dashboard_stats(request):
@@ -677,6 +709,17 @@ def dashboard_stats(request):
     except Exception:
         evolution_api_online = False
 
+    # 11. Unread notification count for the logged-in admin
+    unread_notifications = Notification.objects.filter(
+        user=request.user, is_read=False
+    ).count()
+
+    # 12. Notification delivery stats (calls + SMS today)
+    from django.db.models import Sum
+    today_alerts = SecurityAlert.objects.filter(sent_at__date=today)
+    calls_today = today_alerts.aggregate(total=Sum('calls_made'))['total'] or 0
+    sms_today = today_alerts.aggregate(total=Sum('sms_sent'))['total'] or 0
+
     # Send the "Package" back to Angular
     return Response({
         "stats": {
@@ -686,6 +729,9 @@ def dashboard_stats(request):
             "llm_interventions": llm_interventions,
             "avg_latency_ms": get_avg_latency('agent_1', 42) + get_avg_latency('agent_2', 287) + get_avg_latency('agent_5', 12),
             "evolution_api_online": evolution_api_online,
+            "unread_notifications": unread_notifications,
+            "calls_today": calls_today,
+            "sms_today": sms_today,
             "latencies": {
                 "agent_1": get_avg_latency('agent_1', 42),
                 "agent_2": get_avg_latency('agent_2', 287),

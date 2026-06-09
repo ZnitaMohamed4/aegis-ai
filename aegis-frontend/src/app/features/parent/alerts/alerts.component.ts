@@ -51,6 +51,9 @@ export class AlertsComponent implements OnInit, OnDestroy {
   private alertSub?: Subscription;
 
   ngOnInit() {
+    // Mark notifications as read when parent opens the alerts page
+    this.apiService.markNotificationsRead().subscribe();
+
     this.authService.currentUser$.subscribe(user => {
       if (user && user.monitoring_mode) {
         this.monitoringMode = user.monitoring_mode;

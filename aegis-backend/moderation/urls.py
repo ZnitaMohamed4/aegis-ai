@@ -17,6 +17,10 @@ urlpatterns = [
     # 3. REST API - Dashboard live stats
     path('stats/dashboard/', views.dashboard_stats, name='dashboard-stats'),
 
+    # 3b. Notifications — per-user inbox persistence
+    path('notifications/mark-read/', views.mark_notifications_read, name='notifications-mark-read'),
+    path('notifications/unread/', views.notifications_unread_count, name='notifications-unread-count'),
+
     # 4. Review Queue (Agent 3 Audits + Admin flagged messages) 
     path('review/', views.review_queue_list, name='review-queue-list'),
     path('review/stats/', views.review_queue_stats, name='review-queue-stats'),

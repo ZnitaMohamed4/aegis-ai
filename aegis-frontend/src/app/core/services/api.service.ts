@@ -19,6 +19,9 @@ export interface DashboardStatsResponse {
       agent_5: number;
     };
     evolution_api_online: boolean;
+    unread_notifications: number;
+    calls_today: number;
+    sms_today: number;
   };
   category_breakdown: Record<string, number>;
   weekly_activity: { day: string; blocked: number; warned: number; safe: number }[];
@@ -55,6 +58,9 @@ export interface ParentDashboardStatsResponse {
     total_blocked_all_time: number;
     llm_interventions: number;
     avg_latency_ms: number;
+    unread_notifications: number;
+    calls_today: number;
+    sms_today: number;
   };
   category_breakdown: Record<string, number>;
   weekly_activity: { day: string; blocked: number; warned: number; safe: number }[];
@@ -313,5 +319,23 @@ export class ApiService {
 
   getKnowledgeStats(): Observable<any> {
     return this.http.get<any>(`${this.BASE_URL}/knowledge/stats/`);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // NOTIFICATIONS (per-user inbox persistence)
+  // ══════════════════════════════════════════════════════════════
+
+  /** Marks all unread notifications as read for the logged-in user. */
+  markNotificationsRead(notificationId?: string): Observable<{ status: string; unread: number }> {
+    const body: any = {};
+    if (notificationId) body.notification_id = notificationId;
+    return this.http.post<{ status: string; unread: number }>(
+      `${this.BASE_URL}/notifications/mark-read/`, body
+    );
+  }
+
+  /** Gets the unread notification count for the logged-in user. */
+  getUnreadNotificationCount(): Observable<{ unread: number }> {
+    return this.http.get<{ unread: number }>(`${this.BASE_URL}/notifications/unread/`);
   }
 }

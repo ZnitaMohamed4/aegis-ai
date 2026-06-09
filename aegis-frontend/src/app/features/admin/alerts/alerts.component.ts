@@ -40,6 +40,9 @@ export class AlertsComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
 
   ngOnInit() {
+    // Mark notifications as read when admin opens the alerts page
+    this.apiService.markNotificationsRead().subscribe();
+
     this.route.queryParams.subscribe(params => {
       const senderJid = params['jid'];
 
