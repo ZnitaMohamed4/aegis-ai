@@ -4,6 +4,11 @@ AGENT 1 & 2: Gatekeeper + Classifier
 Runs the ML pipeline (M1 toxicity + M2 classification), then evaluates
 whether the message needs to be sent to Agent 3 (the Groq Auditor).
 
+Language-aware routing:
+  - English/other → XLM-R M1 + DeBERTa M2 (existing pipeline)
+  - Darija → DarijaBERT-mix M1D (Darija-native pipeline)
+             All M1D-flagged messages go to Agent 3 for severity classification.
+
 Extracted from graph.py during Phase 2 audit refactoring (2026-04-21).
 """
 import logging
@@ -18,21 +23,75 @@ from .escalation import compute_escalation_risk
 logger = logging.getLogger(__name__)
 
 
+def _detect_darija_script(text: str) -> str:
+    """
+    Classify a Darija message's script type.
+    Returns: 'arabic', 'arabizi', or 'mixed'.
+    """
+    arabic_chars = sum(1 for c in text if '\u0600' <= c <= '\u06FF')
+    latin_chars = sum(1 for c in text if c.isascii() and c.isalpha())
+    arabizi_digits = sum(1 for c in text if c in "235789")
+
+    if arabic_chars >= 2 and latin_chars >= 2:
+        return 'mixed'
+    elif arabic_chars >= 2:
+        return 'arabic'
+    elif arabizi_digits >= 1 or latin_chars >= 2:
+        return 'arabizi'
+    return 'arabic'  # default
+
+
 def ml_pipeline_node(state: ModerationState) -> dict:
     """
     AGENT 1 & 2: Gatekeeper + Classifier
+    With language-aware routing: Darija → M1D, English → M1+M2.
     """
     import time as _time
     _t_start = _time.time()
 
     raw_text = state["raw_text"]
 
-    # Resolve the correct pipeline at runtime (respects AEGIS_STUB_MODE).
+    # ── Language Detection ────────────────────────────────────────────
+    from ml_pipeline.models_pkg.language_detector import detect_language, is_likely_darija
+    lang_code = detect_language(raw_text)
+    is_darija = is_likely_darija(raw_text, lang_code)
+    darija_script = _detect_darija_script(raw_text) if is_darija else None
+
+    # ── Pipeline Routing ──────────────────────────────────────────────
     from django.conf import settings
-    from ml_pipeline.inference import run_pipeline, run_pipeline_stub
-    _pipeline_fn = run_pipeline_stub if getattr(settings, 'AEGIS_STUB_MODE', False) else run_pipeline
-    result = _pipeline_fn(raw_text)
-    
+    stub_mode = getattr(settings, 'AEGIS_STUB_MODE', False)
+
+    if is_darija and not stub_mode:
+        # 🇲🇦 DARIJA TRACK — try DarijaBERT-mix M1D
+        from ml_pipeline.models_pkg.darija_inference import DarijaPipeline, run_darija_pipeline
+        darija_pipeline = DarijaPipeline.get_instance()
+
+        if darija_pipeline is not None:
+            logger.info(
+                f"[GATEKEEPER] 🇲🇦 Darija detected (lang={lang_code}, script={darija_script}) "
+                f"→ routing to M1D DarijaBERT"
+            )
+            result = run_darija_pipeline(raw_text)
+        else:
+            # M1D not loaded → fall back to English pipeline (will underperform)
+            logger.warning(
+                f"[GATEKEEPER] ⚠️ Darija detected but M1D not available. "
+                f"Falling back to English pipeline (lang={lang_code})."
+            )
+            from ml_pipeline.inference import run_pipeline, run_pipeline_stub
+            _pipeline_fn = run_pipeline_stub if stub_mode else run_pipeline
+            result = _pipeline_fn(raw_text)
+            is_darija = False  # Mark as not-routed for state tracking
+    else:
+        # 🇬🇧 ENGLISH TRACK — existing M1/M2
+        logger.info(
+            f"[GATEKEEPER] 🇬🇧 English track (lang={lang_code}, is_darija={is_darija}) "
+            f"→ routing to M1+M2 XLM-R"
+        )
+        from ml_pipeline.inference import run_pipeline, run_pipeline_stub
+        _pipeline_fn = run_pipeline_stub if stub_mode else run_pipeline
+        result = _pipeline_fn(raw_text)
+
     # --- Behavioral Escalation Gate ---
     escalation_risk, escalation_reason = compute_escalation_risk(
         state["sender_jid"], state["instance_name"], result.m1_score
@@ -45,7 +104,11 @@ def ml_pipeline_node(state: ModerationState) -> dict:
     # ✅ TRUST-BUT-VERIFY: ALL non-ALLOW decisions go to Agent 3
     if result.decision != 'ALLOW':
         needs_audit = True
-        audit_reason = "ml-flagged"
+        # Darija-flagged messages get a specific audit reason
+        if is_darija:
+            audit_reason = "darija-flagged"
+        else:
+            audit_reason = "ml-flagged"
 
     # 🚨 ESCALATION GATE: Safe-looking message but behavioral pattern is alarming
     elif escalation_risk >= ESCALATION_AUDIT_THRESHOLD:
@@ -110,4 +173,8 @@ def ml_pipeline_node(state: ModerationState) -> dict:
         "escalation_risk": escalation_risk,
         "escalation_reason": escalation_reason,
         "agent_1_2_latency_ms": _t_elapsed,
+        # Darija routing metadata
+        "detected_language": lang_code,
+        "is_darija": is_darija,
+        "darija_script": darija_script,
     }

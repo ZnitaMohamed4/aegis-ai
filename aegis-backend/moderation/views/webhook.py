@@ -56,6 +56,108 @@ def get_avg_latency(agent, default=0):
     except Exception: return default
 
 
+def _has_arabic_script(text: str) -> bool:
+    """Check if text contains Arabic-script characters."""
+    return any('\u0600' <= c <= '\u06FF' for c in text)
+
+
+def _retranscribe_voice_as_arabic(body: dict, inner_data: dict) -> str | None:
+    """
+    Re-transcribe a voice message using Whisper with language='ar' to force
+    Arabic-script output.  This is the key insight: M1D DarijaBERT was trained
+    on 82.6% Arabic-script Darija, so feeding it Arabic text is optimal.
+
+    Flow:
+      1. Download the audio from Evolution API (using the original message data)
+      2. Call Groq Whisper with language='ar'
+      3. Return Arabic-script transcription, or None on failure
+    """
+    import requests as _requests
+
+    evo_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+    evo_key = os.getenv('EVOLUTION_API_KEY', '')
+    groq_key = os.getenv('GROQ_API_KEY', '')
+
+    if not groq_key:
+        logger.warning("[WHISPER-AR] GROQ_API_KEY not set — skipping re-transcription")
+        return None
+
+    # ── Step 1: Download audio from Evolution API ────────────────────
+    # Use instance name from body (set by Evolution API webhook)
+    instance = body.get("instance", "")
+    if not instance:
+        # Fallback: extract from message key
+        instance = inner_data.get("key", {}).get("remoteJid", "").split("@")[0]
+    if not instance:
+        logger.warning("[WHISPER-AR] Cannot determine Evolution API instance")
+        return None
+
+    try:
+        resp = _requests.post(
+            f"{evo_url}/chat/getBase64FromMediaMessage/{instance}",
+            headers={"apikey": evo_key},
+            json={"message": inner_data},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        audio_resp = resp.json()
+    except Exception as e:
+        logger.warning("[WHISPER-AR] Failed to download audio from Evolution API: %s", e)
+        return None
+
+    # Handle nested response format
+    if isinstance(audio_resp, list):
+        audio_resp = audio_resp[0] if audio_resp else {}
+
+    base64_data = audio_resp.get("base64", "")
+    if not base64_data:
+        logger.warning("[WHISPER-AR] No base64 audio in Evolution API response")
+        return None
+
+    # Strip data URI prefix if present (e.g. "data:audio/ogg;base64,...")
+    if base64_data.startswith("data:"):
+        base64_data = base64_data.split(",", 1)[1] if "," in base64_data else base64_data
+
+    mime_type = audio_resp.get("mimetype", "audio/ogg")
+
+    # ── Step 2: Call Groq Whisper with language='ar' ─────────────────
+    import base64 as _b64
+    try:
+        audio_bytes = _b64.b64decode(base64_data)
+    except Exception as e:
+        logger.warning("[WHISPER-AR] Failed to decode base64 audio: %s", e)
+        return None
+
+    try:
+        groq_resp = _requests.post(
+            "https://api.groq.com/openai/v1/audio/transcriptions",
+            headers={"Authorization": f"Bearer {groq_key}"},
+            files={"file": ("voice.ogg", audio_bytes, mime_type)},
+            data={
+                "model": "whisper-large-v3-turbo",
+                "language": "ar",
+                "prompt": "هذا صوت يحتوي على الدارجة المغربية أو العربية. اكتبها بالحروف العربية.",
+            },
+            timeout=15,
+        )
+        groq_resp.raise_for_status()
+        result = groq_resp.json()
+        text = result.get("text", "").strip()
+
+        if text and _has_arabic_script(text):
+            logger.info("[WHISPER-AR] ✅ Re-transcribed to Arabic script: %r", text[:80])
+            return text
+        else:
+            logger.warning(
+                "[WHISPER-AR] Re-transcription returned non-Arabic text: %r",
+                text[:80] if text else "(empty)",
+            )
+            return None
+    except Exception as e:
+        logger.warning("[WHISPER-AR] Groq Whisper re-transcription failed: %s", e)
+        return None
+
+
 @csrf_exempt
 @require_http_methods(["POST"])
 def webhook_messages(request):
@@ -108,14 +210,55 @@ def webhook_messages(request):
 
     # Extract conversation text. Evolution API nests this depending on the message type.
     raw_text = ""
+    is_voice_message = False
     
     # 0. Voice transcription from n8n
     if inner_data.get("is_voice_transcription") or data.get("is_voice_transcription"):
+        is_voice_message = True
         transcribed_text = inner_data.get("transcription") or data.get("transcription") or ""
+        # Guard: Whisper sometimes echoes back its own prompt when audio is
+        # empty/corrupt, or when n8n doesn't extract the response correctly.
+        _WHISPER_PROMPT_TAIL = "Transcribe faithfully."
+        if transcribed_text and _WHISPER_PROMPT_TAIL in transcribed_text and len(transcribed_text) < 80:
+            logger.warning(
+                "[WEBHOOK] 🎤 Voice transcription looks like Whisper prompt echo — "
+                "audio may be empty/corrupt. Received: %r",
+                transcribed_text,
+            )
+            transcribed_text = ""
         if transcribed_text:
-            raw_text = f"🎤 [Voice Message] {transcribed_text}"
+            raw_text = transcribed_text
+
+            # ── Smart Re-Transcription: Latin → Arabic script ──────
+            # M1D DarijaBERT was trained on 82.6% Arabic-script Darija.
+            # When Whisper auto-detect outputs Latin script for a Darija voice
+            # message, we re-transcribe with language="ar" to get Arabic script.
+            # Skip if fasttext is confident this is English (no need to re-transcribe).
+            if not _has_arabic_script(raw_text):
+                _voice_lang = detect_language(raw_text)
+                if _voice_lang == "en":
+                    # Confidently English — no re-transcription needed
+                    pass
+                else:
+                    logger.info(
+                        "[WEBHOOK] 🎤 Voice transcription is Latin script "
+                        "(lang=%s) — attempting Arabic re-transcription for M1D",
+                        _voice_lang,
+                    )
+                    arabic_text = _retranscribe_voice_as_arabic(body, inner_data)
+                    if arabic_text:
+                        logger.info(
+                            "[WEBHOOK] 🎤 ✅ Re-transcribed: %r → %r",
+                            raw_text[:50], arabic_text[:50],
+                        )
+                        raw_text = arabic_text
+                    else:
+                        logger.info(
+                            "[WEBHOOK] 🎤 Re-transcription failed — "
+                            "keeping Latin: %r", raw_text[:50],
+                        )
         else:
-            raw_text = "🎤 [Voice Message] (Transcription failed/empty)"
+            raw_text = "(Transcription failed/empty)"
     # 1. Plain text
     elif "conversation" in message:
         raw_text = message["conversation"]
@@ -347,11 +490,12 @@ def webhook_messages(request):
             return JsonResponse({"status": "blocked", "reason": "sender_blocked"})
 
     direction = "OUTGOING (Self-Moderation)" if is_from_me else "INCOMING"
+    voice_tag = " 🎤 VOICE" if is_voice_message else ""
     sender_label = push_name if push_name else (pure_number if not is_from_me else "ME (Host)")
     recipient_label = pure_number if is_from_me else "ME (Host)"
     
     logger.info(
-        f"[WEBHOOK] {direction} message | "
+        f"[WEBHOOK] {direction} message{voice_tag} | "
         f"Sender={sender_label} | Recipient={recipient_label} | "
         f"Text='{raw_text[:80] + ('...' if len(raw_text) > 80 else '')}'"
     )
@@ -390,6 +534,7 @@ def webhook_messages(request):
         "is_from_me": is_from_me,
         "start_time_ms": int(t_ml_start * 1000),
         "detected_language": detected_lang,
+        "is_voice_message": is_voice_message,
 
         # IMAGE ANALYSIS DATA
         "image_analyzed": bool(image_result),

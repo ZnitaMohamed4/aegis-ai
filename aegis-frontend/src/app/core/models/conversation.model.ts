@@ -46,10 +46,11 @@ export interface ConversationMessage {
   content_preview: string;
   direction: 'incoming' | 'outgoing';
   is_blocked: boolean;
-  language: 'FR' | 'AR' | 'EN' | 'UNKNOWN';
+  language: 'FR' | 'AR' | 'EN' | 'DARIJA' | 'UNKNOWN';
   sent_at: string;
   decision: string | null;
   toxicity_score: number | null;
   category: string | null;
   llm_triggered: boolean;
+  is_voice_message?: boolean;
 }

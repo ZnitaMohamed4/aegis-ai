@@ -331,6 +331,9 @@ export interface FeedEvent {
   text: string;
   fullText?: string;
   flagged?: boolean;
+  isVoiceMessage?: boolean;
+  isDarija?: boolean;
+  darijaScript?: string | null;
 }
 
 const FEED_POOL: Omit<FeedEvent, 'id' | 'time'>[] = [

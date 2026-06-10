@@ -65,6 +65,8 @@ def alert_list(request):
             "llm_triggered": r.llm_triggered,
             "llm_explanation": r.llm_explanation,
             "language": r.language or 'unknown',
+            "is_voice_message": r.is_voice_message,
+            "is_darija": r.language == 'darija',
             "sender_jid": r.sender_jid,
             "contact_number": formatted_contact,
             "human_reviewed": r.human_reviewed,
@@ -674,6 +676,12 @@ def dashboard_stats(request):
             hourly_data["safe"][bucket_idx] += entry['count']
 
     # 9. Language Distribution (Live from DB)
+    # Normalize synonyms so we don't show "EN" + "ENGLISH" as separate slices
+    _LANG_NORMALIZE = {
+        'ENGLISH': 'EN', 'FRENCH': 'FR', 'ARABIC': 'AR',
+        'DARIJA': 'DARIJA', 'UNKNOWN': 'UNKNOWN',
+    }
+
     lang_counts = ModerationResult.objects.exclude(
         language__isnull=True
     ).exclude(
@@ -682,19 +690,19 @@ def dashboard_stats(request):
         language='error'
     ).values('language').annotate(count=Count('id')).order_by('-count')
 
-    lang_labels = []
-    lang_data = []
-    
+    lang_agg = {}  # normalized_label -> total count
     for item in lang_counts:
-        lang = str(item['language']).upper()
-        if lang:  # Ensure it's not empty string
-            lang_labels.append(lang)
-            lang_data.append(item['count'])
-            
-    # Fallback to empty chart if no language labels exist yet
+        raw = str(item['language'] or '').upper()
+        label = _LANG_NORMALIZE.get(raw, raw)
+        if label:
+            lang_agg[label] = lang_agg.get(label, 0) + item['count']
+
+    lang_labels = list(lang_agg.keys()) if lang_agg else ['UNKNOWN']
+    lang_data = list(lang_agg.values()) if lang_agg else [1]
+
     language_distribution = {
-        "labels": lang_labels if lang_labels else ['UNKNOWN'],
-        "data": lang_data if lang_data else [1]
+        "labels": lang_labels,
+        "data": lang_data
     }
 
     # 10. Check Evolution API global status
@@ -1624,6 +1632,8 @@ def simulate_message(request):
             "final_score": round(final_state.get("m1_score", 0.0), 4),
             "decision": final_state.get("decision", "ALLOW"),
             "language": final_state.get("detected_language", language),
+            "is_darija": final_state.get("is_darija", False),
+            "darija_script": final_state.get("darija_script"),
             "explanation": final_state.get("llm_explanation", "Pipeline analysis complete."),
             "latency_ms": latency_ms,
             "agent_latencies": {

@@ -19,6 +19,9 @@ export interface WebSocketAlertPayload {
   llm_triggered?: boolean;
   llm_explanation?: string | null;
   severity: 'low' | 'medium' | 'high' | 'critical';
+  is_voice_message?: boolean;
+  is_darija?: boolean;
+  darija_script?: 'arabizi' | 'arabic' | null;
   timestamp: string;
 }
 

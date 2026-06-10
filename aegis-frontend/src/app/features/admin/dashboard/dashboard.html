@@ -76,6 +76,12 @@
           <span class="feed-time mono">{{ event.time }}</span>
           <div class="feed-dot" [style.background]="getFeedColor(event.type)"></div>
           <i class="pi {{ event.icon }} feed-icon" [style.color]="getFeedColor(event.type)"></i>
+          @if (event.isVoiceMessage) {
+            <span class="text-[10px] font-bold px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 flex-shrink-0" title="Voice message (Whisper transcription)">🎤</span>
+          }
+          @if (event.isDarija) {
+            <span class="text-[10px] font-bold px-1 py-0.5 rounded flex-shrink-0" style="background: rgba(139,92,246,0.2); color: #a78bfa;" title="Darija detected — M1D (DarijaBERT)">🇲🇦</span>
+          }
           <span class="feed-text">{{ event.text }}</span>
         </div>
       }

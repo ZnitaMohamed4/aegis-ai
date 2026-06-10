@@ -132,7 +132,9 @@ def auditor_node(state: ModerationState) -> dict:
         llm_response = analyze_grey_zone(
             raw_text, check_class, check_conf, m1_score,
             state["sender_jid"], state["instance_name"],
-            image_context=image_context
+            image_context=image_context,
+            is_darija=state.get("is_darija", False),
+            darija_script=state.get("darija_script"),
         )
 
     new_decision = llm_response.get("decision", "REVISE").upper()

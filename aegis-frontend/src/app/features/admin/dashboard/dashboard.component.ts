@@ -103,12 +103,23 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
       }
 
+      // Inject Darija/voice badges into feed text
+      const badges: string[] = [];
+      if (alert.is_voice_message) badges.push('🎤 Voice');
+      if (alert.is_darija) badges.push(`🇲🇦 Darija${alert.darija_script ? ` (${alert.darija_script})` : ''}`);
+      if (badges.length > 0) {
+        feedText = `[${badges.join(' · ')}] ${feedText}`;
+      }
+
       const newEvent: FeedEvent = {
         id: alert.id,
         time: new Date(alert.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         type: alert.decision.toLowerCase() as any,
         icon: feedIcon,
         text: feedText,
+        isVoiceMessage: alert.is_voice_message || false,
+        isDarija: alert.is_darija || false,
+        darijaScript: alert.darija_script || null,
         fullText: (() => {
           if (alert.decision.toUpperCase() === 'ALLOW' || !alert.text) {
             return '\u2705 This message was analyzed and cleared. Content is not stored to protect user privacy.';

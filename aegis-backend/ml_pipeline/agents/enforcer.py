@@ -127,6 +127,8 @@ def enforcer_node(state: ModerationState) -> dict:
         sender_name=ctx.push_name,
         is_from_me=ctx.is_from_me,
         is_self_moderation=ctx.is_self_moderation,
+        is_voice_message=state.get("is_voice_message", False),
+        language=state.get("detected_language", "unknown") or "unknown",
         raw_text=ctx.raw_text,
         normalized_text=state.get("normalized_text", ""),
         message_key_id=ctx.message_key_id,
@@ -215,7 +217,7 @@ def enforcer_node(state: ModerationState) -> dict:
             "text": mod.raw_text,
             "decision": mod.decision.lower(),
             "primary_class": mod.primary_class or 'safe',
-            "language": getattr(mod, 'language', 'unknown'),
+            "language": state.get('detected_language') or getattr(mod, 'language', 'unknown') or 'unknown',
             "m1_score": round(mod.toxicity_score, 4),
             "m2_confidence": (
                 round(mod.confidence_score, 4) if mod.confidence_score else None
@@ -223,6 +225,9 @@ def enforcer_node(state: ModerationState) -> dict:
             "llm_triggered": mod.llm_triggered,
             "llm_explanation": mod.llm_explanation,
             "severity": alerte.severity if alerte else "none",
+            "is_voice_message": mod.is_voice_message,
+            "is_darija": state.get("is_darija", False),
+            "darija_script": state.get("darija_script"),
             "timestamp": (
                 alerte.sent_at if alerte else mod.created_at
             ).isoformat(),

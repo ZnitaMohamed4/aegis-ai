@@ -26,7 +26,80 @@ _DEFAULT_MODEL_PATH = os.path.join(
 # fasttext language codes → human-friendly labels
 # fasttext uses ISO 639-1 two-letter codes (e.g. "en", "fr", "ar")
 # We keep them as-is for simplicity.
-_DARIJA_MARKERS = {"ar", "fr", "id", "es", "it", "ms", "tr"}  # Languages Darija is commonly misclassified as
+_DARIJA_MARKERS = {"ar", "fr", "id", "es", "it", "ms", "tr", "en", "ur", "de", "hu", "pt", "nl", "zh", "ro", "pl", "sv"}  # Languages Darija is commonly misclassified as
+
+# Common Darija lexical markers — words that are uniquely Moroccan dialectal
+# and almost never appear in MSA, French, English, or other languages.
+# These are the strongest signal for detecting Darija in both scripts.
+_DARIJA_LEXICAL_MARKERS = {
+    # ── Latin-script markers (Arabizi / transliterated) ──────────────
+    # Pronouns / particles
+    "dyal", "dyali", "dyalk", "dyalkom", "dyalha", "dyalo",
+    "machi", "makaynch", "wakha", "yalah", "daba",
+    "bzzaf", "bezaf", "shwiya", "chwia",
+    "nta", "nti", "ntouma", "huwa", "hiya", "hna",
+    # Greetings / common phrases
+    "salam", "salamo", "alek", "alekom", "alik",
+    "labas", "labass", "labasse", "la bas", "bikhir", "hamdulah", "lhamdullah", "nchallah", "inchallah",
+    "khouya", "khoya", "sahbi", "sahbiya",
+    "elik", "3lik", "3liya",
+    # Question words
+    "chno", "chnou", "kifach", "fach", "shkun", "chkun",
+    "wach", "wash", "3lach", "3lash", "fin", "fink",
+    # Verbs
+    "bghit", "bghiti", "bgha", "kandir", "kadir", "kaydir",
+    "ghadi", "mshi", "mshina", "sir", "jib",
+    # Common verb conjugations (Darija suffixes: -ek/-ik/-u/-ha/-ni)
+    "bghitek", "bghitu", "bghitek", "bghiti", "bghitk",
+    "kandiro", "kadiri", "ghadin", "mshit",
+    "kat3awd", "katdir", "kaydir", "kaykon",
+    "3tini", "3tini", "aji", "nji", "njik",
+    # Adjectives
+    "zwina", "zwin", "mzyan", "mazyan", "khyb", "khyba",
+    "mzyana", "zwin", "zwina",
+    # Nouns
+    "lflous", "flous", "weld", "bent", "wlad",
+    # Offensive (common Darija insults — strong signal)
+    "9a7ba", "l9a7ba", "l9ahba", "qahba",
+    "7mar", "7mara", "t9awd", "tqwd", "azaml", "zamel",
+    # Prepositions / pronouns
+    "m3aya", "m3ak", "m3aha", "m3ah", "binatna",
+    # Interjections
+    "wllh", "wlh", "afin",
+    # Darija prefix patterns (imperfect conjugation markers)
+    # "ka-" / "ta-" / "kat-" / "tat-" prefixes are distinctly Darija
+    # ── Arabic-script markers ────────────────────────────────────────
+    # These are Darija-specific words written in Arabic script that
+    # almost never appear in MSA. Strong signal for Arabic-script Darija.
+    "ديال", "ديالي", "ديالك", "ديالكم",
+    "ماشي", "ماكاينش", "واخا", "يلاه", "دابا",
+    "بزاف", "شوية",
+    "لاباس", "لاباس؟", "بخير", "الحمدلله", "ان شاء الله",
+    "خويا", "صاحبي", "صحبي",
+    "شنو", "كيفاش", "فاش", "شكون",
+    "بغيت", "بغيتي", "بغا", "غادي", "كندير", "كادير",
+    "مزيان", "زوين", "zwina", "خيب",
+    "الفلوس", "فلوس",
+    "والله",
+    # Darija pronouns (Arabic script) — distinct from MSA
+    "نتا", "نتي", "نتوما",  # you (masc/fem/pl)
+    "فين", "فينك", "فينكم",  # where (MSA uses أين)
+    "واش", "آش",  # what/question marker
+    "علاش", "علاه",  # why (MSA uses لماذا)
+    # Darija verbs (Arabic script)
+    "سير", "جي", "مشا", "جا",  # go, come (imperative/past)
+    "قود", "تقود",  # go (Maghrebi)
+    "بغى", "بغيت",  # want
+    "دار", "دير",  # do
+    # Darija nouns/adjectives (Arabic script)
+    "ولد", "بنت", "ولاد",  # boy, girl, boys (Maghrebi)
+    "قحبة", "القحبة", "حمار", "الحمار",  # offensive
+    # Common Darija phrases (multi-word for extra precision)
+    "كي داير", "كيداير",
+    "الله يهديك", "الله يعطيك",
+    "هدا", "هاد", "هاذ",  # Darija demonstratives (not MSA)
+    "سير تقود", "ولد القحبة",  # common offensive phrases
+}
 
 
 def _get_model():
@@ -93,10 +166,15 @@ def is_likely_darija(text: str, lang_code: str) -> bool:
 
     Darija is a diglossic mix of Arabic, French, and Berber.
     fasttext typically classifies it as "ar" (Arabic-script) or misclassifies
-    Arabizi as Indonesian/Spanish/Italian. This heuristic adds script-based signals.
+    Arabizi as ANY random language (Welsh, Volapük, Persian, Indonesian, etc.)
+    because Darija transliteration is not a known language to fasttext.
+
+    Detection strategy (priority order):
+      1. Arabizi digits (2+ in any text) → strong Darija signal regardless of lang
+      2. Darija lexical markers → strong signal regardless of lang
+      3. Mixed Arabic + Latin script → strong signal
+      4. Arabizi digits with Arabic lang → likely Darija (not MSA)
     """
-    if lang_code not in _DARIJA_MARKERS:
-        return False
 
     # Arabic-script Darija: contains Arabic chars mixed with Latin
     arabic_chars = sum(1 for c in text if '\u0600' <= c <= '\u06FF')
@@ -106,16 +184,32 @@ def is_likely_darija(text: str, lang_code: str) -> bool:
     # These digits are rare in normal text but common in Arabizi transliteration
     arabizi_count = sum(1 for c in text if c in "235789")
 
-    # Mixed Arabic + Latin script is a strong Darija signal
+    # ── Signal 1: Arabizi digits (STRONGEST — overrides lang code) ────
+    # fasttext cannot classify Arabizi and returns random languages.
+    # 2+ Arabizi digits in ANY text is a strong Darija signal.
+    if arabizi_count >= 2:
+        return True
+
+    # ── Signal 2: Darija lexical markers (strong — overrides lang code) ─
+    # Check for common Darija words. Works regardless of what fasttext says.
+    # Strip BOTH Arabic and Latin punctuation so words like "salam." match "salam"
+    _all_punct = str.maketrans('', '', '؟،؛٠.,!?;:\'"()-')
+    text_clean = text.lower().translate(_all_punct)
+    text_words = set(text_clean.split())
+    if text_words & _DARIJA_LEXICAL_MARKERS:
+        return True
+
+    # Also check for multi-word markers via substring matching
+    for marker in _DARIJA_LEXICAL_MARKERS:
+        if ' ' in marker and marker in text_clean:
+            return True
+
+    # ── Signal 3: Mixed Arabic + Latin script ────────────────────────
     if arabic_chars >= 2 and latin_chars >= 2:
         return True
 
-    # 2+ Arabizi digits in a message that was misclassified = likely Darija
-    if arabizi_count >= 2 and lang_code in {"id", "es", "it", "ms", "tr", "fr"}:
-        return True
-
-    # 1+ Arabizi digit with Arabic classification = likely Darija (not MSA)
-    if arabizi_count >= 1 and lang_code == "ar":
+    # ── Signal 4: Single Arabizi digit + known Darija lang code ──────
+    if arabizi_count >= 1 and lang_code in _DARIJA_MARKERS:
         return True
 
     return False

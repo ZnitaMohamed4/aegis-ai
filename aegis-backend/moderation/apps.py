@@ -1,5 +1,11 @@
 import logging
+import os
 from django.apps import AppConfig
+
+# Suppress noisy HuggingFace transformers LOAD REPORT and progress bars
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")  # Kill tqdm progress bars
 
 logger = logging.getLogger(__name__)
 
@@ -49,4 +55,19 @@ class ModerationConfig(AppConfig):
             logger.info("[AEGIS] Real ML pipeline models loaded into memory successfully.")
         except Exception as e:
             logger.error(f"[AEGIS] Failed to load models from {m1_path} or {m2_path}. Error: {e}")
+
+        # 4. Load M1D DarijaBERT-mix (Darija offensive language detector)
+        # Graceful degradation: if M1D model is missing, Darija messages fall back
+        # to the English pipeline (which will underperform but won't crash).
+        try:
+            from ml_pipeline.models_pkg.darija_inference import DarijaPipeline
+            m1d_path = str(settings.BASE_DIR / settings.M1D_MODEL_PATH)
+            m1d_threshold = getattr(settings, 'M1D_THRESHOLD', 0.48)
+            DarijaPipeline.initialize(m1d_path, m1d_threshold)
+            logger.info("[AEGIS] DarijaBERT-mix (M1D) loaded successfully.")
+        except Exception as e:
+            logger.warning(
+                f"[AEGIS] M1D DarijaBERT not loaded ({e}). "
+                "Darija messages will fall back to English pipeline."
+            )
 

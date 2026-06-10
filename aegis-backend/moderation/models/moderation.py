@@ -78,6 +78,7 @@ class ModerationResult(models.Model):
     sender_name = models.CharField(max_length=255, null=True, blank=True, help_text="Push name or display name of the sender")
     is_from_me = models.BooleanField(default=False, help_text="True if the monitored child sent this message")
     is_self_moderation = models.BooleanField(default=False, help_text="True if this was a self-moderation event (child's own toxic message caught)")
+    is_voice_message = models.BooleanField(default=False, help_text="True if the message text came from n8n audio transcription (Whisper)")
 
     # Link to harassment category reference table
     category = models.ForeignKey(HarassmentCategory, on_delete=models.SET_NULL,

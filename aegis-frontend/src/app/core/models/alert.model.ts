@@ -28,4 +28,6 @@ export interface MockAlert {
   sent_at: string;
   language: string;
   contact_number?: string;
+  is_voice_message?: boolean;
+  is_darija?: boolean;
 }

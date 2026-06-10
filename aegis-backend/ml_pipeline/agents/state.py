@@ -74,6 +74,13 @@ class ModerationState(TypedDict):
     risk_level: Optional[str]
     detected_language: Optional[str]
 
+    # DARIJA PIPELINE FLAGS
+    is_darija: Optional[bool]          # True if routed through M1D (DarijaBERT-mix)
+    darija_script: Optional[str]       # 'arabic', 'arabizi', 'mixed', or None
+
+    # VOICE MESSAGE FLAG
+    is_voice_message: Optional[bool]   # True if text came from n8n audio transcription
+
     decision: Optional[str] # ALLOW, WARN, BLOCK, ESCALATE, REVISE, HUMAN_REVIEW
 
     # PER-AGENT LATENCY (ms) — for dashboard metrics

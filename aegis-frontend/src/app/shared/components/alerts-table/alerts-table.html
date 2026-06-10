@@ -141,6 +141,9 @@
           <!-- Preview -->
           <td class="px-4 py-3 max-w-xs">
             <div class="flex items-center gap-2">
+              @if (alert.is_voice_message) {
+                <span class="text-[10px] font-bold px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 flex-shrink-0" title="Transcribed from voice (Whisper)">🎤</span>
+              }
               <span class="text-sm text-[var(--text-primary)] truncate">{{ alert.preview }}</span>
               @if (alert.llm_triggered) {
                 <span class="text-xs bg-purple-500/20 text-purple-400 px-1.5 py-0.5 rounded font-mono flex-shrink-0">LLM</span>
@@ -182,9 +185,15 @@
 
           <!-- Language -->
           <td class="px-4 py-3">
-            <span class="text-xs font-mono bg-[var(--bg-surface-2)] text-[var(--text-muted)] px-2 py-0.5 rounded">
-              {{ alert.language }}
-            </span>
+            @if (alert.is_darija) {
+              <span class="text-xs font-mono px-2 py-0.5 rounded" style="background: rgba(139,92,246,0.15); color: #a78bfa;" title="Darija detected — M1D (DarijaBERT)">
+                🇲🇦 DARIJA
+              </span>
+            } @else {
+              <span class="text-xs font-mono bg-[var(--bg-surface-2)] text-[var(--text-muted)] px-2 py-0.5 rounded">
+                {{ alert.language }}
+              </span>
+            }
           </td>
 
           <!-- Time -->

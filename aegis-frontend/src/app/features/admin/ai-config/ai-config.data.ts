@@ -28,7 +28,7 @@ export interface ProviderModelOption {
 }
 
 export interface LanguageTab {
-	key: 'auto' | 'fr' | 'ar' | 'en';
+	key: 'auto' | 'fr' | 'ar' | 'en' | 'darija';
 	label: string;
 }
 
@@ -94,12 +94,16 @@ export const LANGUAGE_TABS: LanguageTab[] = [
 	{ key: 'fr', label: 'FR' },
 	{ key: 'ar', label: 'AR' },
 	{ key: 'en', label: 'EN' },
+	{ key: 'darija', label: '🇲🇦 Darija' },
 ];
 
 export const SIMULATION_SAMPLES: SimulationSample[] = [
 	{ text: 'je vais te trouver', language: 'fr', toxicity: 0.78, behavioral: 0.74, explanation: 'Threatening phrasing detected in French.' },
 	{ text: 'this is our secret', language: 'en', toxicity: 0.64, behavioral: 0.71, explanation: 'Grooming-style secrecy cue detected.' },
 	{ text: 'سأؤذيك', language: 'ar', toxicity: 0.93, behavioral: 0.89, explanation: 'Direct violent threat found in Arabic.' },
+	{ text: 'nta zbil w mamak 3ahra', language: 'darija', toxicity: 0.88, behavioral: 0.55, explanation: 'Offensive Darija in Arabizi → M1D (DarijaBERT) → BLOCK' },
+	{ text: 'salam labas 3lik? kif dayr', language: 'darija', toxicity: 0.05, behavioral: 0.02, explanation: 'Safe Darija greeting in Arabizi → M1D → ALLOW' },
+	{ text: 'غادي نضربك حتى تموت', language: 'darija', toxicity: 0.85, behavioral: 0.70, explanation: 'Threatening Darija in Arabic script → M1D → ESCALATE' },
 ];
 
 export const DECISION_LABELS: Record<FinalDecision, string> = {

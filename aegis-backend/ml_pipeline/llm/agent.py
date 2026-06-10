@@ -9,7 +9,7 @@ from .tools import fetch_recent_history, search_similar_cases, fetch_risk_profil
 logger = logging.getLogger(__name__)
 
 
-def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid, instance_name, image_context=None):
+def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid, instance_name, image_context=None, is_darija=False, darija_script=None):
     """
     Agent 3: ReAct Agent — Calls tools before reaching a decision.
     Equipped with: fetch_recent_history + search_similar_cases
@@ -131,6 +131,39 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     - If OCR text contains harmful content → classify the OCR text using the standard rules above.
     - Do NOT downgrade image-flagged content to HUMAN_REVIEW. ViT classifiers are definitive."""
         system_prompt += image_section
+
+    # ── DARIJA CONTEXT INJECTION ────────────────────────────────────────
+    # When the message was flagged by M1D (DarijaBERT-mix), inject Moroccan
+    # cultural context so the LLM can properly assess Darija-specific patterns.
+    if is_darija:
+        darija_section = f"""
+
+    --- DARIJA AWARENESS (Moroccan Arabic Dialect) ---
+    This message is in Moroccan Darija (الدارجة المغربية), detected by M1D (DarijaBERT-mix).
+    Script: {darija_script or 'unknown'} (arabic / arabizi / mixed).
+
+    CRITICAL CONTEXT:
+    - Darija mixes Arabic, French, and Amazigh vocabulary within sentences
+    - Many severe insults appear mild in MSA/English translation
+    - Grooming in Moroccan context often uses French terms of endearment
+    - Code-switching (Arabic<->French within one sentence) is normal communication
+    - Arabizi uses digits as letters: 2=hamza, 3=ain, 5=kha, 7=ha, 8/9=qaf
+
+    DARIJA-SPECIFIC SEVERITY GUIDE:
+    - "sir t9awed" / "sir tqwd" = severe verbal insult, equivalent to "fuck off" (BLOCK as verbal_harassment)
+    - "9a7ba" / "qa7ba" / "l9a7ba" = severe gendered slur (BLOCK)
+    - "nta 7mar" / "7mara" / "حمار" = strong dehumanizing insult (WARN/BLOCK by context)
+    - "ghadi ndarbek" / "n9tlek" / "غادي نقتلك" = direct physical threat (BLOCK/ESCALATE)
+    - "bghitek" / "bghitk" from stranger to minor = grooming signal (HUMAN_REVIEW)
+    - "3tini snap" / "aji l whtsp" = off-platforming grooming signal (HUMAN_REVIEW)
+    - "matgoulich l mamak" / "bini w binek" = forced secrecy grooming (BLOCK)
+    - "salam" / "labas" / "cv?" / "kifach" = safe greetings (ALLOW)
+
+    GENERAL PRINCIPLE: Do not rely only on exact keywords above. Use them as reference
+    examples, but apply the same severity logic to ANY Darija expression you encounter.
+    Darija is highly contextual — the same word can be friendly or threatening depending
+    on tone, relationship, and surrounding words. When in doubt, assess INTENT over vocabulary."""
+        system_prompt += darija_section
 
     tools = [fetch_risk_profile, fetch_recent_history, search_similar_cases]
     agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))

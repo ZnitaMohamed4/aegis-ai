@@ -63,7 +63,9 @@ export class AlertsComponent implements OnInit, OnDestroy {
             llm_triggered: a.llm_triggered ?? false,
             llm_explanation: a.llm_explanation ?? null,
             language: a.language || 'unknown',
-            contact_number: a.contact_number
+            contact_number: a.contact_number,
+            is_voice_message: a.is_voice_message || false,
+            is_darija: a.is_darija || false,
           }));
           this.alerts.set(history);
 
@@ -102,7 +104,9 @@ export class AlertsComponent implements OnInit, OnDestroy {
           llm_triggered: alert.llm_triggered || false,
           llm_explanation: alert.llm_explanation || null,
           language: alert.language || 'unknown',
-          contact_number: alert.sender
+          contact_number: alert.sender,
+          is_voice_message: alert.is_voice_message || false,
+          is_darija: alert.is_darija || false,
         };
         this.alerts.update(list => [newAlert, ...list]);
 

@@ -87,6 +87,8 @@ interface SimulationUiResult {
   escalationRisk: number;
   mlCorrected: boolean;
   category?: string;
+  isDarija: boolean;
+  darijaScript?: 'arabizi' | 'arabic' | null;
 }
 
 interface PipelineNodeState {
@@ -156,7 +158,7 @@ export class AiConfigComponent implements OnInit, OnDestroy {
   readonly connectionResult = signal<ConnectionTestResult | null>(null);
 
   readonly simulationMessage = signal('');
-  readonly simulationLanguage = signal<'auto' | 'fr' | 'ar' | 'en'>('auto');
+  readonly simulationLanguage = signal<'auto' | 'fr' | 'ar' | 'en' | 'darija'>('auto');
   readonly simulationResult = signal<SimulationUiResult | null>(null);
   readonly isSimulating = signal(false);
   readonly graphNodes = signal<GraphNode[]>(GRAPH_NODES);
@@ -337,6 +339,8 @@ export class AiConfigComponent implements OnInit, OnDestroy {
           escalationRisk: res.escalation_risk || 0,
           mlCorrected: res.ml_corrected || false,
           category: res.primary_class || 'safe',
+          isDarija: res.is_darija || false,
+          darijaScript: res.darija_script || null,
         };
         this.simulationResult.set(result);
         this.animatePipelineFlow(result);
@@ -351,18 +355,22 @@ export class AiConfigComponent implements OnInit, OnDestroy {
   get routeLabel(): string {
     const r = this.simulationResult();
     if (!r) return '';
+    if (r.isDarija) return 'Darija Track (M1D)';
     return r.llmTriggered ? 'Audit Path' : 'Fast Path';
   }
 
   get routeColor(): string {
     const r = this.simulationResult();
     if (!r) return 'var(--text-muted)';
+    if (r.isDarija) return '#8b5cf6';
     return r.llmTriggered ? '#f59e0b' : '#10b981';
   }
 
   private animatePipelineFlow(result: SimulationUiResult): void {
     const lat = result.agentLatencies;
     const isAudit = result.llmTriggered;
+    const modelLabel = result.isDarija ? 'M1D (DarijaBERT)' : 'M1+M2';
+    const scriptTag = result.darijaScript ? ` [${result.darijaScript}]` : '';
     const d = 250;  // initial delay
     const s = 420;  // step duration
 
@@ -371,12 +379,12 @@ export class AiConfigComponent implements OnInit, OnDestroy {
 
     // ═══ Phase 1: Agent 1+2 (Pipeline) ═══
     this.animationTimers.push(setTimeout(() => {
-      this.updateNode(0, 'active', lat.agent_1_2, `Toxicity: ${result.toxicityScore.toFixed(2)}`);
+      this.updateNode(0, 'active', lat.agent_1_2, `${modelLabel}${scriptTag} → ${result.toxicityScore.toFixed(2)}`);
       this.activePathSegments.set(['entry']);
     }, d));
 
     this.animationTimers.push(setTimeout(() => {
-      this.updateNode(0, 'completed', lat.agent_1_2, `Toxicity: ${result.toxicityScore.toFixed(2)}`);
+      this.updateNode(0, 'completed', lat.agent_1_2, `${modelLabel}${scriptTag} → ${result.toxicityScore.toFixed(2)}`);
       this.activePathSegments.update(p => [...p, isAudit ? 'toAuditor' : 'toFast']);
       this.packetKey.update(k => k + 1);
     }, d + s));
@@ -487,7 +495,9 @@ export class AiConfigComponent implements OnInit, OnDestroy {
     return category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ');
   }
 
-  private detectLanguage(text: string): 'fr' | 'ar' | 'en' {
+  private detectLanguage(text: string): 'fr' | 'ar' | 'en' | 'darija' {
+    // Arabizi digit patterns (3=ع, 7=ح, etc.) suggest Darija
+    if (/\b\d{1,2}[a-z]+|[a-z]+\d+[a-z]*\b/.test(text)) return 'darija';
     if (/[\u0600-\u06ff]/.test(text)) return 'ar';
     if (text.includes('je ') || text.includes('toi') || text.includes('bonjour')) return 'fr';
     return 'en';

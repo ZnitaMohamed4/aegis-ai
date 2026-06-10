@@ -5,10 +5,13 @@ import warnings
 
 # Suppress all the messy HuggingFace, httpx, and sentence-transformer logs!
 warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", message=".*UNEXPECTED.*")
 logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("transformers").setLevel(logging.ERROR)  # Suppress LOAD REPORT noise
+logging.getLogger("transformers.modeling_utils").setLevel(logging.ERROR)
 
 import chromadb 
 from chromadb.config import Settings

@@ -443,8 +443,18 @@
                   </div>
                   <div class="flex flex-col">
                     <span class="text-[var(--text-muted)]">Language</span>
-                    <span class="font-semibold text-[var(--text-primary)] uppercase">{{ msg.language }}</span>
+                    @if (msg.language === 'DARIJA') {
+                      <span class="font-semibold" style="color: #a78bfa;">🇲🇦 DARIJA</span>
+                    } @else {
+                      <span class="font-semibold text-[var(--text-primary)] uppercase">{{ msg.language }}</span>
+                    }
                   </div>
+                  @if (msg.is_voice_message) {
+                    <div class="flex flex-col">
+                      <span class="text-[var(--text-muted)]">Source</span>
+                      <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 w-fit">🎤 Voice</span>
+                    </div>
+                  }
                 </div>
 
                 <!-- Redacted Content Notice -->

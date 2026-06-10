@@ -172,9 +172,14 @@
           <span>LangGraph Execution Graph</span>
           @if (simulationResult()) {
             <span class="route-badge" [style.borderColor]="routeColor" [style.color]="routeColor">
-              <i [class]="simulationResult()!.llmTriggered ? 'pi pi-arrow-right' : 'pi pi-bolt'"></i>
+              <i [class]="simulationResult()!.isDarija ? 'pi pi-flag' : (simulationResult()!.llmTriggered ? 'pi pi-arrow-right' : 'pi pi-bolt')"></i>
               {{ routeLabel }}
             </span>
+            @if (simulationResult()!.isDarija && simulationResult()!.darijaScript) {
+              <span class="route-badge ml-2" style="border-color: #8b5cf6; color: #8b5cf6; font-size: 0.7rem;">
+                <i class="pi pi-pencil"></i> {{ simulationResult()!.darijaScript === 'arabizi' ? 'Arabizi' : 'Arabic Script' }}
+              </span>
+            }
           }
         </div>
 

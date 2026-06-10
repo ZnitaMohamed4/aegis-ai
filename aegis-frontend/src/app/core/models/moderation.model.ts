@@ -1,6 +1,6 @@
 export type ModerationDecision = 'allow' | 'warn' | 'block' | 'escalate';
 export type ReviewStatus = 'pending' | 'confirmed_block' | 'allowed';
-export type DetectedLanguage = 'fr' | 'ar' | 'en' | 'unknown';
+export type DetectedLanguage = 'fr' | 'ar' | 'en' | 'darija' | 'unknown';
 
 export interface ModerationRequest {
   id: string;

@@ -120,6 +120,10 @@ def run_pipeline(raw_text: str) -> PipelineResult:
     is_harmful = m1_score >= pipeline.threshold or has_sexual_context
 
     if not is_harmful:
+        logger.info(
+            f"[M1] ✅ ALLOW | m1_score={m1_score:.4f} (threshold={pipeline.threshold}) "
+            f"| latency={m1_latency}ms | '{text[:60]}'"
+        )
         result = PipelineResult(text, m1_score, False, 'safe', None, None, 'ALLOW', m1_latency_ms=m1_latency, m2_latency_ms=0)
         set_cached_prediction(raw_text, result.__dict__)
         return result
@@ -154,6 +158,11 @@ def run_pipeline(raw_text: str) -> PipelineResult:
             break
 
     decision = get_decision_uml(m1_score, primary_label, confidence)
+
+    logger.info(
+        f"[M1+M2] 🚨 {decision} | m1_score={m1_score:.4f} | class={primary_label} "
+        f"(conf={confidence:.2f}) | m1={m1_latency}ms m2={m2_latency}ms | '{text[:60]}'"
+    )
 
     result = PipelineResult(text, m1_score, True, primary_label, final_secondary, confidence, decision, m1_latency_ms=m1_latency, m2_latency_ms=m2_latency)
     set_cached_prediction(raw_text, result.__dict__)
