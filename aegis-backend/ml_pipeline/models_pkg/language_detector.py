@@ -99,6 +99,14 @@ _DARIJA_LEXICAL_MARKERS = {
     "الله يهديك", "الله يعطيك",
     "هدا", "هاد", "هاذ",  # Darija demonstratives (not MSA)
     "سير تقود", "ولد القحبة",  # common offensive phrases
+    # ── Additional Arabic-script markers (output by Gemini/Whisper transcribers) ──
+    # These catch Darija words that appear in voice transcriptions written in Arabic script.
+    "كي", "داير", "دايرة", "لاباس", "كنتمنى", "كلشي", "كتعاود",
+    "هاد", "هاذ", "هذ", "ذلك",  # demonstratives
+    "عير", "غير",  # Darija filler/adverb (not MSA)
+    "باش", "حتى",  # until/even (Maghrebi usage)
+    "آ", "يا",  # vocative particle (very common in Darija)
+    "واش", "آش", "شنو",  # question words (already partially above, reinforced)
 }
 
 
@@ -170,23 +178,43 @@ def is_likely_darija(text: str, lang_code: str) -> bool:
     because Darija transliteration is not a known language to fasttext.
 
     Detection strategy (priority order):
-      1. Arabizi digits (2+ in any text) → strong Darija signal regardless of lang
+      1. Arabizi digits embedded in words (e.g., "w3lash", "3tini") → strong signal
       2. Darija lexical markers → strong signal regardless of lang
       3. Mixed Arabic + Latin script → strong signal
-      4. Arabizi digits with Arabic lang → likely Darija (not MSA)
+      4. Single embedded Arabizi digit + known Darija lang code → likely Darija
+
+    Note: Standalone numbers like "25 points" or "3 cats" are NOT counted as
+    Arabizi — only digits embedded within alphabetic tokens (e.g., "w3lash").
     """
+    import re
 
     # Arabic-script Darija: contains Arabic chars mixed with Latin
     arabic_chars = sum(1 for c in text if '\u0600' <= c <= '\u06FF')
     latin_chars = sum(1 for c in text if c.isascii() and c.isalpha())
 
-    # Arabizi markers: digits 2, 3, 5, 7, 8, 9 used as Arabic letter substitutes
-    # These digits are rare in normal text but common in Arabizi transliteration
-    arabizi_count = sum(1 for c in text if c in "235789")
+    # ── Signal 0: Pure Arabic-script text with lang='ar' (STRONGEST for voice) ─
+    # When Whisper/Gemini detects Arabic and the text is entirely Arabic script,
+    # it's almost certainly Darija (MSA is rarely spoken in casual WhatsApp voice
+    # messages). DarijaBERT-mix was trained on 82.6% Arabic-script Darija, so
+    # routing pure-Arabic-script text to M1D is always the correct choice.
+    if lang_code == "ar" and arabic_chars >= 5 and latin_chars == 0:
+        return True
 
-    # ── Signal 1: Arabizi digits (STRONGEST — overrides lang code) ────
+    # Arabizi markers: digits 2, 3, 5, 7, 8, 9 used as Arabic letter substitutes
+    # CRITICAL: Only count digits EMBEDDED in words (adjacent to letters), not standalone numbers.
+    # "w3lash" → Arabizi ✓ | "25 points" → NOT Arabizi ✗ | "3tini" → Arabizi ✓
+    # Also exclude short time references like "5pm", "9am" (digit + ≤2 letters).
+    # Arabizi words typically have 3+ letters around the digit.
+    arabizi_pattern = re.compile(
+        r'\b[a-zA-Z]{2,}[235789][a-zA-Z]*\b'   # letters + digit + optional letters (e.g., "w3lash")
+        r'|\b[a-zA-Z][235789][a-zA-Z]{2,}\b'   # letter + digit + 2+ letters (e.g., "3tini")
+        r'|\b[235789][a-zA-Z]{3,}\b'           # digit + 3+ letters (e.g., "3labalik")
+    )
+    arabizi_count = len(arabizi_pattern.findall(text))
+
+    # ── Signal 1: Embedded Arabizi digits (STRONGEST — overrides lang code) ─
     # fasttext cannot classify Arabizi and returns random languages.
-    # 2+ Arabizi digits in ANY text is a strong Darija signal.
+    # 2+ digits embedded in words (like "w3lash", "bghit3") is a strong Darija signal.
     if arabizi_count >= 2:
         return True
 
@@ -208,7 +236,7 @@ def is_likely_darija(text: str, lang_code: str) -> bool:
     if arabic_chars >= 2 and latin_chars >= 2:
         return True
 
-    # ── Signal 4: Single Arabizi digit + known Darija lang code ──────
+    # ── Signal 4: Single embedded Arabizi digit + known Darija lang code ──
     if arabizi_count >= 1 and lang_code in _DARIJA_MARKERS:
         return True
 

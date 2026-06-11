@@ -11,7 +11,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '').strip('"').strip("'")
-GROQ_MODEL = os.environ.get('GROQ_MODEL', 'mixtral-8x7b-32768').strip('"').strip("'")
+GROQ_MODEL = os.environ.get('GROQ_MODEL', 'llama-3.3-70b-versatile').strip('"').strip("'")
 
 def detect_language_via_llm(text):
     if not GROQ_API_KEY:

@@ -39,11 +39,11 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
         return {"decision": "HUMAN_REVIEW", "category": primary_class, "explanation": "LLM init failed."}
 
     # ── System prompt ─────────────────────────────────────────
-    # updated using claude
+    # SECURITY: raw_text is NOT in the system prompt to prevent prompt injection.
+    # The message text is passed in the user message instead.
     system_prompt = f"""You are the AEGIS Child Safety Auditor — classify WhatsApp messages to protect minors from harassment, threats, and grooming.
 
-    --- MESSAGE ---
-    Text: "{raw_text}"
+    --- MESSAGE CONTEXT ---
     ML Label: {primary_class} | Confidence: {(confidence or 0.0):.2f} | Toxicity: {(m1_score or 0.0):.2f}
     Sender: {sender_jid} | Instance: {instance_name}
 
@@ -169,7 +169,14 @@ def analyze_grey_zone(raw_text, primary_class, confidence, m1_score, sender_jid,
     agent = create_react_agent(llm, tools, prompt=SystemMessage(content=system_prompt))
 
     try:
-        inputs = {"messages": [("user", "Please analyse the message and give your JSON verdict.")]}
+        # SECURITY: raw_text is in the user message, NOT the system prompt.
+        # This prevents prompt injection attacks where malicious text tries to
+        # override the system instructions.
+        user_message = f"""Message to analyse:
+"{raw_text}"
+
+Please analyse the message and give your JSON verdict."""
+        inputs = {"messages": [("user", user_message)]}
 
         logger.info(f"[AGENT 3: AUDITOR] ReAct Analysis Starting for: '{raw_text[:60]}'")
 

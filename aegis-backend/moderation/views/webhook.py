@@ -61,103 +61,6 @@ def _has_arabic_script(text: str) -> bool:
     return any('\u0600' <= c <= '\u06FF' for c in text)
 
 
-def _retranscribe_voice_as_arabic(body: dict, inner_data: dict) -> str | None:
-    """
-    Re-transcribe a voice message using Whisper with language='ar' to force
-    Arabic-script output.  This is the key insight: M1D DarijaBERT was trained
-    on 82.6% Arabic-script Darija, so feeding it Arabic text is optimal.
-
-    Flow:
-      1. Download the audio from Evolution API (using the original message data)
-      2. Call Groq Whisper with language='ar'
-      3. Return Arabic-script transcription, or None on failure
-    """
-    import requests as _requests
-
-    evo_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-    evo_key = os.getenv('EVOLUTION_API_KEY', '')
-    groq_key = os.getenv('GROQ_API_KEY', '')
-
-    if not groq_key:
-        logger.warning("[WHISPER-AR] GROQ_API_KEY not set — skipping re-transcription")
-        return None
-
-    # ── Step 1: Download audio from Evolution API ────────────────────
-    # Use instance name from body (set by Evolution API webhook)
-    instance = body.get("instance", "")
-    if not instance:
-        # Fallback: extract from message key
-        instance = inner_data.get("key", {}).get("remoteJid", "").split("@")[0]
-    if not instance:
-        logger.warning("[WHISPER-AR] Cannot determine Evolution API instance")
-        return None
-
-    try:
-        resp = _requests.post(
-            f"{evo_url}/chat/getBase64FromMediaMessage/{instance}",
-            headers={"apikey": evo_key},
-            json={"message": inner_data},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        audio_resp = resp.json()
-    except Exception as e:
-        logger.warning("[WHISPER-AR] Failed to download audio from Evolution API: %s", e)
-        return None
-
-    # Handle nested response format
-    if isinstance(audio_resp, list):
-        audio_resp = audio_resp[0] if audio_resp else {}
-
-    base64_data = audio_resp.get("base64", "")
-    if not base64_data:
-        logger.warning("[WHISPER-AR] No base64 audio in Evolution API response")
-        return None
-
-    # Strip data URI prefix if present (e.g. "data:audio/ogg;base64,...")
-    if base64_data.startswith("data:"):
-        base64_data = base64_data.split(",", 1)[1] if "," in base64_data else base64_data
-
-    mime_type = audio_resp.get("mimetype", "audio/ogg")
-
-    # ── Step 2: Call Groq Whisper with language='ar' ─────────────────
-    import base64 as _b64
-    try:
-        audio_bytes = _b64.b64decode(base64_data)
-    except Exception as e:
-        logger.warning("[WHISPER-AR] Failed to decode base64 audio: %s", e)
-        return None
-
-    try:
-        groq_resp = _requests.post(
-            "https://api.groq.com/openai/v1/audio/transcriptions",
-            headers={"Authorization": f"Bearer {groq_key}"},
-            files={"file": ("voice.ogg", audio_bytes, mime_type)},
-            data={
-                "model": "whisper-large-v3-turbo",
-                "language": "ar",
-                "prompt": "هذا صوت يحتوي على الدارجة المغربية أو العربية. اكتبها بالحروف العربية.",
-            },
-            timeout=15,
-        )
-        groq_resp.raise_for_status()
-        result = groq_resp.json()
-        text = result.get("text", "").strip()
-
-        if text and _has_arabic_script(text):
-            logger.info("[WHISPER-AR] ✅ Re-transcribed to Arabic script: %r", text[:80])
-            return text
-        else:
-            logger.warning(
-                "[WHISPER-AR] Re-transcription returned non-Arabic text: %r",
-                text[:80] if text else "(empty)",
-            )
-            return None
-    except Exception as e:
-        logger.warning("[WHISPER-AR] Groq Whisper re-transcription failed: %s", e)
-        return None
-
-
 @csrf_exempt
 @require_http_methods(["POST"])
 def webhook_messages(request):
@@ -211,76 +114,20 @@ def webhook_messages(request):
     # Extract conversation text. Evolution API nests this depending on the message type.
     raw_text = ""
     is_voice_message = False
-    
-    # 0. Voice transcription from n8n
-    if inner_data.get("is_voice_transcription") or data.get("is_voice_transcription"):
-        is_voice_message = True
-        transcribed_text = inner_data.get("transcription") or data.get("transcription") or ""
-        # Guard: Whisper sometimes echoes back its own prompt when audio is
-        # empty/corrupt, or when n8n doesn't extract the response correctly.
-        _WHISPER_PROMPT_TAIL = "Transcribe faithfully."
-        if transcribed_text and _WHISPER_PROMPT_TAIL in transcribed_text and len(transcribed_text) < 80:
-            logger.warning(
-                "[WEBHOOK] 🎤 Voice transcription looks like Whisper prompt echo — "
-                "audio may be empty/corrupt. Received: %r",
-                transcribed_text,
-            )
-            transcribed_text = ""
-        if transcribed_text:
-            raw_text = transcribed_text
+    audio_message_data = None  # Set when audioMessage detected — Agent 0 will transcribe
 
-            # ── Smart Re-Transcription: Latin → Arabic script ──────
-            # M1D DarijaBERT was trained on 82.6% Arabic-script Darija.
-            # When Whisper auto-detect outputs Latin script for a Darija voice
-            # message, we re-transcribe with language="ar" to get Arabic script.
-            # Skip if fasttext is confident this is English (no need to re-transcribe).
-            if not _has_arabic_script(raw_text):
-                _voice_lang = detect_language(raw_text)
-                if _voice_lang == "en":
-                    # Confidently English — no re-transcription needed
-                    pass
-                else:
-                    logger.info(
-                        "[WEBHOOK] 🎤 Voice transcription is Latin script "
-                        "(lang=%s) — attempting Arabic re-transcription for M1D",
-                        _voice_lang,
-                    )
-                    arabic_text = _retranscribe_voice_as_arabic(body, inner_data)
-                    if arabic_text:
-                        logger.info(
-                            "[WEBHOOK] 🎤 ✅ Re-transcribed: %r → %r",
-                            raw_text[:50], arabic_text[:50],
-                        )
-                        raw_text = arabic_text
-                    else:
-                        logger.info(
-                            "[WEBHOOK] 🎤 Re-transcription failed — "
-                            "keeping Latin: %r", raw_text[:50],
-                        )
-        else:
-            raw_text = "(Transcription failed/empty)"
     # 1. Plain text
-    elif "conversation" in message:
+    if "conversation" in message:
         raw_text = message["conversation"]
     # 2. Extended text (links, quotes, etc)
     elif "extendedTextMessage" in message:
         raw_text = message["extendedTextMessage"].get("text", "")
-    # 3. Audio Message (Forward to n8n for transcription)
+    # 3. Audio Message — Agent 0 (Transcription Agent) will handle inside the graph
     elif "audioMessage" in message:
-        logger.info("Audio message detected. Forwarding to n8n for transcription...")
-        import requests
-        import threading
-        
-        def forward_to_n8n():
-            try:
-                # Use the Production URL (remove '-test') so it runs automatically in the background
-                requests.post("http://localhost:5678/webhook/evolution-audio", json=body, timeout=5)
-            except Exception as e:
-                logger.error(f"Failed to forward audio to n8n: {e}")
-                
-        threading.Thread(target=forward_to_n8n).start()
-        
-        return JsonResponse({"status": "forwarded_to_n8n", "reason": "audio_message"})
+        logger.info("Audio message detected. Agent 0 will transcribe inside the pipeline.")
+        is_voice_message = True
+        audio_message_data = inner_data
+        raw_text = ""  # Will be set by Agent 0
     # 4. Image Message (ViT + OCR Pipeline)
     is_image = False
     image_msg = None
@@ -337,7 +184,8 @@ def webhook_messages(request):
     elif isinstance(message, str):
         raw_text = message
 
-    if not raw_text or not raw_text.strip():
+    # Allow audio messages through even with empty raw_text (Agent 0 will transcribe)
+    if (not raw_text or not raw_text.strip()) and not audio_message_data:
         logger.debug("Ignoring message: raw_text is empty.")
         return JsonResponse({"status": "ignored", "reason": "no_text_content"})
 
@@ -497,7 +345,7 @@ def webhook_messages(request):
     logger.info(
         f"[WEBHOOK] {direction} message{voice_tag} | "
         f"Sender={sender_label} | Recipient={recipient_label} | "
-        f"Text='{raw_text[:80] + ('...' if len(raw_text) > 80 else '')}'"
+        f"Text='{'(audio — Agent 0 will transcribe)' if audio_message_data else raw_text[:80] + ('...' if len(raw_text) > 80 else '')}'"
     )
     # 3. 🧠 SEND TO AI PIPELINE (LangGraph Orchestrator)
     t_ml_start = time.time()
@@ -535,6 +383,9 @@ def webhook_messages(request):
         "start_time_ms": int(t_ml_start * 1000),
         "detected_language": detected_lang,
         "is_voice_message": is_voice_message,
+
+        # AUDIO DATA (for Agent 0 Transcription)
+        "audio_message_data": audio_message_data,
 
         # IMAGE ANALYSIS DATA
         "image_analyzed": bool(image_result),
@@ -601,6 +452,12 @@ def webhook_messages(request):
 
     # Log the Multi-Agent Execution Results
     logger.info(f"[ORCHESTRATOR] Graph Execution Complete in {int((t_ml_end - t_ml_start) * 1000)}ms")
+
+    # Agent 0: Transcription (only for voice messages)
+    a0_latency = final_state.get("agent_0_latency_ms", 0)
+    if a0_latency > 0:
+        logger.info(f"[AGENT 0: TRANSCRIBER] Transcription latency: {a0_latency}ms")
+
     logger.info(f"[AGENT 1: GATEKEEPER] Toxicity Score: {m1_score:.2f}")
     
     if m2_confidence is not None:
@@ -629,11 +486,14 @@ def webhook_messages(request):
     t_orch = int((t_end - t_start) * 1000)
     
     # Extract agent latencies from state or fallback to defaults/orchestrator time
+    a0_lat = final_state.get("agent_0_latency_ms", 0)
     a1_2_lat = final_state.get("agent_1_2_latency_ms", int((t_ml_end - t_ml_start) * 1000))
     a3_lat = final_state.get("agent_3_latency_ms", 0)
     a4_lat = final_state.get("agent_4_latency_ms", 0)
-    a5_lat = final_state.get("agent_5_latency_ms", max(1, t_orch - a1_2_lat - a3_lat - a4_lat))
+    a5_lat = final_state.get("agent_5_latency_ms", max(1, t_orch - a0_lat - a1_2_lat - a3_lat - a4_lat))
 
+    if a0_lat > 0:
+        log_latency('agent_0', a0_lat)
     log_latency('agent_1', a1_2_lat // 2)
     log_latency('agent_2', a1_2_lat // 2)
     if final_state.get("llm_triggered") or final_state.get("shadow_reviewed"):

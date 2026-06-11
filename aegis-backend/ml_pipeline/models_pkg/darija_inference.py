@@ -172,9 +172,13 @@ def run_darija_pipeline(raw_text: str) -> PipelineResult:
     if pipeline is None:
         raise RuntimeError("DarijaPipeline not initialized. Check M1D model loading at startup.")
 
-    # Detect if text contains Arabizi digits → enable Arabizi normalization
-    use_arabizi = has_arabizi_digits(raw_text)
-    text = normalize_darija(raw_text, apply_arabizi=use_arabizi)
+    # ── Normalize (apply_arabizi=False — always!) ──────────────────────
+    # DarijaBERT-mix was trained on RAW Arabizi (apply_arabizi=False in the
+    # fine-tuning notebook). Converting digits to Arabic mid-word creates
+    # mutant tokens like "9a7ba" → "قaحba" that the model has never seen,
+    # causing it to default to SAFE. The model is already natively fluent
+    # in both pure Arabic script and pure Arabizi — let it read the original.
+    text = normalize_darija(raw_text, apply_arabizi=False)
 
     # ── M1D Inference ─────────────────────────────────────────────────
     t_start = _time.time()

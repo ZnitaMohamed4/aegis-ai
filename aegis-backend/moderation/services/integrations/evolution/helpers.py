@@ -21,14 +21,18 @@ def delete_message_from_whatsapp(instance_name, message_key_id, remote_jid,
 
 
 def send_aegis_warning(instance_name, remote_jid, category, is_from_me,
-                       decision, message_key_id=None, image_flags=None):
+                       decision, message_key_id=None, image_flags=None,
+                       language="en"):
     """Backward-compatible wrapper.
 
     Builds the warning text via ``message_templates`` then delegates to the client.
+
+    Args:
+        language: Target language for the warning ("en", "fr", "ar", "darija").
     """
     from moderation.services.message_templates import get_warning_text
     warning_text = get_warning_text(category, decision, is_from_me,
-                                    image_flags=image_flags)
+                                    image_flags=image_flags, language=language)
     return get_evolution_client().send_warning(
         instance_name, remote_jid, warning_text,
         message_key_id=message_key_id, is_from_me=is_from_me,

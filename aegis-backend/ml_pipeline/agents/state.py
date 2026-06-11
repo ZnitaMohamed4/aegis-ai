@@ -78,12 +78,16 @@ class ModerationState(TypedDict):
     is_darija: Optional[bool]          # True if routed through M1D (DarijaBERT-mix)
     darija_script: Optional[str]       # 'arabic', 'arabizi', 'mixed', or None
 
+    # AUDIO DATA (for Agent 0 transcription)
+    audio_message_data: Optional[dict]   # Raw Evolution API message payload for audio download
+
     # VOICE MESSAGE FLAG
-    is_voice_message: Optional[bool]   # True if text came from n8n audio transcription
+    is_voice_message: Optional[bool]   # True if text came from Agent 0 audio transcription
 
     decision: Optional[str] # ALLOW, WARN, BLOCK, ESCALATE, REVISE, HUMAN_REVIEW
 
     # PER-AGENT LATENCY (ms) — for dashboard metrics
+    agent_0_latency_ms: Optional[int]   # Agent 0: Transcription
     agent_1_2_latency_ms: Optional[int]
     agent_3_latency_ms: Optional[int]
     agent_4_latency_ms: Optional[int]

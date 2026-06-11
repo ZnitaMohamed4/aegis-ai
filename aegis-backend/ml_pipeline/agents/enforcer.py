@@ -46,6 +46,7 @@ class _EnforcementContext:
         'ml_original_class', 'monitoring_mode', 'is_adult_mode',
         'is_self_moderation', 'moderation', 'child', 'conversation',
         'enforcement_actions', 'alert_severity', 'broadcast_fn',
+        'detected_language',
     )
 
     def __init__(self, state):
@@ -66,6 +67,8 @@ class _EnforcementContext:
         self.ml_original_class = state.get("ml_original_class")
         self.monitoring_mode = state.get("monitoring_mode", "child")
         self.is_adult_mode = self.monitoring_mode == 'adult'
+        # Language for warning templates (en, fr, ar, darija)
+        self.detected_language = state.get("detected_language", "en")
 
         # Determined by enforcer_node before dispatching
         self.decision = None
@@ -502,6 +505,7 @@ def _enforce_standard(ctx):
             ctx.instance_name, phone_jid, ctx.primary_class,
             ctx.is_from_me, ctx.decision, ctx.message_key_id,
             image_flags=image_flags,
+            language=ctx.detected_language,
         )
         ctx.enforcement_actions.append("warn")
 

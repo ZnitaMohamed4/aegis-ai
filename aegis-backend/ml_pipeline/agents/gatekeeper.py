@@ -52,9 +52,39 @@ def ml_pipeline_node(state: ModerationState) -> dict:
     raw_text = state["raw_text"]
 
     # ── Language Detection ────────────────────────────────────────────
+    # Priority: webhook detection (text messages) > Whisper detection (voice) > fasttext fallback
+    # For Arabic ('ar') from Whisper, we still need is_likely_darija() because
+    # Whisper cannot distinguish Darija from MSA.
     from ml_pipeline.models_pkg.language_detector import detect_language, is_likely_darija
-    lang_code = detect_language(raw_text)
-    is_darija = is_likely_darija(raw_text, lang_code)
+
+    webhook_lang = state.get("detected_language", "unknown")
+    is_voice = state.get("is_voice_message", False)
+
+    if webhook_lang == "darija":
+        # Webhook explicitly flagged Darija (heuristic matched on text) — trust it
+        lang_code = "ar"
+        is_darija = True
+    elif webhook_lang and webhook_lang != "unknown":
+        # Webhook or Whisper detected a specific language
+        lang_code = webhook_lang
+        # Even if transcriber says 'ar', check if it's actually Darija
+        if lang_code == "ar":
+            # Voice shortcut: Arabic-script voice messages are almost certainly
+            # Darija (MSA is not spoken in casual WhatsApp voice messages).
+            # DarijaBERT-mix was trained on 82.6% Arabic-script Darija.
+            arabic_chars = sum(1 for c in raw_text if '\u0600' <= c <= '\u06FF')
+            if is_voice and arabic_chars >= 5:
+                is_darija = True
+                logger.debug("[GATEKEEPER] Voice+Arabic shortcut → is_darija=True")
+            else:
+                is_darija = is_likely_darija(raw_text, lang_code)
+        else:
+            is_darija = False
+    else:
+        # No detection available — run fasttext + heuristic
+        lang_code = detect_language(raw_text)
+        is_darija = is_likely_darija(raw_text, lang_code)
+
     darija_script = _detect_darija_script(raw_text) if is_darija else None
 
     # ── Pipeline Routing ──────────────────────────────────────────────
