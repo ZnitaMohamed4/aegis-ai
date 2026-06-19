@@ -5,7 +5,7 @@ Defines the Bayesian Network structure, CPTs, and inference logic
 for behavioral risk assessment. Replaces the Random Forest model.
 
 Architecture:
-  10 observable variables → 3 intermediate risk nodes → 1 output node
+  12 observable variables → 3 intermediate risk nodes → 1 output node
 
 The CPTs encode domain expertise from:
   - O'Connell (2003): Grooming stages

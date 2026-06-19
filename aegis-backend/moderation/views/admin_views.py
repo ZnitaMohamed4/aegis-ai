@@ -28,6 +28,25 @@ from moderation.views.webhook import get_avg_latency
 
 logger = logging.getLogger(__name__)
 
+
+# ── Notification Cache Helpers ─────────────────────────────────────────
+def _get_unread_count(user):
+    """Returns the unread notification count for a user, cached in Redis (30s TTL)."""
+    from django.core.cache import cache
+    cache_key = f"notif_unread_{user.id}"
+    count = cache.get(cache_key)
+    if count is not None:
+        return count
+    count = Notification.objects.filter(user=user, is_read=False).count()
+    cache.set(cache_key, count, 30)
+    return count
+
+
+def invalidate_unread_count(user_id):
+    """Call this whenever notifications change for a user (new alert or mark-read)."""
+    from django.core.cache import cache
+    cache.delete(f"notif_unread_{user_id}")
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUser])
 def alert_list(request):
@@ -388,11 +407,19 @@ def admin_user_list(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUser])
 def admin_conversations(request):
-    """GET /api/v1/admin/conversations/?limit=500"""
+    """GET /api/v1/admin/conversations/?limit=500 — cached 60s"""
+    from django.core.cache import cache as dj_cache
+
     limit = min(int(request.query_params.get('limit', 500)), 2000)
+    child_param = request.query_params.get('child', '')
+
+    # Cache key includes limit + child filter so different views get correct data
+    cache_key = f"admin_conversations_v1_{limit}_{child_param}"
+    cached = dj_cache.get(cache_key)
+    if cached:
+        return Response(cached)
     
     queryset = ModerationResult.objects.all()
-    child_param = request.query_params.get('child')
     if child_param:
         instance_name = child_param.replace('child-', '') if child_param.startswith('child-') else child_param
         queryset = queryset.filter(instance_name=instance_name)
@@ -549,10 +576,14 @@ def admin_conversations(request):
     for jid in messages_map:
         messages_map[jid].reverse()
 
-    return Response({
+    response_data = {
         "contacts": list(contacts_map.values()),
         "messages": messages_map
-    })
+    }
+
+    # Cache for 60s — conversation view tolerates 1min delay
+    dj_cache.set(cache_key, response_data, 60)
+    return Response(response_data)
 
 
 @csrf_exempt
@@ -591,8 +622,9 @@ def mark_notifications_read(request):
         Notification.objects.filter(
             user=request.user, is_read=False
         ).update(is_read=True, read_at=tz.now())
-    unread = Notification.objects.filter(user=request.user, is_read=False).count()
-    return Response({"status": "ok", "unread": unread})
+    # Event-based invalidation — immediately reflect the correct count
+    invalidate_unread_count(request.user.id)
+    return Response({"status": "ok", "unread": _get_unread_count(request.user)})
 
 
 @api_view(['GET'])
@@ -600,16 +632,24 @@ def mark_notifications_read(request):
 def notifications_unread_count(request):
     """GET /api/v1/notifications/unread/
     Returns the unread notification count for the logged-in user.
-    Lightweight endpoint for polling or badge refresh.
+    Lightweight endpoint for polling or badge refresh — cached in Redis.
     """
-    unread = Notification.objects.filter(user=request.user, is_read=False).count()
-    return Response({"unread": unread})
+    return Response({"unread": _get_unread_count(request.user)})
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUser])
 def dashboard_stats(request):
-    """GET /api/v1/stats/dashboard/ - Live stats from PostgreSQL"""
+    """GET /api/v1/stats/dashboard/ - Live stats from PostgreSQL (cached 30s)"""
+    from django.core.cache import cache as dj_cache
+
+    cache_key = "dashboard_stats_v1"
+    cached = dj_cache.get(cache_key)
+    if cached:
+        # Patch per-user notification count (user-specific, not globally cacheable)
+        cached["stats"]["unread_notifications"] = _get_unread_count(request.user)
+        return Response(cached)
+
     today = timezone.now().date()
     
     # 1. Grab all moderation results for today
@@ -676,10 +716,11 @@ def dashboard_stats(request):
             hourly_data["safe"][bucket_idx] += entry['count']
 
     # 9. Language Distribution (Live from DB)
-    # Normalize synonyms so we don't show "EN" + "ENGLISH" as separate slices
+    # Strict normalization: only keep Darija, French, English — everything else → Other
     _LANG_NORMALIZE = {
-        'ENGLISH': 'EN', 'FRENCH': 'FR', 'ARABIC': 'AR',
-        'DARIJA': 'DARIJA', 'UNKNOWN': 'UNKNOWN',
+        'EN': 'English', 'ENGLISH': 'English',
+        'FR': 'French', 'FRENCH': 'French',
+        'DARIJA': 'Darija',
     }
 
     lang_counts = ModerationResult.objects.exclude(
@@ -690,14 +731,16 @@ def dashboard_stats(request):
         language='error'
     ).values('language').annotate(count=Count('id')).order_by('-count')
 
-    lang_agg = {}  # normalized_label -> total count
+    lang_agg = {"Darija": 0, "French": 0, "English": 0, "Other": 0}
     for item in lang_counts:
-        raw = str(item['language'] or '').upper()
-        label = _LANG_NORMALIZE.get(raw, raw)
-        if label:
-            lang_agg[label] = lang_agg.get(label, 0) + item['count']
+        raw = str(item['language'] or '').upper().strip()
+        label = _LANG_NORMALIZE.get(raw, "Other")
+        lang_agg[label] = lang_agg.get(label, 0) + item['count']
 
-    lang_labels = list(lang_agg.keys()) if lang_agg else ['UNKNOWN']
+    # Drop empty buckets so the pie chart only shows categories with data
+    lang_agg = {k: v for k, v in lang_agg.items() if v > 0}
+
+    lang_labels = list(lang_agg.keys()) if lang_agg else ['Other']
     lang_data = list(lang_agg.values()) if lang_agg else [1]
 
     language_distribution = {
@@ -705,55 +748,62 @@ def dashboard_stats(request):
         "data": lang_data
     }
 
-    # 10. Check Evolution API global status
-    evolution_api_online = False
-    try:
-        import requests
-        import os
-        api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
-        # Fast 1.5s timeout ping to check if container is responding
-        requests.get(api_url, timeout=1.5)
-        evolution_api_online = True
-    except Exception:
-        evolution_api_online = False
+    # 10. Check Evolution API global status (cached separately — M7)
+    evo_cache_key = "evo_api_online"
+    evolution_api_online = dj_cache.get(evo_cache_key)
+    if evolution_api_online is None:
+        try:
+            import requests
+            import os
+            api_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:5002')
+            requests.get(api_url, timeout=1.5)
+            evolution_api_online = True
+        except Exception:
+            evolution_api_online = False
+        dj_cache.set(evo_cache_key, evolution_api_online, 30)
 
-    # 11. Unread notification count for the logged-in admin
-    unread_notifications = Notification.objects.filter(
-        user=request.user, is_read=False
-    ).count()
-
-    # 12. Notification delivery stats (calls + SMS today)
+    # 11. Notification delivery stats (calls + SMS today)
     from django.db.models import Sum
     today_alerts = SecurityAlert.objects.filter(sent_at__date=today)
     calls_today = today_alerts.aggregate(total=Sum('calls_made'))['total'] or 0
     sms_today = today_alerts.aggregate(total=Sum('sms_sent'))['total'] or 0
 
-    # Send the "Package" back to Angular
-    return Response({
+    # Build latencies once
+    latencies = {
+        "agent_1": get_avg_latency('agent_1', 42),
+        "agent_2": get_avg_latency('agent_2', 287),
+        "agent_3": get_avg_latency('agent_3', 1240),
+        "agent_4": get_avg_latency('agent_4', 95),
+        "agent_5": get_avg_latency('agent_5', 12)
+    }
+
+    # Build the globally-cacheable response (no user-specific fields)
+    response_data = {
         "stats": {
             "total_messages_today": total_messages,
             "total_alerts_today": total_alerts,
             "total_blocked_today": total_blocked,
             "llm_interventions": llm_interventions,
-            "avg_latency_ms": get_avg_latency('agent_1', 42) + get_avg_latency('agent_2', 287) + get_avg_latency('agent_5', 12),
+            "avg_latency_ms": latencies["agent_1"] + latencies["agent_2"] + latencies["agent_5"],
             "evolution_api_online": evolution_api_online,
-            "unread_notifications": unread_notifications,
+            "unread_notifications": 0,  # placeholder — patched per-user below
             "calls_today": calls_today,
             "sms_today": sms_today,
-            "latencies": {
-                "agent_1": get_avg_latency('agent_1', 42),
-                "agent_2": get_avg_latency('agent_2', 287),
-                "agent_3": get_avg_latency('agent_3', 1240),
-                "agent_4": get_avg_latency('agent_4', 95),
-                "agent_5": get_avg_latency('agent_5', 12)
-            }
+            "latencies": latencies
         },
         "category_breakdown": category_breakdown,
         "weekly_activity": weekly_data,
         "at_risk_users": at_risk_users,
         "hourly_activity": hourly_data,
         "language_distribution": language_distribution
-    })
+    }
+
+    # Cache for 30 seconds — dashboard staleness is invisible with WebSocket push
+    dj_cache.set(cache_key, response_data, 30)
+
+    # Patch user-specific notification count before returning
+    response_data["stats"]["unread_notifications"] = _get_unread_count(request.user)
+    return Response(response_data)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUser])
@@ -839,8 +889,14 @@ def activity_feed(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUser])
 def admin_risk_profiles(request):
-    """GET /api/v1/admin/risk-profiles/"""
+    """GET /api/v1/admin/risk-profiles/ — cached 120s (heavy N+1 endpoint)"""
+    from django.core.cache import cache as dj_cache
     from moderation.models import BehavioralSnapshot
+
+    cache_key = "admin_risk_profiles_v1"
+    cached = dj_cache.get(cache_key)
+    if cached:
+        return Response(cached)
     
     # 1. Build Children Profiles
     children_profiles = []
@@ -1049,10 +1105,14 @@ def admin_risk_profiles(request):
             "related_child_ids": related_child_ids
         })
 
-    return Response({
+    response_data = {
         "children": children_profiles,
         "contacts": contact_profiles
-    })
+    }
+
+    # Cache for 120s — risk profiles are aggregate views; 2min staleness is fine
+    dj_cache.set(cache_key, response_data, 120)
+    return Response(response_data)
 
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated, IsAdminUser])
@@ -1075,6 +1135,7 @@ def admin_settings(request):
         serializer = PlatformSettingsSerializer(settings, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            PlatformSettings.invalidate_cache()  # Force fresh DB read on next access
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1205,11 +1266,11 @@ def admin_analytics(request):
 
     # 5. Language Stats
     lang_qs = qs.exclude(language__isnull=True).exclude(language='error').values('language').annotate(count=Count('id'))
-    lang_dist = [0, 0, 0] # FR, AR, EN
+    lang_dist = [0, 0, 0] # FR, Darija, EN
     for r in lang_qs:
         l = r['language'].lower() if r['language'] else ''
-        if 'fr' in l: lang_dist[0] += r['count']
-        elif 'ar' in l: lang_dist[1] += r['count']
+        if 'darija' in l: lang_dist[1] += r['count']
+        elif 'fr' in l: lang_dist[0] += r['count']
         elif 'en' in l: lang_dist[2] += r['count']
 
     # 6. Notifications Stats
@@ -1386,8 +1447,15 @@ def admin_channels(request):
     and maps them back to ParentProfile owners and their MonitoredChild records.
     Admins observe and force-logout — they do NOT create instances here.
     Instance creation happens via the Parent WhatsApp Setup page.
+    Cached 30s to avoid hammering Evolution API on every page load.
     """
     import datetime
+    from django.core.cache import cache as dj_cache
+
+    cache_key = "admin_channels_v1"
+    cached = dj_cache.get(cache_key)
+    if cached:
+        return Response(cached)
     
     evo_status = "Online"
     evo_version = "v2.1.2"
@@ -1532,11 +1600,15 @@ def admin_channels(request):
         "webhook": "Connected" if evo_status == "Online" else "Disconnected",
         "warning": "Uses WhatsApp Web protocol (Baileys). Parents pair their child's device from the Parent Dashboard."
     }
-    
-    return Response({
+
+    response_data = {
         "serverStatus": server_status,
         "instances": instances
-    })
+    }
+
+    # Cache for 30s — channel status changes rarely, Evolution API call is the bottleneck
+    dj_cache.set(cache_key, response_data, 30)
+    return Response(response_data)
 
 
 @api_view(['DELETE'])

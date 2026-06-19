@@ -77,16 +77,62 @@ _REFUSAL_MESSAGES = {
         "domains.<br><br>Feel free to ask me about Moroccan laws, online child "
         "protection, or cybersecurity."
     ),
+    "darija": (
+        "أنا المساعد ديال AEGIS، متخصص في حماية الطفولة والأمن السيبراني في المغرب. "
+        "غير نقدر نجاوب على الأسئلة اللي عندها علاقة بهاد المواضیع.<br><br>"
+        "سولني على القوانين المغربية، كيفاش تحمي ولادك في الأنترنت، ولا الأمن السيبراني."
+    ),
+}
+
+# Hallucination disclaimers per language — prepended when the guardrail
+# detects that the answer isn't fully grounded in sources.
+_HALLUCINATION_DISCLAIMERS = {
+    "fr": (
+        "<b>⚠️ Avertissement :</b> Cette réponse n'a pas pu être entièrement "
+        "vérifiée dans nos sources. Les informations ci-dessous doivent être "
+        "confirmées auprès d'un professionnel.<br><br>"
+    ),
+    "ar": (
+        "<b>⚠️ تنبيه :</b> لم يتسنّ التحقق الكامل من هذه الإجابة في مصادرنا. "
+        "يُرجى تأكيد المعلومات أدناه لدى مختص.<br><br>"
+    ),
+    "en": (
+        "<b>⚠️ Disclaimer:</b> This answer could not be fully verified against "
+        "our sources. The information below should be confirmed with a "
+        "professional.<br><br>"
+    ),
+    "darija": (
+        "<b>⚠️ تنبيه :</b> هاد الجواب ما قدرش يتأكد بالكامل من المصادر ديالنا. "
+        "عافاك أكد هاد المعلومات مع شي مختص.<br><br>"
+    ),
 }
 
 
-def input_topic_guardrail(question: str, language: str = "fr") -> tuple[bool, str]:
+def _is_followup_in_active_session(session) -> bool:
+    """Check if this is a follow-up question in a session with prior on-topic exchanges.
+
+    If the session already has assistant responses (meaning prior questions passed
+    the guardrail), then any new question in this session is treated as a follow-up
+    and allowed through.  This prevents the LLM topic classifier from blocking short
+    vague follow-ups like "tell me more" or "yes please" in non-English languages.
+    """
+    try:
+        # Count prior assistant messages — if >= 1, the session already had
+        # on-topic exchanges
+        assistant_msgs = session.messages.filter(role='assistant').count()
+        return assistant_msgs >= 1
+    except Exception:
+        return False
+
+
+def input_topic_guardrail(question: str, language: str = "fr", session=None) -> tuple[bool, str]:
     """
     Check if the user's question is on-topic for AEGIS.
 
     Args:
         question: The user's raw question text
         language: Target language for the refusal message
+        session: The current ChatSession (for follow-up detection)
 
     Returns:
         (is_allowed, reason) tuple:
@@ -95,6 +141,13 @@ def input_topic_guardrail(question: str, language: str = "fr") -> tuple[bool, st
     """
     from .rag_retrieval import _retrieve_context
     from .rag_config import SIMILARITY_THRESHOLD
+
+    # Follow-up fast path: if the user is in an active session with prior
+    # on-topic exchanges, treat follow-up questions as on-topic.  Short vague
+    # follow-ups like "tell me more" or "yes please" should NOT be blocked.
+    if session and _is_followup_in_active_session(session):
+        logger.debug(f"[GUARDRAIL] \u2705 Follow-up in active session \u2014 skipping topic check")
+        return True, ""
 
     try:
         # Fast path: check ChromaDB for any remotely similar context using the
@@ -141,6 +194,7 @@ RULES:
 - Engaging follow-up questions at the end of the answer are NOT hallucinations.
 - If the answer says "I don't have this information" or similar, that's GROUNDED (it's honest)
 - If sources are empty/missing and the answer still provides specific legal details → NOT GROUNDED
+- CROSS-LANGUAGE RULE: The answer may be in a DIFFERENT language than the sources (e.g., answer in Arabic/Darija while sources are in French). This is NOT a hallucination — the assistant is expected to translate and summarize source content in the user's language. Judge the factual accuracy, not the language match.
 
 RESPOND WITH EXACTLY ONE WORD:
 - "GROUNDED" if the answer is faithful to the sources
@@ -155,13 +209,14 @@ Verdict:""")
 ])
 
 
-def output_hallucination_guardrail(answer: str, sources_text: str) -> tuple[bool, str]:
+def output_hallucination_guardrail(answer: str, sources_text: str, language: str = "fr") -> tuple[bool, str]:
     """
     Check if the agent's answer is grounded in the retrieved sources.
 
     Args:
         answer: The agent's generated answer
         sources_text: Concatenated text of all retrieved source documents
+        language: Target language for the disclaimer if hallucination detected
 
     Returns:
         (is_grounded, flagged_answer) tuple:
@@ -182,10 +237,8 @@ def output_hallucination_guardrail(answer: str, sources_text: str) -> tuple[bool
 
         if "HALLUCINATION" in result:
             logger.warning(f"[GUARDRAIL] ⚠️ Hallucination detected in answer: '{answer[:80]}...'")
-            disclaimer = (
-                "<b>⚠️ Avertissement :</b> Cette réponse n'a pas pu être entièrement "
-                "vérifiée dans nos sources. Les informations ci-dessous doivent être "
-                "confirmées auprès d'un professionnel.<br><br>"
+            disclaimer = _HALLUCINATION_DISCLAIMERS.get(
+                language, _HALLUCINATION_DISCLAIMERS["fr"]
             )
             return False, disclaimer + answer
 
@@ -207,6 +260,7 @@ _LANGUAGE_NAMES = {
     "fr": "French",
     "ar": "Arabic",
     "en": "English",
+    "darija": "Moroccan Darija (Arabic script — Darija dialect written in Arabic characters, common in Moroccan informal communication)",
 }
 
 _TRANSLATE_PROMPT = ChatPromptTemplate.from_messages([
@@ -290,5 +344,23 @@ def _is_likely_correct_language(text: str, target_lang: str) -> bool:
         words = clean.lower().split()
         en_word_count = sum(1 for w in words if w in en_words)
         return en_word_count >= 2
+
+    if target_lang == "darija":
+        # Darija in Arabic script: must have Arabic Unicode characters.
+        # We accept it as correct if it's Arabic-script text — the LLM
+        # handles Darija dialect natively, no complex heuristic needed.
+        arabic_chars = sum(1 for c in clean if '\u0600' <= c <= '\u06FF')
+        if arabic_chars / max(len(clean), 1) > 0.3:
+            return True  # Arabic-script text → likely Darija (LLM will handle it)
+        # Also accept Arabizi (Latin-script Darija) for backward compatibility
+        import re as _re
+        arabizi_pattern = _re.search(r'[a-zA-Z]*[3579][a-zA-Z]*', clean)
+        darija_markers = [
+            'kifach', 'chnou', 'wach', 'fin', 'labas', 'mzyan', 'bghit',
+            'ghadi', 'hna', 'nta', 'nti', 'dyal', 'bzaaf', 'walakin',
+        ]
+        words = clean.lower().split()
+        darija_word_count = sum(1 for w in words if w in darija_markers)
+        return bool(arabizi_pattern) or darija_word_count >= 2
 
     return True

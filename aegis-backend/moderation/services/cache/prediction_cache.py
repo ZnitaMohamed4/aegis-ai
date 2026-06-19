@@ -19,6 +19,63 @@ except Exception as e:
     logger.error(f"[AEGIS-CACHE] Failed to connect to Redis: {e}")
     redis_client = None
 
+
+# ── Blocked Contact Cache ─────────────────────────────────────────────
+# Hot-path check: every incoming WhatsApp message hits this.
+# Uses a Redis SET for O(1) SISMEMBER lookup instead of a DB EXISTS query.
+BLOCKED_CACHE_TTL = 60  # seconds
+BLOCKED_CACHE_KEY = "aegis:blocked_set"
+
+
+def is_sender_blocked(sender_jid, sender_phone_jid=None):
+    """Check if a sender is blocked using Redis SET cache (O(1) lookup).
+    Falls back to DB query if Redis is unavailable."""
+    if not redis_client:
+        return _db_blocked_check(sender_jid, sender_phone_jid)
+
+    try:
+        if not redis_client.exists(BLOCKED_CACHE_KEY):
+            # Cache miss — load all active blocked JIDs from DB
+            from moderation.models import BlockedContact
+            blocked_jids = list(
+                BlockedContact.objects.filter(is_active=True)
+                .values_list('sender_jid', flat=True)
+            )
+            if blocked_jids:
+                redis_client.sadd(BLOCKED_CACHE_KEY, *blocked_jids)
+            else:
+                redis_client.sadd(BLOCKED_CACHE_KEY, "__empty__")
+            redis_client.expire(BLOCKED_CACHE_KEY, BLOCKED_CACHE_TTL)
+
+        # O(1) membership check
+        is_blocked = redis_client.sismember(BLOCKED_CACHE_KEY, sender_jid)
+        if not is_blocked and sender_phone_jid:
+            is_blocked = redis_client.sismember(BLOCKED_CACHE_KEY, sender_phone_jid)
+        return bool(is_blocked)
+    except Exception as e:
+        logger.error(f"[AEGIS-CACHE] BlockedContact cache error: {e}")
+        return _db_blocked_check(sender_jid, sender_phone_jid)
+
+
+def invalidate_blocked_cache():
+    """Call after blocking or unblocking a contact to force a fresh DB load."""
+    if redis_client:
+        try:
+            redis_client.delete(BLOCKED_CACHE_KEY)
+        except Exception:
+            pass
+
+
+def _db_blocked_check(sender_jid, sender_phone_jid=None):
+    """Fallback: direct DB check for blocked contacts."""
+    from moderation.models import BlockedContact
+    jids = [sender_jid]
+    if sender_phone_jid:
+        jids.append(sender_phone_jid)
+    return BlockedContact.objects.filter(
+        sender_jid__in=jids, is_active=True
+    ).exists()
+
 def normalize_text(text):
     """
     Perform 'Deep Clean' for hashing:

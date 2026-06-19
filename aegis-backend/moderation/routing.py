@@ -4,4 +4,6 @@ from . import consumers
 websocket_urlpatterns = [
     # Angular will connect to ws://localhost:8000/ws/alerts/
     re_path(r'ws/alerts/$', consumers.AlertConsumer.as_asgi()),
+    # Proactive chatbot alerts — ws://localhost:8000/ws/chatbot/
+    re_path(r'ws/chatbot/$', consumers.ChatbotProactiveConsumer.as_asgi()),
 ]

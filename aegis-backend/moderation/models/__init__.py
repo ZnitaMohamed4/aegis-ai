@@ -23,7 +23,7 @@ from .behavioral import UserBehaviorProfile, BehavioralSnapshot
 from .alerts import SecurityAlert, Notification
 
 # Package 6: Chatbot & Bot Memory
-from .chatbot import ChatSession, ChatMessage, BotConversation
+from .chatbot import ChatSession, ChatMessage, BotConversation, ProactiveAlert
 
 # Package 7–9: Platform (BlockedContact, Report, PlatformSettings, SelfModerationEvent, FailedMessage)
 from .platform import BlockedContact, Report, PlatformSettings, SelfModerationEvent, FailedMessage
@@ -37,7 +37,7 @@ __all__ = [
     'HarassmentCategory', 'ModerationResult',
     'UserBehaviorProfile', 'BehavioralSnapshot',
     'SecurityAlert', 'Notification',
-    'ChatSession', 'ChatMessage', 'BotConversation',
+    'ChatSession', 'ChatMessage', 'BotConversation', 'ProactiveAlert',
     'BlockedContact', 'Report', 'PlatformSettings', 'SelfModerationEvent',
     'FailedMessage',
     'IndexedDocument',

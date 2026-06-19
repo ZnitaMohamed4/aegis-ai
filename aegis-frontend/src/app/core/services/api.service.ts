@@ -281,6 +281,68 @@ export class ApiService {
     });
   }
 
+  /** SSE streaming chatbot endpoint — returns an Observable of parsed SSE events. */
+  askChatbotStream(
+    message: string,
+    sessionId?: string,
+    language?: string
+  ): Observable<{ type: string; data: any }> {
+    return new Observable(observer => {
+      const url = `${this.BASE_URL}/chatbot/ask-stream/`;
+      const token = localStorage.getItem('access_token') || sessionStorage.getItem('access_token');
+
+      // Use fetch for SSE (EventSource doesn't support POST + auth headers)
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ message, session_id: sessionId, language }),
+      }).then(response => {
+        if (!response.ok) {
+          observer.error(new Error(`HTTP ${response.status}`));
+          return;
+        }
+
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        const read = (): Promise<void> => {
+          return reader.read().then(({ done, value }) => {
+            if (done) {
+              observer.complete();
+              return;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const event = JSON.parse(line.slice(6));
+                  observer.next(event);
+                } catch (e) {
+                  // Skip malformed events
+                }
+              }
+            }
+
+            return read();
+          });
+        };
+
+        return read();
+      }).catch(err => observer.error(err));
+
+      // Cleanup on unsubscribe
+      return () => {};
+    });
+  }
+
   getSuggestedQuestions(language: string = 'fr'): Observable<any[]> {
     return this.http.get<any[]>(`${this.BASE_URL}/chatbot/suggested-questions/?language=${language}`);
   }
@@ -319,6 +381,43 @@ export class ApiService {
 
   getKnowledgeStats(): Observable<any> {
     return this.http.get<any>(`${this.BASE_URL}/knowledge/stats/`);
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // CHATBOT ANSWER CACHE & FEEDBACK ENDPOINTS
+  // ════════════════════════════════════════════════════════════════
+
+  /** Get semantic cache statistics for the RAG chatbot. */
+  getAnswerCacheStats(): Observable<any> {
+    return this.http.get<any>(`${this.BASE_URL}/chatbot/cache/stats/`);
+  }
+
+  /** Clear all cached question→answer pairs (forces fresh answers). */
+  clearAnswerCache(): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/chatbot/cache/clear/`, {});
+  }
+
+  /** Submit thumbs up/down feedback on a chatbot message. */
+  submitMessageFeedback(messageId: string, feedback: 'up' | 'down' | 'none', comment?: string): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/chatbot/feedback/`, {
+      message_id: messageId,
+      feedback,
+      comment: comment || ''
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // PROACTIVE ALERTS (chatbot-driven parent notifications)
+  // ══════════════════════════════════════════════════════════════
+
+  /** Get unacknowledged proactive alerts for the current user. */
+  getProactiveAlerts(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.BASE_URL}/chatbot/proactive-alerts/`);
+  }
+
+  /** Acknowledge (dismiss) a proactive alert. */
+  acknowledgeProactiveAlert(alertId: string): Observable<any> {
+    return this.http.post<any>(`${this.BASE_URL}/chatbot/proactive-alerts/${alertId}/acknowledge/`, {});
   }
 
   // ══════════════════════════════════════════════════════════════

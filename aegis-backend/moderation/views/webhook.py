@@ -321,16 +321,13 @@ def webhook_messages(request):
         return JsonResponse({"status": "ignored", "reason": "bot_instance_webhook"})
     # ─────────────────────────────────────────────────────────────────────────────
 
-    # 🚫 APPLICATION-LEVEL BLOCKLIST CHECK
+    # 🚫 APPLICATION-LEVEL BLOCKLIST CHECK (cached in Redis — O(1) SISMEMBER)
     # If this sender has been blocked by the Enforcer, silently drop their message.
     # No pipeline, no response, no warning — they're shouting into the void.
     # Only applies to incoming messages (outgoing self-moderation must always run).
     if not is_from_me:
-        from moderation.models import BlockedContact
-        if BlockedContact.objects.filter(
-            sender_jid__in=[sender_jid, sender_phone_jid],
-            is_active=True,
-        ).exists():
+        from moderation.services.cache.prediction_cache import is_sender_blocked
+        if is_sender_blocked(sender_jid, sender_phone_jid):
             logger.info(
                 "[WEBHOOK] 🚫 BLOCKED sender %s — message silently dropped.",
                 sender_phone_jid,

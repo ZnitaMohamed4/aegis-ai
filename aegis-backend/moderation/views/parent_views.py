@@ -62,9 +62,15 @@ def parent_dashboard_stats(request):
     """
     GET /api/v1/parent/stats/
     Dashboard stats filtered to the parent's child only.
-    Same structure as /stats/dashboard/ but scoped.
+    Same structure as /stats/dashboard/ but scoped. Cached 60s per parent.
     """
+    from django.core.cache import cache as dj_cache
+
     user = request.user
+    cache_key = f"parent_dashboard_{user.id}"
+    cached = dj_cache.get(cache_key)
+    if cached:
+        return Response(cached)
 
     parent_q, profile, child_jids = _get_parent_filter(user)
     today = timezone.now().date()
@@ -197,21 +203,29 @@ def parent_dashboard_stats(request):
         } for p in risky]
 
     # Language distribution scoped to parent's child
+    # Strict normalization: only keep Darija, French, English — everything else → Other
+    _LANG_NORMALIZE = {
+        'EN': 'English', 'ENGLISH': 'English',
+        'FR': 'French', 'FRENCH': 'French',
+        'DARIJA': 'Darija',
+    }
+
     lang_counts = all_results.exclude(
         language__isnull=True
     ).exclude(language='other').exclude(language='error').values('language').annotate(count=Count('id')).order_by('-count')
 
-    lang_labels = []
-    lang_data = []
+    lang_agg = {"Darija": 0, "French": 0, "English": 0, "Other": 0}
     for item in lang_counts:
-        lang = str(item['language']).upper()
-        if lang:
-            lang_labels.append(lang)
-            lang_data.append(item['count'])
+        raw = str(item['language'] or '').upper().strip()
+        label = _LANG_NORMALIZE.get(raw, "Other")
+        lang_agg[label] = lang_agg.get(label, 0) + item['count']
+
+    # Drop empty buckets so the pie chart only shows categories with data
+    lang_agg = {k: v for k, v in lang_agg.items() if v > 0}
 
     language_distribution = {
-        "labels": lang_labels if lang_labels else ['UNKNOWN'],
-        "data": lang_data if lang_data else [1]
+        "labels": list(lang_agg.keys()) if lang_agg else ['Other'],
+        "data": list(lang_agg.values()) if lang_agg else [1]
     }
 
     # Unread notification count for the logged-in parent
@@ -225,7 +239,7 @@ def parent_dashboard_stats(request):
     calls_today = today_security_alerts.aggregate(total=Sum('calls_made'))['total'] or 0
     sms_today = today_security_alerts.aggregate(total=Sum('sms_sent'))['total'] or 0
 
-    return Response({
+    response_data = {
         "child": child_info,
         "stats": {
             "total_messages_today": total_messages,
@@ -245,7 +259,11 @@ def parent_dashboard_stats(request):
         "at_risk_contacts": at_risk_contacts,
         "hourly_activity": hourly_data,
         "language_distribution": language_distribution,
-    })
+    }
+
+    # Cache for 60 seconds — parent data is scoped, low-frequency, and aggregate
+    dj_cache.set(cache_key, response_data, 60)
+    return Response(response_data)
 
 
 # ────────────────────────────────────────────────────────────────────────────────

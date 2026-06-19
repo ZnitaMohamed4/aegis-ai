@@ -16,6 +16,15 @@
     </div>
 
     <!-- Mode Selector Removed -->
+    <!-- Language Selector -->
+    <div class="sidebar-section-title">Language</div>
+    <div class="lang-selector-row">
+      <button class="lang-btn" [class.active]="activeLanguage()==='fr'" (click)="activeLanguage.set('fr'); loadSuggestedQuestions()">FR</button>
+      <button class="lang-btn" [class.active]="activeLanguage()==='ar'" (click)="activeLanguage.set('ar'); loadSuggestedQuestions()">AR</button>
+      <button class="lang-btn" [class.active]="activeLanguage()==='en'" (click)="activeLanguage.set('en'); loadSuggestedQuestions()">EN</button>
+      <button class="lang-btn" [class.active]="activeLanguage()==='darija'" (click)="activeLanguage.set('darija'); loadSuggestedQuestions()">Darija</button>
+    </div>
+
     <!-- Conversation History -->
     <div class="sidebar-section-title">History</div>
     <div class="history-scroll">
@@ -104,8 +113,24 @@
 
               <!-- Actual Message -->
               @if (msg.text) {
-                <div class="bubble" [class.bubble-bot]="msg.role==='bot'" [class.bubble-user]="msg.role==='user'">
-                  <p [innerHTML]="msg.text"></p>
+                <div class="bubble" [class.bubble-bot]="msg.role==='bot'" [class.bubble-user]="msg.role==='user'" [class.bubble-proactive]="msg.isProactive">
+
+                  <!-- Proactive alert banner -->
+                  @if (msg.isProactive) {
+                    <div class="proactive-banner">
+                      <div class="proactive-banner-left">
+                        <i class="pi pi-shield proactive-banner-icon"></i>
+                        <span class="proactive-banner-text">Proactive Alert</span>
+                      </div>
+                      @if (msg.proactiveAlertId) {
+                        <button class="proactive-dismiss-btn" (click)="dismissProactiveAlert(msg.proactiveAlertId!)" title="Dismiss alert">
+                          <i class="pi pi-times"></i>
+                        </button>
+                      }
+                    </div>
+                  }
+
+                  <p dir="auto" [innerHTML]="msg.text"></p>
                   @if (msg.sources && msg.sources.length > 0) {
                     <details class="src-details">
                       <summary><i class="pi pi-book"></i> Sources ({{ msg.sources.length }})</summary>
@@ -129,6 +154,26 @@
                     </details>
                   }
                 </div>
+
+                <!-- Feedback buttons on bot messages -->
+                @if (msg.role === 'bot' && msg.serverMessageId && !msg.isProactive) {
+                  <div class="feedback-row">
+                    <button
+                      class="feedback-btn"
+                      [class.active-up]="msg.feedback === 'up'"
+                      (click)="submitFeedback(msg.id, 'up')"
+                      title="Helpful">
+                      <i class="pi pi-thumbs-up"></i>
+                    </button>
+                    <button
+                      class="feedback-btn"
+                      [class.active-down]="msg.feedback === 'down'"
+                      (click)="submitFeedback(msg.id, 'down')"
+                      title="Not helpful">
+                      <i class="pi pi-thumbs-down"></i>
+                    </button>
+                  </div>
+                }
               } @else if (msg.role === 'bot' && !msg.thinkingSteps) {
                 <div class="bubble bubble-bot typing-bubble">
                   <span class="dot"></span><span class="dot"></span><span class="dot"></span>

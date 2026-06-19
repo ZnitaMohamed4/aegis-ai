@@ -263,6 +263,10 @@ def enforcer_node(state: ModerationState) -> dict:
                     Notification(user=u, alert=alerte)
                     for u in recipients
                 ], ignore_conflicts=True)
+                # Invalidate cached unread counts for all recipients
+                from moderation.views.admin_views import invalidate_unread_count
+                for u in recipients:
+                    invalidate_unread_count(u.id)
             except Exception as e:
                 logger.warning(f"[AGENT 5: ENFORCER] Notification fan-out failed: {e}")
 
@@ -342,6 +346,14 @@ def _enforce_adult_self_moderation(ctx):
             )
             send_text_message(bot_instance, adult_jid, reflection)
             ctx.enforcement_actions.append("self_reflection_dm")
+
+    # ── PROACTIVE ALERT CHECK ──────────────────────────────────────
+    try:
+        from moderation.services.proactive_alert_service import check_and_trigger_proactive_alert
+        if ctx.child and ctx.child.parent and ctx.child.parent.user:
+            check_and_trigger_proactive_alert(ctx.child.parent.user, ctx.instance_name)
+    except Exception as e:
+        logger.warning(f"[AGENT 5: ADULT SELF-MOD] Proactive alert check failed: {e}")
 
     logger.info(
         f"[AGENT 5: ADULT SELF-MOD] Message flagged for self-reflection | "
@@ -434,6 +446,15 @@ def _enforce_child_self_moderation(ctx):
         logger.error(
             f"[AGENT 5: ENFORCER] Failed to create SelfModerationEvent: {e}"
         )
+
+    # ── 5. PROACTIVE ALERT CHECK ──────────────────────────────────────
+    # Check if this alert should trigger a proactive chatbot message
+    try:
+        from moderation.services.proactive_alert_service import check_and_trigger_proactive_alert
+        if ctx.child and ctx.child.parent and ctx.child.parent.user:
+            check_and_trigger_proactive_alert(ctx.child.parent.user, ctx.instance_name)
+    except Exception as e:
+        logger.warning(f"[AGENT 5: SELF-MOD] Proactive alert check failed: {e}")
 
     logger.info(
         f"[AGENT 5: SELF-MODERATION] Child message caught | "
@@ -576,6 +597,15 @@ def _enforce_standard(ctx):
                 # Persist delivery counts
                 alerte.save(update_fields=['parent_notified', 'calls_made', 'sms_sent'])
 
+        # ── PROACTIVE ALERT CHECK ──────────────────────────────────────
+        # Check if this alert should trigger a proactive chatbot message
+        try:
+            from moderation.services.proactive_alert_service import check_and_trigger_proactive_alert
+            if ctx.child and ctx.child.parent and ctx.child.parent.user:
+                check_and_trigger_proactive_alert(ctx.child.parent.user, ctx.instance_name)
+        except Exception as e:
+            logger.warning(f"[AGENT 5: ENFORCER] Proactive alert check failed: {e}")
+
         # ── APPLICATION-LEVEL BLOCK + BEST-EFFORT WHATSAPP BLOCK ──────────────
         # WhatsApp protocol limitation: we CANNOT delete incoming messages (fromMe=False).
         # Baileys' updateBlockStatus fails for LID contacts (bad-request).
@@ -584,6 +614,7 @@ def _enforce_standard(ctx):
         # Also attempt the real WhatsApp block as best-effort — works for phone-JID contacts.
         if ctx.decision in ('BLOCK', 'ESCALATE') and not ctx.is_from_me:
             from moderation.models import BlockedContact
+            from moderation.services.cache.prediction_cache import invalidate_blocked_cache
             try:
                 BlockedContact.objects.update_or_create(
                     sender_jid=phone_jid,
@@ -593,6 +624,7 @@ def _enforce_standard(ctx):
                         "is_active": True,
                     },
                 )
+                invalidate_blocked_cache()  # Force cache to reload on next message
                 logger.info(
                     f"[AGENT 5: ENFORCER] 🚫 APP-BLOCKED {phone_jid} — "
                     f"all future messages will be silently dropped."

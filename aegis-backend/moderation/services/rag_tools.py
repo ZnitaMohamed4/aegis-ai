@@ -26,18 +26,24 @@ class SearchKnowledgeBaseInput(BaseModel):
 
     @field_validator('query')
     def normalize_query(cls, v: str) -> str:
-        """Normalize the query by stripping accents and normalising whitespace.
+        """Normalize the query by stripping Latin accents while preserving
+        Arabic, Darija, and other non-Latin scripts.
 
-        This ensures the model's tool call JSON remains ASCII-safe even when
-        the LLM generates accented characters.
+        The previous implementation stripped ALL non-ASCII characters which
+        destroyed Arabic/Darija text entirely (resulting in empty queries).
         """
         if not isinstance(v, str):
             return v
         try:
             import unicodedata
             norm = unicodedata.normalize('NFKD', v)
-            ascii_only = norm.encode('ascii', 'ignore').decode('ascii')
-            return ' '.join(ascii_only.split())
+            # Only strip Latin combining marks (accents like é→e, ç→c).
+            # Arabic characters have no decomposition under NFKD so they pass through.
+            result = ''.join(
+                ch for ch in norm
+                if not (unicodedata.combining(ch) and ord(ch) < 0x0600)
+            )
+            return ' '.join(result.split())
         except Exception:
             return v
 
@@ -108,14 +114,18 @@ class SearchWebAndLearnInput(BaseModel):
 
     @field_validator('query')
     def normalize_query(cls, v: str) -> str:
-        """Also strip accents for web searches to keep downstream tool calls stable."""
+        """Normalize the query by stripping Latin accents while preserving
+        Arabic, Darija, and other non-Latin scripts."""
         if not isinstance(v, str):
             return v
         try:
             import unicodedata
             norm = unicodedata.normalize('NFKD', v)
-            ascii_only = norm.encode('ascii', 'ignore').decode('ascii')
-            return ' '.join(ascii_only.split())
+            result = ''.join(
+                ch for ch in norm
+                if not (unicodedata.combining(ch) and ord(ch) < 0x0600)
+            )
+            return ' '.join(result.split())
         except Exception:
             return v
 
@@ -137,8 +147,13 @@ def search_web_and_learn(query: str) -> str:
         or a message indicating no results were found.
     """
     from .rag_web import _web_search, _auto_learn_web_results, _build_web_context_text
+    from .rag_retrieval import _preprocess_query
 
-    web_results = _web_search(query)
+    # Translate Darija/Arabic keywords to French so SerpAPI returns relevant results.
+    # Google search with raw Arabic-script Darija queries returns poor results.
+    search_query = _preprocess_query(query)
+
+    web_results = _web_search(search_query)
 
     if not web_results:
         return (

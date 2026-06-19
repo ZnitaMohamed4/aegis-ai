@@ -1,8 +1,23 @@
 import logging
-from rest_framework.decorators import api_view, permission_classes, parser_classes
+import json
+import time
+from rest_framework.decorators import api_view, permission_classes, parser_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
+from django.http import StreamingHttpResponse
+
+
+# ── Custom Throttle Scopes ────────────────────────────────────────────
+class ChatbotThrottle(UserRateThrottle):
+    """15 requests/min — protects Groq TPM budget."""
+    scope = 'chatbot'
+
+
+class KnowledgeUploadThrottle(UserRateThrottle):
+    """10 requests/min — prevents rapid bulk uploads."""
+    scope = 'knowledge_upload'
 
 from moderation.models import ChatSession, ChatMessage, IndexedDocument
 from moderation.services.rag_service import ask_question
@@ -18,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([ChatbotThrottle])
 def ask_chatbot(request):
     """POST /api/v1/chatbot/ask/"""
     data = request.data
@@ -39,6 +55,75 @@ def ask_chatbot(request):
     except Exception as e:
         logger.error(f"[RAG API] Error in ask_chatbot: {e}")
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([ChatbotThrottle])
+def ask_chatbot_stream(request):
+    """POST /api/v1/chatbot/ask-stream/
+
+    SSE (Server-Sent Events) streaming endpoint for the chatbot.
+    Sends progressive events:
+      - "thinking": pipeline step updates
+      - "answer_chunk": word-by-word answer delivery
+      - "done": final metadata (sources, message_id, session_id)
+    """
+    data = request.data
+    message = data.get('message', '').strip()
+    session_id = data.get('session_id')
+    language = data.get('language', 'fr')
+
+    if not message:
+        return Response({"error": "Message is required"}, status=400)
+
+    def event_stream():
+        """Generator that yields SSE events."""
+        try:
+            # Run the full pipeline
+            response_data = ask_question(
+                question=message,
+                session_id=session_id,
+                user=request.user,
+                language=language
+            )
+
+            # 1. Stream thinking steps
+            for step in response_data.get('thinking_steps', []):
+                yield f"data: {json.dumps({'type': 'thinking', 'data': step})}\n\n"
+
+            # 2. Stream answer word-by-word
+            answer = response_data.get('answer', '')
+            words = answer.split(' ')
+            for i, word in enumerate(words):
+                chunk = word if i == 0 else ' ' + word
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'data': chunk})}\n\n"
+                time.sleep(0.03)  # 30ms per word — smooth streaming UX
+
+            # 3. Send done event with metadata
+            done_payload = {
+                'type': 'done',
+                'data': {
+                    'session_id': response_data.get('session_id'),
+                    'message_id': response_data.get('message_id'),
+                    'source_type': response_data.get('source_type'),
+                    'sources': response_data.get('sources', []),
+                    'cached': response_data.get('cached', False),
+                }
+            }
+            yield f"data: {json.dumps(done_payload)}\n\n"
+
+        except Exception as e:
+            logger.error(f"[RAG SSE] Error in stream: {e}")
+            yield f"data: {json.dumps({'type': 'error', 'data': str(e)})}\n\n"
+
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type='text/event-stream',
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'  # Disable nginx buffering
+    return response
 
 
 @api_view(['GET'])
@@ -92,7 +177,14 @@ def get_chat_sessions(request):
     for s in sessions:
         # Title is the first user message, or default
         first_msg = s.messages.filter(role='user').order_by('sent_at').first()
-        title = first_msg.content[:50] + "..." if first_msg and len(first_msg.content) > 50 else (first_msg.content if first_msg else "Nouvelle conversation")
+        
+        if s.is_proactive:
+            # Proactive sessions get a special title
+            proactive_msg = s.messages.filter(role='assistant', is_proactive=True).first()
+            trigger_count = s.proactive_alerts.first().trigger_count if s.proactive_alerts.exists() else 0
+            title = f"🛡️ Alerte proactive ({trigger_count} messages signalés)"
+        else:
+            title = first_msg.content[:50] + "..." if first_msg and len(first_msg.content) > 50 else (first_msg.content if first_msg else "Nouvelle conversation")
         
         # Include messages in the response to match the frontend Conversation interface
         messages = []
@@ -103,7 +195,9 @@ def get_chat_sessions(request):
                 "text": m.content,
                 "timestamp": m.sent_at.isoformat(),
                 "source_type": getattr(m, 'source_type', 'knowledge_base'),
-                "sources": _parse_sources(m)
+                "sources": _parse_sources(m),
+                "feedback": getattr(m, 'feedback', 'none'),
+                "isProactive": getattr(m, 'is_proactive', False),
             })
 
         data.append({
@@ -161,6 +255,7 @@ def delete_chat_session(request, session_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @parser_classes([MultiPartParser, FormParser])
+@throttle_classes([KnowledgeUploadThrottle])
 def upload_knowledge_document(request):
     """POST /api/v1/knowledge/upload/"""
     file_obj = request.FILES.get('file')
@@ -224,7 +319,146 @@ def get_rag_stats(request):
     """GET /api/v1/knowledge/stats/"""
     try:
         stats = get_knowledge_stats()
+        # Also include semantic cache stats
+        from moderation.services.cache.rag_cache import get_cache_stats
+        stats["answer_cache"] = get_cache_stats()
         return Response(stats)
     except Exception as e:
         logger.error(f"[RAG API] Error in get_rag_stats: {e}")
+        return Response({"error": str(e)}, status=500)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  ANSWER CACHE ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_answer_cache_stats(request):
+    """GET /api/v1/chatbot/cache/stats/
+
+    Returns semantic cache statistics: entry count, hit rate, TTL settings.
+    """
+    from moderation.services.cache.rag_cache import get_cache_stats
+    try:
+        return Response(get_cache_stats())
+    except Exception as e:
+        logger.error(f"[RAG API] Error in get_answer_cache_stats: {e}")
+        return Response({"error": str(e)}, status=500)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def clear_answer_cache(request):
+    """POST /api/v1/chatbot/cache/clear/
+
+    Clears all cached question→answer pairs. Use after uploading
+    new knowledge base documents to force fresh answers.
+    """
+    from moderation.services.cache.rag_cache import clear_cache
+    try:
+        deleted = clear_cache()
+        return Response({"status": "success", "deleted_entries": deleted})
+    except Exception as e:
+        logger.error(f"[RAG API] Error in clear_answer_cache: {e}")
+        return Response({"error": str(e)}, status=500)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  USER FEEDBACK ENDPOINT
+# ═══════════════════════════════════════════════════════════════════════
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_message_feedback(request):
+    """POST /api/v1/chatbot/feedback/
+
+    Submit thumbs up/down feedback on a chatbot message.
+
+    Body: {
+        "message_id": "<UUID>",
+        "feedback": "up" | "down",
+        "comment": "optional comment"
+    }
+    """
+    message_id = request.data.get('message_id')
+    feedback = request.data.get('feedback')  # 'up' or 'down'
+    comment = request.data.get('comment', '')
+
+    if not message_id or feedback not in ('up', 'down', 'none'):
+        return Response(
+            {"error": "message_id and feedback ('up'|'down'|'none') are required"},
+            status=400,
+        )
+
+    try:
+        msg = ChatMessage.objects.get(id=message_id)
+        msg.feedback = feedback
+        msg.feedback_comment = comment
+        msg.save(update_fields=['feedback', 'feedback_comment'])
+
+        logger.info(
+            f"[RAG FEEDBACK] {feedback.upper()} on message {message_id} "
+            f"(session={msg.session_id}, comment={comment[:50]})"
+        )
+        return Response({"status": "success", "message_id": str(msg.id), "feedback": feedback})
+    except ChatMessage.DoesNotExist:
+        return Response({"error": "Message not found"}, status=404)
+    except Exception as e:
+        logger.error(f"[RAG API] Error in submit_message_feedback: {e}")
+        return Response({"error": str(e)}, status=500)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  PROACTIVE ALERT ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_proactive_alerts(request):
+    """GET /api/v1/chatbot/proactive-alerts/
+
+    Returns unacknowledged proactive alerts for the current user.
+    Includes the linked chat message content and session ID so the
+    frontend can inject it into the chatbot UI.
+    """
+    from moderation.models import ProactiveAlert
+
+    alerts = ProactiveAlert.objects.filter(
+        parent=request.user,
+        is_acknowledged=False,
+    ).select_related('chat_session', 'chat_message').order_by('-created_at')[:10]
+
+    data = []
+    for alert in alerts:
+        data.append({
+            "id": str(alert.id),
+            "session_id": str(alert.chat_session.id),
+            "message_id": str(alert.chat_message.id),
+            "content": alert.chat_message.content,
+            "trigger_count": alert.trigger_count,
+            "categories": alert.alert_categories,
+            "created_at": alert.created_at.isoformat(),
+        })
+
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def acknowledge_proactive_alert(request, alert_id):
+    """POST /api/v1/chatbot/proactive-alerts/<id>/acknowledge/
+
+    Mark a proactive alert as acknowledged (dismissed).
+    """
+    from moderation.models import ProactiveAlert
+
+    try:
+        alert = ProactiveAlert.objects.get(id=alert_id, parent=request.user)
+        alert.acknowledge()
+        return Response({"status": "success", "alert_id": str(alert.id)})
+    except ProactiveAlert.DoesNotExist:
+        return Response({"error": "Alert not found"}, status=404)
+    except Exception as e:
+        logger.error(f"[RAG API] Error in acknowledge_proactive_alert: {e}")
         return Response({"error": str(e)}, status=500)

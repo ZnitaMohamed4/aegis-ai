@@ -90,6 +90,23 @@ CHANNEL_LAYERS = {
     },
 }
 
+# ── Cache Configuration ──────────────────────────────────────────────
+# Redis DB 2 for Django's cache framework.
+# DB 0 = prediction cache (prediction_cache.py), DB 1 = Channels/WebSockets
+# Django 5.2 has built-in RedisCache — no extra package needed.
+# We force DB 2 regardless of REDIS_URL's DB number to avoid collisions.
+_redis_base = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379')
+# Strip any trailing /N to ensure we connect to DB 2
+_redis_host = _redis_base.rsplit('/', 1)[0] if _redis_base.count('/') >= 3 else _redis_base
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': f'{_redis_host}/2',
+        'KEY_PREFIX': 'aegis',
+        'TIMEOUT': 300,  # Default 5 min TTL
+    }
+}
+
 # CORS — restrict to known frontend origins
 CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
@@ -194,6 +211,14 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'user': '120/min',         # General API: 120 requests/min per user
+        'chatbot': '15/min',       # Chatbot ask endpoint: 15 requests/min (protects Groq TPM)
+        'knowledge_upload': '10/min',  # Knowledge uploads: 10/min
+    },
 }
 
 from datetime import timedelta

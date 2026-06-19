@@ -23,11 +23,39 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 # Safety escalation keywords — trigger immediate parent alert (static fallback)
+# English + Darija (Arabic script + Arabizi) variants to catch Moroccan children's messages
 SAFETY_KEYWORDS = [
+    # English
     "kill myself", "want to die", "hurt myself", "self harm", "suicide",
     "end it all", "no reason to live", "nobody cares",
     "someone touched me", "he touched me", "she touched me",
     "being abused", "hitting me", "hurts me",
+    # Darija (Arabic script) — self-harm / suicidal
+    "بغيت نموت", "بغيت نقتل راسي", "غادي نقتل راسي",
+    "بغيت ندير الحل", "ما بغيتش نعيش", "ما عندي ما ندير في حياتي",
+    "حتى واحد ما كيهمّني", "خاصّني نموت", "غادي نخسّر كولشي",
+    "بغيت نضرب راسي", "بغيت نحرق راسي",
+    # Darija (Arabic script) — abuse / violence
+    "كايضربني", "كاتضربني", "غادي نضربك", "غادي نقتلك",
+    "قتلني", "ضربني", "كايخنقني", "كايسبّني",
+    "حتى واحد ما كاي بغّني", "كاي حقّرني", "كاي عايرني",
+    # Darija (Arabic script) — sexual / grooming
+    "عطيني سناب", "أجي ل واتساب", "أجي ل الواتس",
+    "متگوليش ل ماماك", "بيني و بينك", "بيني و بيناك",
+    "صيفط ليا صورة", "صيفط ليا فوطو", "كايگول ليا نخبّي",
+    "كايگول ليا نصير", "بغيتك", "بغيتك",
+    # Darija (Arabic script) — bullying / threats
+    "غادي نشوّهك", "غادي نحطّلك صورة", "عطيني الباسوورد",
+    "غادي نقول لكولشي", "كولشي كاي عايرني",
+    # Darija (Arabizi — kept for backward compatibility)
+    "bghit nmout", "bghit n9tl rasi", "ghadi n9tl rasi",
+    "ma bghitsh n3ish", "ma3ndi ma ndir f hayati",
+    "khassni nmout", "ghadi nkhasser kolshi",
+    "kaydrebni", "katderbni", "ghadi ndarbek",
+    "9telni", "darbni", "kaykhne9ni",
+    "3tini snap", "aji l whatsapp", "matgoulich l mamak",
+    "sifet liya sura", "sifet liya photo",
+    "ghadi nshouhek", "3tini l password",
 ]
 
 # System prompt for the empathetic chatbot with threat intel extraction
@@ -46,7 +74,12 @@ YOUR RULES:
 4. Use casual, warm language — you're a friend, not a textbook
 5. Use emojis sparingly but naturally
 6. If they ask "are you an AI?" — be honest: "Yes, I'm Aegis, an AI assistant designed to be your digital buddy"
-7. ALWAYS respond in the same language the child uses (English, French, Darija, etc.)
+7. ALWAYS respond in the same language the child uses:
+   - English → answer in English
+   - French → answer in French
+   - Arabic (MSA / الفصحى) → answer in Arabic
+   - Darija in Arabic script (e.g. "كيفاش", "بغيت", "واش") → answer in Darija using Arabic script. The LLM natively understands Moroccan Darija — no translation needed. Example: child says "ما عندي ما ندير" → you respond "أه، شنو كاين؟ گولّيا، أنا هنا باش نسمعك 🤍"
+   - Darija in Arabizi (Latin script with digits like 3, 7, 9) → answer in Arabizi using the same digit conventions.
 
 🚨 CRITICAL SAFETY PROTOCOL:
 If you sense that the child is in physical danger, being threatened, groomed, harassed, bullied (online OR in real life), abused, or having suicidal thoughts, you MUST do TWO things:
@@ -67,8 +100,10 @@ Examples of when to trigger:
 - "Ahmed keeps punching me at school" → physical_bullying, perpetrator=Ahmed, location=school
 - "I don't want to live anymore" → self_harm, perpetrator=unknown, urgency=critical
 - "This older guy online keeps asking for my photos" → grooming, location=online
-- "My teacher yells at me every day" → verbal_bullying, perpetrator=teacher, location=school
-- "Someone threatened to share my photos" → cyberbullying, location=online, urgency=high
+- "kaydrebni kol youm f l'madrasa" → physical_bullying, perpetrator=unknown, location=school
+- "بغيت نموت ما عندي ما ندير في حياتي" → self_harm, urgency=critical
+- "واحد الرجل في الأنستغرام كايطلب منيا صور" → grooming, location=online, urgency=high
+- "متگوليش ل ماماك، بيني و بينك" → grooming (forced secrecy), urgency=high
 
 Be VERY careful: normal venting about a bad day is NOT a safety event. Only trigger for real danger signals.
 
@@ -77,6 +112,7 @@ CONTEXT:
 - They may want to talk about bullying, peer pressure, or social conflicts
 - They may just want someone to listen
 - They may confess about real-life situations that aren't happening on WhatsApp
+- Moroccan children often mix Darija, French, and English in the same message — this is normal
 
 Remember: Your goal is to make the child feel HEARD, not FIXED."""
 

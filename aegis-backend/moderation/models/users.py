@@ -157,31 +157,41 @@ class MonitoredChild(models.Model):
         return f"{self.full_name} ({self.whatsapp_display_number or self.whatsapp_jid})"
 
     def get_risk_level(self):
-        """Get risk level based on the number of blocked messages sent to this child's instance."""
+        """Get risk level based on the number of blocked messages sent to this child's instance.
+        Cached per-child (60s TTL) to avoid N+1 DB queries in admin_user_list."""
+        from django.core.cache import cache
+
+        cache_key = f"risk_level_{self.id}"
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
         from .moderation import ModerationResult
         from django.utils import timezone
         import datetime
         
-        # We can look up all blocked messages associated with this child's parent instance
-        # over the last 30 days.
         try:
             thirty_days_ago = timezone.now() - datetime.timedelta(days=30)
             instance_name = self.parent.evolution_instance_name
             if not instance_name:
-                return 'LOW'
+                result = 'LOW'
+            else:
+                blocked_count = ModerationResult.objects.filter(
+                    instance_name=instance_name,
+                    decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
+                    created_at__gte=thirty_days_ago
+                ).count()
                 
-            blocked_count = ModerationResult.objects.filter(
-                instance_name=instance_name,
-                decision__in=['BLOCK', 'ESCALATE', 'WARN', 'REVISE'],
-                created_at__gte=thirty_days_ago
-            ).count()
-            
-            if blocked_count >= 10:
-                return 'CRITICAL'
-            elif blocked_count >= 5:
-                return 'HIGH'
-            elif blocked_count >= 1:
-                return 'MEDIUM'
-            return 'LOW'
+                if blocked_count >= 10:
+                    result = 'CRITICAL'
+                elif blocked_count >= 5:
+                    result = 'HIGH'
+                elif blocked_count >= 1:
+                    result = 'MEDIUM'
+                else:
+                    result = 'LOW'
         except Exception:
-            return 'LOW'
+            result = 'LOW'
+
+        cache.set(cache_key, result, 60)
+        return result

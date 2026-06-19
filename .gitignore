@@ -40,6 +40,9 @@ aegis-backend/chroma_storage/
 *.h5
 *.onnx
 
+# ML training notebooks & scripts (local experiments, not for production)
+aegis-ml/models_to_improve/
+
 # ------------------------------------------------------------------------------
 # 3. ANGULAR FRONTEND & NODE.JS
 # ------------------------------------------------------------------------------

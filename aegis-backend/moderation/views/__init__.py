@@ -84,6 +84,12 @@ from moderation.views.rag_views import (
     get_knowledge_documents,
     delete_knowledge_document,
     get_rag_stats,
+    get_answer_cache_stats,
+    clear_answer_cache,
+    submit_message_feedback,
+    ask_chatbot_stream,
+    get_proactive_alerts,
+    acknowledge_proactive_alert,
 )
 
 # Health Check
@@ -144,5 +150,11 @@ __all__ = [
     'get_knowledge_documents',
     'delete_knowledge_document',
     'get_rag_stats',
+    'get_answer_cache_stats',
+    'clear_answer_cache',
+    'submit_message_feedback',
+    'ask_chatbot_stream',
+    'get_proactive_alerts',
+    'acknowledge_proactive_alert',
     'health_check',
 ]

@@ -151,6 +151,10 @@ class PlatformSettings(models.Model):
 
     updated_at = models.DateTimeField(auto_now=True)
     
+    # ── In-process cache for the singleton (avoids DB round-trip on every pipeline call) ──
+    _cached_instance = None
+    _cache_timestamp = 0
+
     class Meta:
         verbose_name = "Platform Settings"
         verbose_name_plural = "Platform Settings"
@@ -160,9 +164,25 @@ class PlatformSettings(models.Model):
 
     @classmethod
     def get_settings(cls):
-        """Returns the singleton instance, creating it if it doesn't exist."""
-        obj, created = cls.objects.get_or_create(id=uuid.UUID('00000000-0000-0000-0000-000000000001'))
+        """Returns the singleton instance with 60s in-process caching.
+        Eliminates the get_or_create DB hit on every pipeline invocation."""
+        import time
+        now = time.time()
+        if cls._cached_instance and (now - cls._cache_timestamp) < 60:
+            return cls._cached_instance
+
+        obj, created = cls.objects.get_or_create(
+            id=uuid.UUID('00000000-0000-0000-0000-000000000001')
+        )
+        cls._cached_instance = obj
+        cls._cache_timestamp = now
         return obj
+
+    @classmethod
+    def invalidate_cache(cls):
+        """Call after any settings update to force a fresh DB read."""
+        cls._cached_instance = None
+        cls._cache_timestamp = 0
 
 
 # ╔══════════════════════════════════════════════════════════════╗

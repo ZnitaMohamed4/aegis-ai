@@ -29,7 +29,7 @@ export class ChatbotWidgetComponent implements OnDestroy {
 
   isOpen = signal(false);
   showPulse = signal(true);
-  chatLanguage = signal<'fr' | 'ar' | 'en'>(this.getSystemLanguage());
+  chatLanguage = signal<'fr' | 'ar' | 'en' | 'darija'>(this.getSystemLanguage());
   isFullPage = signal(false);
   isResizing = signal(false);
 
@@ -123,13 +123,13 @@ export class ChatbotWidgetComponent implements OnDestroy {
     this.router.navigate(['/admin/chatbot']);
   }
 
-  private getSystemLanguage(): 'fr' | 'ar' | 'en' {
+  private getSystemLanguage(): 'fr' | 'ar' | 'en' | 'darija' {
     const lang = navigator.language.split('-')[0];
     if (['fr', 'ar', 'en'].includes(lang)) return lang as any;
     return 'fr';
   }
 
-  setLanguage(lang: 'fr' | 'ar' | 'en') {
+  setLanguage(lang: 'fr' | 'ar' | 'en' | 'darija') {
     this.chatLanguage.set(lang);
   }
 
@@ -148,20 +148,50 @@ export class ChatbotWidgetComponent implements OnDestroy {
     const typingId = crypto.randomUUID();
     this.messages.update((m) => [...m, { id: typingId, role: 'bot', text: '', isTyping: true }]);
 
-    this.apiService.askChatbot(text, this.sessionId, this.chatLanguage()).subscribe({
-      next: (res) => {
-        if (!this.sessionId && res.session_id) {
-          this.sessionId = res.session_id;
+    // Use SSE streaming for real-time response delivery
+    let accumulatedText = '';
+
+    this.apiService.askChatbotStream(text, this.sessionId, this.chatLanguage()).subscribe({
+      next: (event) => {
+        switch (event.type) {
+          case 'answer_chunk':
+            accumulatedText += event.data;
+            this.updateBotMessage(typingId, accumulatedText);
+            this.scrollToBottom();
+            break;
+
+          case 'done':
+            if (!this.sessionId && event.data.session_id) {
+              this.sessionId = event.data.session_id;
+            }
+            const sources = (event.data.sources || []).map((s: any) => s.name);
+            this.messages.update((m) =>
+              m.filter((msg) => msg.id !== typingId).concat([
+                { id: crypto.randomUUID(), role: 'bot', text: accumulatedText, sources }
+              ])
+            );
+            this.isTyping.set(false);
+            this.scrollToBottom();
+            break;
+
+          case 'error':
+            this.messages.update((m) =>
+              m.filter((msg) => msg.id !== typingId).concat([
+                { id: crypto.randomUUID(), role: 'bot', text: `Erreur: ${event.data}` }
+              ])
+            );
+            this.isTyping.set(false);
+            break;
         }
-
-        const fullText = res.answer;
-        const sources = res.sources.map((s: any) => s.name);
-
-        this.startStreamingResponse(typingId, fullText, sources);
       },
       error: (err) => {
         console.error(err);
-        this.startStreamingResponse(typingId, "Erreur de connexion au serveur RAG. Veuillez réessayer.", []);
+        this.messages.update((m) =>
+          m.filter((msg) => msg.id !== typingId).concat([
+            { id: crypto.randomUUID(), role: 'bot', text: 'Erreur de connexion au serveur RAG. Veuillez réessayer.' }
+          ])
+        );
+        this.isTyping.set(false);
       }
     });
 

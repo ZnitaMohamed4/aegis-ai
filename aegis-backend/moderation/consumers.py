@@ -86,3 +86,52 @@ class AlertConsumer(AsyncWebsocketConsumer):
             return user.parent_profile.evolution_instance_name
         except Exception:
             return None
+
+
+class ChatbotProactiveConsumer(AsyncWebsocketConsumer):
+    """
+    WebSocket consumer for proactive chatbot alerts.
+    
+    Angular chatbot page connects here to receive real-time proactive
+    alert messages when the parent's child gets multiple flagged messages.
+    
+    Endpoint: ws://localhost:8000/ws/chatbot/?token=<JWT_ACCESS_TOKEN>
+    Group: chatbot_{user_id}
+    """
+
+    async def connect(self):
+        query_string = self.scope.get("query_string", b"").decode()
+        params = parse_qs(query_string)
+        token_list = params.get("token", [])
+
+        if not token_list:
+            logger.warning("[WS-CHATBOT] Connection rejected: no token provided")
+            await self.close(code=4001)
+            return
+
+        user = await get_user_from_token(token_list[0])
+        if user is None:
+            logger.warning("[WS-CHATBOT] Connection rejected: invalid token")
+            await self.close(code=4001)
+            return
+
+        self.user = user
+        self.group_name = f"chatbot_{user.id}"
+
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+        logger.info(f"[WS-CHATBOT] {user.username} connected to {self.group_name}")
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        username = getattr(self, 'user', None)
+        logger.info(f"[WS-CHATBOT] {username} disconnected")
+
+    async def proactive_message(self, event):
+        """
+        Receives proactive.message events from proactive_alert_service
+        and pushes them to the connected Angular chatbot client.
+        """
+        data = event["data"]
+        await self.send(text_data=json.dumps(data))

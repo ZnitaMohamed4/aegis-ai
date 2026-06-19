@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 #  INFRASTRUCTURE — Embedder & ChromaDB Collection
 # ═══════════════════════════════════════════════════════════════════════
 
+_knowledge_collection = None  # Cached singleton to avoid re-opening SQLite
+
+
 def _get_embedder():
     """Reuse the SentenceTransformer already loaded by semantic_cache.py."""
     import moderation.services.cache.semantic_cache as sc
@@ -40,7 +43,16 @@ def _get_embedder():
 
 
 def _get_knowledge_collection():
-    """Get or create the knowledge base ChromaDB collection."""
+    """Get or create the knowledge base ChromaDB collection (cached singleton).
+
+    Without caching, each call opens a new PersistentClient → new SQLite
+    connection.  Under concurrent requests this causes 'database is locked'
+    errors and connection exhaustion.
+    """
+    global _knowledge_collection
+    if _knowledge_collection is not None:
+        return _knowledge_collection
+
     import chromadb
 
     chroma_path = os.path.join(
@@ -48,11 +60,11 @@ def _get_knowledge_collection():
         'chroma_storage'
     )
     client = chromadb.PersistentClient(path=chroma_path)
-    collection = client.get_or_create_collection(
+    _knowledge_collection = client.get_or_create_collection(
         name=KNOWLEDGE_COLLECTION,
         metadata={"hnsw:space": "cosine"}
     )
-    return collection
+    return _knowledge_collection
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -62,13 +74,33 @@ def _get_knowledge_collection():
 
 def _preprocess_query(query: str) -> str:
     """
-    Expand common French abbreviations and clean query for better embedding match.
-    Does NOT alter the meaning — only enriches with synonyms/full forms.
+    Expand common French abbreviations and translate Darija/Arabic keywords
+    to French for better embedding match with the English-trained embedder.
+
+    Replacement strategy:
+      - Sort by key length descending so longer matches are replaced first.
+      - Short keys (<=2 chars) use word-boundary regex to avoid corrupting
+        longer words (e.g. 'و' inside 'ولدي').
     """
-    expanded = query.lower().strip()
-    for abbr, full in QUERY_EXPANSIONS.items():
-        if abbr in expanded:
-            expanded = expanded.replace(abbr, full)
+    import re
+    expanded = query.strip()
+
+    # Sort by key length descending: longer patterns match first
+    sorted_expansions = sorted(QUERY_EXPANSIONS.items(), key=lambda kv: len(kv[0]), reverse=True)
+
+    for abbr, full in sorted_expansions:
+        if len(abbr) <= 2:
+            # Only replace standalone tokens (word boundaries)
+            # Use a regex that matches the abbr only when surrounded by
+            # whitespace, start/end of string, or Arabic punctuation.
+            pattern = r'(?<!\S)' + re.escape(abbr) + r'(?!\S)'
+            expanded = re.sub(pattern, full, expanded)
+        else:
+            if abbr in expanded:
+                expanded = expanded.replace(abbr, full)
+
+    # Collapse multiple spaces
+    expanded = ' '.join(expanded.split())
     return expanded
 
 
@@ -112,6 +144,16 @@ def _reformulate_query(session, question: str) -> str:
         rewrite_chain = reformulate_prompt | fast_llm | StrOutputParser()
         rewritten = rewrite_chain.invoke({"question": question})
         if rewritten and isinstance(rewritten, str) and rewritten.strip():
+            # Check if LLM actually rewrote it or returned unchanged
+            if rewritten.strip() != question.strip():
+                logger.debug(f"[RAG] Reformulated query: '{question}' -> '{rewritten}'")
+                return rewritten
+
+            # LLM returned unchanged — likely can't handle the language (e.g. Darija).
+            # This is OK — the agent will receive the session history separately
+            # and can understand the follow-up context from prior exchanges.
+            logger.debug(f"[RAG] Reformulation returned unchanged (non-English?) — keeping original")
+
             logger.debug(f"[RAG] Reformulated query: '{question}' -> '{rewritten}'")
             return rewritten
     except Exception as e:
@@ -137,8 +179,13 @@ def _retrieve_context(query: str, language: str = None) -> list[dict]:
 
     collection = _get_knowledge_collection()
 
+    # Translate Darija/Arabic keywords to French so the English-trained
+    # embedder produces meaningful vectors.  Idempotent for already-French
+    # text — safe to call unconditionally.
+    processed_query = _preprocess_query(query)
+
     # Embed the preprocessed query
-    query_vector = embedder.encode(query).tolist()
+    query_vector = embedder.encode(processed_query).tolist()
 
     # Build filter if language specified
     where_filter = None
